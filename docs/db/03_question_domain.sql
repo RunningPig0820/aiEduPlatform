@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_question;
 
 -- =====================================================
 -- 1. 知识点表 (树形结构)
@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS t_knowledge_point (
     INDEX idx_parent (parent_id),
     INDEX idx_subject (subject),
     INDEX idx_grade (grade_level),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_kp_parent FOREIGN KEY (parent_id) REFERENCES t_knowledge_point(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识点表';
 
 -- =====================================================
@@ -56,8 +55,7 @@ CREATE TABLE IF NOT EXISTS t_question (
     INDEX idx_type (question_type),
     INDEX idx_subject (subject),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_question_kp FOREIGN KEY (knowledge_point_id) REFERENCES t_knowledge_point(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目表';
 
 -- =====================================================
@@ -76,7 +74,6 @@ CREATE TABLE IF NOT EXISTS t_question_option (
     modified_by BIGINT NOT NULL DEFAULT 0 COMMENT '修改人ID',
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_option_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE,
     UNIQUE KEY uk_question_label (question_id, option_label)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目选项表';
 
@@ -110,9 +107,7 @@ CREATE TABLE IF NOT EXISTS t_question_tag_relation (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     UNIQUE KEY uk_question_tag (question_id, tag_id),
     INDEX idx_tag (tag_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_qtr_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE,
-    CONSTRAINT fk_qtr_tag FOREIGN KEY (tag_id) REFERENCES t_question_tag(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目-标签关联表';
 
 -- =====================================================
@@ -133,8 +128,7 @@ CREATE TABLE IF NOT EXISTS t_question_attachment (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     INDEX idx_question (question_id),
     INDEX idx_type (attachment_type),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_att_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目附件表';
 
 -- =====================================================

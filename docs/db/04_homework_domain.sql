@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_homework;
 
 -- =====================================================
 -- 1. 作业定义表 (老师发布的作业)
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS t_homework_definition (
     class_id BIGINT COMMENT '目标班级ID',
     subject VARCHAR(50) COMMENT '学科',
     homework_type VARCHAR(50) DEFAULT 'NORMAL' COMMENT '作业类型: NORMAL/EXAM/PRACTICE',
-    start_time TIMESTAMP COMMENT '开始时间',
-    end_time TIMESTAMP COMMENT '截止时间',
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+    end_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '截止时间',
     duration_minutes INT COMMENT '时长限制(分钟)',
     total_score INT DEFAULT 100 COMMENT '总分',
     allow_late_submit BOOLEAN DEFAULT TRUE COMMENT '是否允许迟交',
@@ -52,9 +52,7 @@ CREATE TABLE IF NOT EXISTS t_homework_question (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     UNIQUE KEY uk_homework_question (homework_definition_id, question_id),
     INDEX idx_question (question_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_hq_homework FOREIGN KEY (homework_definition_id) REFERENCES t_homework_definition(id) ON DELETE CASCADE,
-    CONSTRAINT fk_hq_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='作业题目关联表';
 
 -- =====================================================
@@ -73,7 +71,7 @@ CREATE TABLE IF NOT EXISTS t_homework_submission (
     final_score INT COMMENT '最终得分',
     feedback TEXT COMMENT '总体反馈',
     graded_by BIGINT COMMENT '批改老师ID',
-    graded_at TIMESTAMP COMMENT '批改时间',
+    graded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '批改时间',
     created_by BIGINT NOT NULL DEFAULT 0 COMMENT '创建人ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -83,10 +81,7 @@ CREATE TABLE IF NOT EXISTS t_homework_submission (
     INDEX idx_student (student_id),
     INDEX idx_status (status),
     INDEX idx_homework_def (homework_definition_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_hs_homework FOREIGN KEY (homework_definition_id) REFERENCES t_homework_definition(id) ON DELETE CASCADE,
-    CONSTRAINT fk_hs_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_hs_grader FOREIGN KEY (graded_by) REFERENCES t_user(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='作业提交表';
 
 -- =====================================================
@@ -113,9 +108,7 @@ CREATE TABLE IF NOT EXISTS t_homework_answer (
     UNIQUE KEY uk_submission_question (submission_id, question_id),
     INDEX idx_question (question_id),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_ha_submission FOREIGN KEY (submission_id) REFERENCES t_homework_submission(id) ON DELETE CASCADE,
-    CONSTRAINT fk_ha_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='作业答题详情表';
 
 -- =====================================================
@@ -137,8 +130,7 @@ CREATE TABLE IF NOT EXISTS t_homework_template (
     INDEX idx_teacher (teacher_id),
     INDEX idx_subject (subject),
     INDEX idx_public (is_public),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_template_teacher FOREIGN KEY (teacher_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='作业模板表';
 
 -- =====================================================

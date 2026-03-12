@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_learing;
 
 -- =====================================================
 -- 1. 错题本表 (聚合根)
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS t_error_book (
     correct_count INT DEFAULT 0 COMMENT '订正正确次数',
     is_corrected BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否已订正',
     last_error_at TIMESTAMP COMMENT '最近错误时间',
-    corrected_at TIMESTAMP COMMENT '订正时间',
+    corrected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '订正时间',
     mastery_level INT DEFAULT 0 COMMENT '掌握程度: 0-100',
     created_by BIGINT NOT NULL DEFAULT 0 COMMENT '创建人ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -29,10 +29,7 @@ CREATE TABLE IF NOT EXISTS t_error_book (
     INDEX idx_question (question_id),
     INDEX idx_corrected (is_corrected),
     INDEX idx_mastery (mastery_level),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_eb_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_eb_question FOREIGN KEY (question_id) REFERENCES t_question(id) ON DELETE CASCADE,
-    CONSTRAINT fk_eb_answer FOREIGN KEY (homework_answer_id) REFERENCES t_homework_answer(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题本表';
 
 -- =====================================================
@@ -56,9 +53,7 @@ CREATE TABLE IF NOT EXISTS t_knowledge_mastery (
     INDEX idx_student (student_id),
     INDEX idx_knowledge (knowledge_point_id),
     INDEX idx_mastery (mastery_level),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_km_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_km_knowledge FOREIGN KEY (knowledge_point_id) REFERENCES t_knowledge_point(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识点掌握程度表';
 
 -- =====================================================
@@ -84,8 +79,7 @@ CREATE TABLE IF NOT EXISTS t_emotion_record (
     INDEX idx_session (session_type, session_id),
     INDEX idx_emotion (emotion_state),
     INDEX idx_created (created_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_er_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习情绪记录表';
 
 -- =====================================================
@@ -110,8 +104,7 @@ CREATE TABLE IF NOT EXISTS t_learning_plan (
     INDEX idx_student (student_id),
     INDEX idx_status (status),
     INDEX idx_date_range (start_date, end_date),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_lp_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习计划表';
 
 -- =====================================================
@@ -136,9 +129,7 @@ CREATE TABLE IF NOT EXISTS t_learning_task (
     INDEX idx_plan (plan_id),
     INDEX idx_knowledge (knowledge_point_id),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_lt_plan FOREIGN KEY (plan_id) REFERENCES t_learning_plan(id) ON DELETE CASCADE,
-    CONSTRAINT fk_lt_knowledge FOREIGN KEY (knowledge_point_id) REFERENCES t_knowledge_point(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习计划任务表';
 
 -- =====================================================
@@ -166,9 +157,7 @@ CREATE TABLE IF NOT EXISTS t_learning_record (
     INDEX idx_knowledge (knowledge_point_id),
     INDEX idx_subject (subject),
     INDEX idx_created (created_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_lr_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_lr_knowledge FOREIGN KEY (knowledge_point_id) REFERENCES t_knowledge_point(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习记录表';
 
 -- =====================================================
@@ -195,8 +184,7 @@ CREATE TABLE IF NOT EXISTS t_learning_report (
     INDEX idx_student (student_id),
     INDEX idx_type (report_type),
     INDEX idx_period (period_start, period_end),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_lreport_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学习报告表';
 
 -- =====================================================

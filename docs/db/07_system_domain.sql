@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_sys;
 
 -- =====================================================
 -- 1. 通知消息表
@@ -28,8 +28,7 @@ CREATE TABLE IF NOT EXISTS t_notification (
     INDEX idx_type (notification_type),
     INDEX idx_read (is_read),
     INDEX idx_created (created_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知消息表';
 
 -- =====================================================
@@ -146,8 +145,7 @@ CREATE TABLE IF NOT EXISTS t_file_resource (
     INDEX idx_owner (owner_id),
     INDEX idx_type (file_type),
     INDEX idx_business (business_type, business_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_file_owner FOREIGN KEY (owner_id) REFERENCES t_user(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文件资源表';
 
 -- =====================================================
@@ -163,8 +161,8 @@ CREATE TABLE IF NOT EXISTS t_scheduled_task (
     cron_expression VARCHAR(100) COMMENT 'Cron表达式',
     status VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/PAUSED',
     description VARCHAR(500) COMMENT '描述',
-    last_execute_time TIMESTAMP COMMENT '上次执行时间',
-    next_execute_time TIMESTAMP COMMENT '下次执行时间',
+    last_execute_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '上次执行时间',
+    next_execute_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '下次执行时间',
     created_by BIGINT NOT NULL DEFAULT 0 COMMENT '创建人ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

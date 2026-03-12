@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_org;
 
 -- =====================================================
 -- 1. 学校表
@@ -53,7 +53,6 @@ CREATE TABLE IF NOT EXISTS t_class (
     INDEX idx_school_year (school_year),
     INDEX idx_status (status),
     INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_class_school FOREIGN KEY (school_id) REFERENCES t_school(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级表';
 
 -- =====================================================
@@ -75,9 +74,7 @@ CREATE TABLE IF NOT EXISTS t_student_class (
     UNIQUE KEY uk_student_class (student_id, class_id),
     INDEX idx_class (class_id),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_sc_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_sc_class FOREIGN KEY (class_id) REFERENCES t_class(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生-班级关联表';
 
 -- =====================================================
@@ -101,9 +98,7 @@ CREATE TABLE IF NOT EXISTS t_teacher_class (
     INDEX idx_class (class_id),
     INDEX idx_head_teacher (is_head_teacher),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_tc_teacher FOREIGN KEY (teacher_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_tc_class FOREIGN KEY (class_id) REFERENCES t_class(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='老师-班级关联表';
 
 -- =====================================================
@@ -123,8 +118,7 @@ CREATE TABLE IF NOT EXISTS t_grade (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     INDEX idx_school (school_id),
     INDEX idx_grade_level (grade_level),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_grade_school FOREIGN KEY (school_id) REFERENCES t_school(id) ON DELETE SET NULL
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='年级表';
 
 -- =====================================================

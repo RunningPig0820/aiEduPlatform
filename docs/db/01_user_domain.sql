@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_user;
 
 -- =====================================================
 -- 1. 用户表 (聚合根)
@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS t_student_profile (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     UNIQUE KEY uk_user_id (user_id),
     UNIQUE KEY uk_student_no (student_no),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_student_user FOREIGN KEY (user_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生扩展信息表';
 
 -- =====================================================
@@ -70,8 +69,7 @@ CREATE TABLE IF NOT EXISTS t_teacher_profile (
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     UNIQUE KEY uk_user_id (user_id),
     UNIQUE KEY uk_teacher_no (teacher_no),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_teacher_user FOREIGN KEY (user_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='老师扩展信息表';
 
 -- =====================================================
@@ -87,8 +85,7 @@ CREATE TABLE IF NOT EXISTS t_parent_profile (
     modified_by BIGINT NOT NULL DEFAULT 0 COMMENT '修改人ID',
     is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除: 0-未删除, 1-已删除',
     UNIQUE KEY uk_user_id (user_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_parent_user FOREIGN KEY (user_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='家长扩展信息表';
 
 -- =====================================================
@@ -108,9 +105,7 @@ CREATE TABLE IF NOT EXISTS t_student_parent (
     UNIQUE KEY uk_student_parent (student_id, parent_id),
     INDEX idx_student (student_id),
     INDEX idx_parent (parent_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_sp_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_sp_parent FOREIGN KEY (parent_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生-家长关联表';
 
 -- =====================================================

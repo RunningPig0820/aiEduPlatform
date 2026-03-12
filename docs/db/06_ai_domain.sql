@@ -3,7 +3,7 @@
 -- 表结构设计文档
 -- =====================================================
 
-USE ai_edu;
+USE ai_edu_ai;
 
 -- =====================================================
 -- 1. AI任务表 (异步任务队列)
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS t_ai_task (
     error_message TEXT COMMENT '错误信息',
     model_name VARCHAR(100) COMMENT '使用的模型名称',
     tokens_used INT COMMENT '消耗Token数',
-    started_at TIMESTAMP COMMENT '开始时间',
-    completed_at TIMESTAMP COMMENT '完成时间',
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '完成时间',
     created_by BIGINT NOT NULL DEFAULT 0 COMMENT '创建人ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -79,8 +79,7 @@ CREATE TABLE IF NOT EXISTS t_ai_conversation (
     INDEX idx_user (user_id),
     INDEX idx_type (conversation_type),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_conv_user FOREIGN KEY (user_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话记录表';
 
 -- =====================================================
@@ -101,8 +100,7 @@ CREATE TABLE IF NOT EXISTS t_ai_message (
     INDEX idx_conversation (conversation_id),
     INDEX idx_role (role),
     INDEX idx_created (created_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_msg_conv FOREIGN KEY (conversation_id) REFERENCES t_ai_conversation(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话消息表';
 
 -- =====================================================
@@ -127,8 +125,7 @@ CREATE TABLE IF NOT EXISTS t_ai_recommendation (
     INDEX idx_type (recommendation_type),
     INDEX idx_accepted (is_accepted),
     INDEX idx_created (created_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_rec_student FOREIGN KEY (student_id) REFERENCES t_user(id) ON DELETE CASCADE
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI推荐记录表';
 
 -- =====================================================
