@@ -1,6 +1,19 @@
-application.yml
-.idea
+# IDE
+.idea/
+*.iml
 .classpath
 .project
-.settings
+.settings/
+
+# Build
 target/
+
+# Config (包含敏感信息)
+**/application.yml
+**/application-*.yml
+**/application.yaml
+**/application-*.yaml
+
+# OS
+.DS_Store
+**/.DS_Store
