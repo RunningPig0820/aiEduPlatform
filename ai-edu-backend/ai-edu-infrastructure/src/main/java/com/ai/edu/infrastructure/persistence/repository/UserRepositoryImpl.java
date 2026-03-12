@@ -38,8 +38,18 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByPhone(String phone) {
+        return userMapper.selectByPhone(phone);
+    }
+
+    @Override
     public boolean existsByUsername(String username) {
         return userMapper.existsByUsername(username);
+    }
+
+    @Override
+    public boolean existsByPhone(String phone) {
+        return userMapper.existsByPhone(phone);
     }
 
     @Override

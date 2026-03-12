@@ -16,6 +16,12 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("SELECT * FROM t_user WHERE username = #{username}")
     Optional<User> selectByUsername(String username);
 
+    @Select("SELECT * FROM t_user WHERE phone = #{phone}")
+    Optional<User> selectByPhone(String phone);
+
     @Select("SELECT COUNT(*) > 0 FROM t_user WHERE username = #{username}")
     boolean existsByUsername(String username);
+
+    @Select("SELECT COUNT(*) > 0 FROM t_user WHERE phone = #{phone}")
+    boolean existsByPhone(String phone);
 }

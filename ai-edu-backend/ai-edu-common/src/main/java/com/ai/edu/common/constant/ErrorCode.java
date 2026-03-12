@@ -12,6 +12,8 @@ public final class ErrorCode {
     public static final String SYSTEM_ERROR = "10000";
     public static final String PARAM_ERROR = "10001";
     public static final String ENTITY_NOT_FOUND = "10002";
+    public static final String INVALID_PARAMS = "10003";
+    public static final String UNAUTHORIZED = "10004";
 
     // 用户模块 2xxxx
     public static final String USER_NOT_FOUND = "20001";
