@@ -2,17 +2,17 @@ package com.ai.edu.domain.user.service;
 
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 /**
  * 用户领域服务
  */
 @Service
-@RequiredArgsConstructor
 public class UserDomainService {
 
-    private final UserRepository userRepository;
+    @Resource
+    private UserRepository userRepository;
 
     public boolean isUsernameAvailable(String username) {
         return !userRepository.existsByUsername(username);

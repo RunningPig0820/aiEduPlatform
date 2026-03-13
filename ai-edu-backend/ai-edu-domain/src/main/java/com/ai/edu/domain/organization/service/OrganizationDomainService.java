@@ -9,7 +9,7 @@ import com.ai.edu.domain.organization.repository.ClassRepository;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.organization.repository.StudentClassRepository;
 import com.ai.edu.domain.organization.repository.TeacherClassRepository;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,13 +20,16 @@ import java.util.Optional;
  * 处理学校和班级相关的复杂业务逻辑
  */
 @Service
-@RequiredArgsConstructor
 public class OrganizationDomainService {
 
-    private final SchoolRepository schoolRepository;
-    private final ClassRepository classRepository;
-    private final StudentClassRepository studentClassRepository;
-    private final TeacherClassRepository teacherClassRepository;
+    @Resource
+    private SchoolRepository schoolRepository;
+    @Resource
+    private ClassRepository classRepository;
+    @Resource
+    private StudentClassRepository studentClassRepository;
+    @Resource
+    private TeacherClassRepository teacherClassRepository;
 
     // ==================== 学校相关 ====================
 

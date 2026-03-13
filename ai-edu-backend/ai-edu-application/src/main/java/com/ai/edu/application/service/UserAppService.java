@@ -11,8 +11,8 @@ import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.domain.user.service.UserDomainService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,11 +28,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class UserAppService {
 
-    private final UserRepository userRepository;
-    private final UserDomainService userDomainService;
+    @Resource
+    private UserRepository userRepository;
+    @Resource
+    private UserDomainService userDomainService;
 
     /**
      * todo

@@ -2,9 +2,9 @@ package com.ai.edu.interface_.api;
 
 import com.ai.edu.application.dto.*;
 import com.ai.edu.application.service.UserAppService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthApiController {
 
-    private final UserAppService userAppService;
+    @Resource
+    private UserAppService userAppService;
 
     /**
      * 用户注册

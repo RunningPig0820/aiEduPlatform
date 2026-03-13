@@ -3,7 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.infrastructure.persistence.mapper.UserMapper;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -12,10 +12,10 @@ import java.util.Optional;
  * 用户仓储实现
  */
 @Repository
-@RequiredArgsConstructor
 public class UserRepositoryImpl implements UserRepository {
 
-    private final UserMapper userMapper;
+    @Resource
+    private UserMapper userMapper;
 
     @Override
     public User save(User user) {
