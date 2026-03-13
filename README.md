@@ -12,7 +12,6 @@ ai-edu-platform/
 │   ├── ai-edu-application/  # 应用层
 │   ├── ai-edu-infrastructure/ # 基础设施层
 │   └── ai-edu-interface/    # 接口层
-├── ai-edu-ai-service/       # Python AI微服务
 └── deploy/                  # 部署配置
 ```
 

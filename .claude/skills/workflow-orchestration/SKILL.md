@@ -11,6 +11,10 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 
 **核心原则：** 先分析，再路由，确保每个任务由正确的 agent 以正确的方式执行。
 
+## 项目定位
+
+本项目是**纯 Java DDD 后端**，仅提供 REST API。
+
 ## 总体流程图
 
 ```
@@ -76,8 +80,7 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 | Question | `ai-edu-coder-question` | 题库、知识点 |
 | Homework | `ai-edu-coder-homework` | 作业、批改、评分 |
 | Learning | `ai-edu-coder-learning` | 错题本、知识掌握度 |
-| Organization | `ai-edu-coder-organization` | 组织架构、升阶 |
-| Frontend | `ai-edu-front-ssr` | 页面、模板 |
+| Organization | `ai-edu-coder-organization` | 学校、班级、年级 |
 | Testing | `ai-edu-tester` | 测试 |
 | **协调** | `ai-edu-architect-coordinator` | 架构、接口契约、协调 |
 
