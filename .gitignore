@@ -18,3 +18,8 @@ target/
 # OS
 .DS_Store
 **/.DS_Store
+
+# Log
+logs/
+**/logs/
+**/logs/**
