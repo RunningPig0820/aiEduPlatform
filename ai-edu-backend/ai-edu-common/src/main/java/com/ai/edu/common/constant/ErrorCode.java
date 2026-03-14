@@ -20,6 +20,13 @@ public final class ErrorCode {
     public static final String USER_ALREADY_EXISTS = "20002";
     public static final String INVALID_CREDENTIALS = "20003";
     public static final String PERMISSION_DENIED = "20004";
+    public static final String CODE_INVALID = "20005";
+    public static final String CODE_EXPIRED = "20006";
+    public static final String CODE_TOO_FREQUENT = "20007";
+    public static final String PHONE_NOT_REGISTERED = "20008";
+    public static final String PHONE_ALREADY_REGISTERED = "20009";
+    public static final String PASSWORD_SAME_AS_OLD = "20010";
+    public static final String OLD_PASSWORD_WRONG = "20011";
 
     // 题库模块 3xxxx
     public static final String QUESTION_NOT_FOUND = "30001";

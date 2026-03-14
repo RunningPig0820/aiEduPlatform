@@ -29,7 +29,7 @@ public class AuthApiController {
     }
 
     /**
-     * 用户登录（支持用户名或手机号）
+     * 用户登录（支持三种方式：用户名+密码、手机号+密码、手机号+验证码）
      */
     @PostMapping("/login")
     public ApiResponse<UserResponse> login(@Valid @RequestBody LoginRequest request, HttpSession session) {
@@ -58,7 +58,25 @@ public class AuthApiController {
      */
     @PostMapping("/send-code")
     public ApiResponse<Void> sendCode(@Valid @RequestBody SendCodeRequest request) {
-        userAppService.sendCode(request.getPhone());
+        userAppService.sendCode(request.getPhone(), request.getScene());
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * 重置密码（忘记密码）
+     */
+    @PostMapping("/reset-password")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        userAppService.resetPassword(request);
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * 修改密码（已登录状态）
+     */
+    @PutMapping("/password")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request, HttpSession session) {
+        userAppService.changePassword(request, session);
         return ApiResponse.success(null);
     }
 

@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS t_class (
     INDEX idx_grade (grade),
     INDEX idx_school_year (school_year),
     INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted),
+    INDEX idx_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级表';
 
 -- =====================================================

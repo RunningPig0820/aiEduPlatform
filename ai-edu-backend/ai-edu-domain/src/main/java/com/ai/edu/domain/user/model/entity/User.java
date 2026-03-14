@@ -27,7 +27,7 @@ public class User {
     @Column(name = "real_name", nullable = false, length = 50)
     private String realName;
 
-    @Column(length = 20)
+    @Column(length = 20, unique = true)
     private String phone;
 
     @Column(length = 100)
@@ -46,6 +46,23 @@ public class User {
         user.realName = realName;
         user.role = role;
         return user;
+    }
+
+    public static User create(String username, String password, String realName, String phone, String role) {
+        User user = new User();
+        user.username = username;
+        user.password = password;
+        user.realName = realName;
+        user.phone = phone;
+        user.role = role;
+        return user;
+    }
+
+    /**
+     * 修改密码
+     */
+    public void changePassword(String newPassword) {
+        this.password = newPassword;
     }
 
     public void updateProfile(String realName, String phone, String email) {

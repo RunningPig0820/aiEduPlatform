@@ -1,11 +1,10 @@
 package com.ai.edu.application.service;
 
 import com.ai.edu.application.assembler.UserAssembler;
-import com.ai.edu.application.dto.DemoLoginRequest;
-import com.ai.edu.application.dto.LoginRequest;
-import com.ai.edu.application.dto.RegisterRequest;
-import com.ai.edu.application.dto.UserResponse;
+import com.ai.edu.application.dto.*;
+import com.ai.edu.common.constant.CodeScene;
 import com.ai.edu.common.constant.ErrorCode;
+import com.ai.edu.common.constant.LoginType;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
@@ -36,8 +35,8 @@ public class UserAppService {
     private UserDomainService userDomainService;
 
     /**
-     * todo
      * 模拟验证码存储（生产环境应使用 Redis）
+     * key: phone:scene, value: code
      */
     private static final Map<String, String> CODE_STORE = new ConcurrentHashMap<>();
 
@@ -54,9 +53,19 @@ public class UserAppService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
+        // 验证验证码
+        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.REGISTER)) {
+            throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
+        }
+
         // 检查用户名是否可用
         if (!userDomainService.isUsernameAvailable(request.getUsername())) {
             throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS, "用户名已存在");
+        }
+
+        // 检查手机号是否可用
+        if (!userDomainService.isPhoneAvailable(request.getPhone())) {
+            throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTERED, "手机号已被注册");
         }
 
         // 创建用户
@@ -65,6 +74,7 @@ public class UserAppService {
                 request.getUsername(),
                 encodedPassword,
                 request.getRealName(),
+                request.getPhone(),
                 request.getRole()
         );
 
@@ -75,24 +85,24 @@ public class UserAppService {
     }
 
     /**
-     * 用户登录（支持用户名或手机号）
+     * 用户登录（支持三种方式）
      */
     public UserResponse login(LoginRequest request) {
-        // 确定登录标识（用户名或手机号）
-        String identifier = StringUtils.hasText(request.getUsername())
-                ? request.getUsername()
-                : request.getPhone();
+        String loginType = request.getLoginType();
+        User user;
 
-        if (!StringUtils.hasText(identifier)) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "请输入用户名或手机号");
-        }
-
-        // 查找用户
-        User user = findUserByIdentifier(request.getUsername(), request.getPhone());
-
-        // 验证密码
-        if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误");
+        switch (loginType) {
+            case LoginType.USERNAME_PASSWORD:
+                user = loginByUsernameAndPassword(request);
+                break;
+            case LoginType.PHONE_PASSWORD:
+                user = loginByPhoneAndPassword(request);
+                break;
+            case LoginType.PHONE_CODE:
+                user = loginByPhoneAndCode(request);
+                break;
+            default:
+                throw new BusinessException(ErrorCode.INVALID_PARAMS, "无效的登录类型");
         }
 
         // 检查用户状态
@@ -101,6 +111,68 @@ public class UserAppService {
         }
 
         return UserAssembler.toResponse(user);
+    }
+
+    /**
+     * 用户名+密码登录
+     */
+    private User loginByUsernameAndPassword(LoginRequest request) {
+        if (!StringUtils.hasText(request.getUsername())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "用户名不能为空");
+        }
+        if (!StringUtils.hasText(request.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "密码不能为空");
+        }
+
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误"));
+
+        if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误");
+        }
+
+        return user;
+    }
+
+    /**
+     * 手机号+密码登录
+     */
+    private User loginByPhoneAndPassword(LoginRequest request) {
+        if (!StringUtils.hasText(request.getPhone())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号不能为空");
+        }
+        if (!StringUtils.hasText(request.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "密码不能为空");
+        }
+
+        User user = userRepository.findByPhone(request.getPhone())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "手机号或密码错误"));
+
+        if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "手机号或密码错误");
+        }
+
+        return user;
+    }
+
+    /**
+     * 手机号+验证码登录
+     */
+    private User loginByPhoneAndCode(LoginRequest request) {
+        if (!StringUtils.hasText(request.getPhone())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号不能为空");
+        }
+        if (!StringUtils.hasText(request.getCode())) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "验证码不能为空");
+        }
+
+        // 验证验证码
+        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.LOGIN)) {
+            throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
+        }
+
+        return userRepository.findByPhone(request.getPhone())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册"));
     }
 
     /**
@@ -129,34 +201,114 @@ public class UserAppService {
     }
 
     /**
-     * 发送验证码（模拟）
+     * 发送验证码
      */
-    public void sendCode(String phone) {
+    public void sendCode(String phone, String scene) {
         // 验证手机号格式
         if (!phone.matches("^1[3-9]\\d{9}$")) {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号格式不正确");
+        }
+
+        // 根据场景校验手机号状态
+        switch (scene) {
+            case CodeScene.REGISTER:
+                // 注册场景：手机号不能已注册
+                if (userRepository.existsByPhone(phone)) {
+                    throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTERED, "手机号已被注册");
+                }
+                break;
+            case CodeScene.LOGIN:
+            case CodeScene.RESET_PASSWORD:
+                // 登录/重置密码场景：手机号必须已注册
+                if (!userRepository.existsByPhone(phone)) {
+                    throw new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册");
+                }
+                break;
+            default:
+                throw new BusinessException(ErrorCode.INVALID_PARAMS, "无效的验证码场景");
         }
 
         // 生成6位验证码
         String code = String.format("%06d", new Random().nextInt(1000000));
 
         // 存储验证码（生产环境应使用 Redis，设置过期时间）
-        CODE_STORE.put(phone, code);
+        String key = buildCodeKey(phone, scene);
+        CODE_STORE.put(key, code);
 
         // 模拟发送（生产环境调用短信服务）
-        log.info("验证码已发送: phone={}, code={}", phone, code);
+        log.info("验证码已发送: phone={}, scene={}, code={}", phone, scene, code);
+    }
+
+    /**
+     * 重置密码
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        // 验证验证码
+        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.RESET_PASSWORD)) {
+            throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
+        }
+
+        // 查找用户
+        User user = userRepository.findByPhone(request.getPhone())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册"));
+
+        // 修改密码
+        String encodedPassword = PasswordUtil.encode(request.getNewPassword());
+        user.changePassword(encodedPassword);
+
+        userRepository.save(user);
+
+        log.info("密码重置成功: phone={}", request.getPhone());
+    }
+
+    /**
+     * 修改密码
+     */
+    @Transactional
+    public void changePassword(ChangePasswordRequest request, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在"));
+
+        // 验证原密码
+        if (!PasswordUtil.matches(request.getOldPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.OLD_PASSWORD_WRONG, "原密码错误");
+        }
+
+        // 检查新密码是否与原密码相同
+        if (PasswordUtil.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD, "新密码不能与原密码相同");
+        }
+
+        // 修改密码
+        String encodedPassword = PasswordUtil.encode(request.getNewPassword());
+        user.changePassword(encodedPassword);
+
+        userRepository.save(user);
+
+        log.info("密码修改成功: userId={}", userId);
     }
 
     /**
      * 验证验证码
      */
-    public boolean verifyCode(String phone, String code) {
-        String storedCode = CODE_STORE.get(phone);
+    public boolean verifyCode(String phone, String code, String scene) {
+        String key = buildCodeKey(phone, scene);
+        String storedCode = CODE_STORE.get(key);
         if (storedCode != null && storedCode.equals(code)) {
-            CODE_STORE.remove(phone);
+            CODE_STORE.remove(key);
             return true;
         }
         return false;
+    }
+
+    private String buildCodeKey(String phone, String scene) {
+        return phone + ":" + scene;
     }
 
     /**
@@ -186,20 +338,6 @@ public class UserAppService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在"));
         return UserAssembler.toResponse(user);
-    }
-
-    /**
-     * 根据用户名或手机号查找用户
-     */
-    private User findUserByIdentifier(String username, String phone) {
-        if (StringUtils.hasText(username)) {
-            return userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误"));
-        } else if (StringUtils.hasText(phone)) {
-            return userRepository.findByPhone(phone)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "手机号或密码错误"));
-        }
-        throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "请输入用户名或手机号");
     }
 
     /**
