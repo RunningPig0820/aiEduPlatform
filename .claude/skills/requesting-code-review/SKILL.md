@@ -58,7 +58,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 [派发 superpowers:code-reviewer 子代理]
   WHAT_WAS_IMPLEMENTED: 对话索引的验证和修复功能
-  PLAN_OR_REQUIREMENTS: docs/plans/deployment-plan.md 中的任务 2
+  PLAN_OR_REQUIREMENTS: docs/plans/<topic>/<topic>-plan.md 中的任务 2
   BASE_SHA: a7981ec
   HEAD_SHA: 3df7661
   DESCRIPTION: 添加了 verifyIndex() 和 repairIndex()，有 4 种问题类型

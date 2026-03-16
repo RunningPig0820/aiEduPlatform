@@ -82,7 +82,7 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 | Learning | `ai-edu-coder-learning` | 错题本、知识掌握度 |
 | Organization | `ai-edu-coder-organization` | 学校、班级、年级 |
 | Testing | `ai-edu-tester` | 测试 |
-| **协调** | `ai-edu-architect-coordinator` | 架构、接口契约、协调 |
+| **协调** | `ai-edu-architect-design` | 架构、接口契约、协调 |
 
 ## 执行流程
 
@@ -98,7 +98,7 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 
 **示例命令：**
 ```
-请 ai-edu-coder-user 根据设计文档 docs/plans/2024-01-15-user-avatar-design.md
+请 ai-edu-coder-user 根据设计文档 docs/plans/user-avatar/user-avatar-design.md
 实现用户头像上传功能，遵循 TDD 流程。
 ```
 
@@ -124,7 +124,7 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 ### 类型 C：多领域有依赖任务
 
 ```
-1. 调用 ai-edu-architect-coordinator
+1. 调用 ai-edu-architect-design
 2. 架构师分析依赖关系
 3. 输出接口契约
 4. 按依赖顺序派发任务
@@ -133,11 +133,11 @@ description: "任务编排总入口 - 根据任务类型自动路由到正确的
 
 **示例命令：**
 ```
-请 ai-edu-architect-coordinator 协调以下有依赖的任务：
+请 ai-edu-architect-design 协调以下有依赖的任务：
 - Homework Context 依赖 User Context
 - Learning Context 依赖 Homework Context
 
-设计文档：docs/plans/2024-01-15-homework-grading-design.md
+设计文档：docs/plans/homework-grading/homework-grading-design.md
 ```
 
 ## 工作流程检查清单
