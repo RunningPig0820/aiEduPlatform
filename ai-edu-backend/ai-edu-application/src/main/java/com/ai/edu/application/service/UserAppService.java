@@ -35,6 +35,7 @@ public class UserAppService {
     private UserDomainService userDomainService;
 
     /**
+     * todo 生产环境应使用 Redis
      * 模拟验证码存储（生产环境应使用 Redis）
      * key: phone:scene, value: code
      */
@@ -54,9 +55,9 @@ public class UserAppService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         // 验证验证码
-        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.REGISTER)) {
-            throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
-        }
+//        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.REGISTER)) {
+//            throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
+//        }
 
         // 检查用户名是否可用
         if (!userDomainService.isUsernameAvailable(request.getUsername())) {
@@ -232,11 +233,19 @@ public class UserAppService {
         String code = String.format("%06d", new Random().nextInt(1000000));
 
         // 存储验证码（生产环境应使用 Redis，设置过期时间）
-        String key = buildCodeKey(phone, scene);
-        CODE_STORE.put(key, code);
+//        String key = buildCodeKey(phone, scene);
+//        CODE_STORE.put(key, code);
 
         // 模拟发送（生产环境调用短信服务）
         log.info("验证码已发送: phone={}, scene={}, code={}", phone, scene, code);
+    }
+
+    /**
+     *  获取验证码
+     */
+    public String getCode(String phone, String scene) {
+        String key = buildCodeKey(phone, scene);
+        return CODE_STORE.getOrDefault(key, "");
     }
 
     /**
