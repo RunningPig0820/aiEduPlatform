@@ -8,9 +8,10 @@ import com.ai.edu.common.constant.LoginType;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
+import com.ai.edu.domain.user.model.valueobject.VerificationCode;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.domain.user.service.UserDomainService;
-import com.ai.edu.domain.shared.service.RedisService;
+import com.ai.edu.domain.user.service.VerificationCodeService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
@@ -20,11 +21,10 @@ import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 用户应用服务
+ * 职责：编排领域服务，处理用例流转，不包含业务逻辑
  *
  * @author AI Edu Platform
  */
@@ -32,22 +32,12 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class UserAppService {
 
-    /**
-     * 验证码过期时间（分钟）
-     */
-    private static final long CODE_EXPIRE_MINUTES = 5;
-
-    /**
-     * 验证码 Key 前缀
-     */
-    private static final String CODE_KEY_PREFIX = "ai-edu:code:";
-
     @Resource
     private UserRepository userRepository;
     @Resource
     private UserDomainService userDomainService;
     @Resource
-    private RedisService redisService;
+    private VerificationCodeService verificationCodeService;
 
     /**
      * 演示账号配置
@@ -60,6 +50,8 @@ public class UserAppService {
         DEMO_ACCOUNTS.put("PARENT", new DemoAccount(3L, "parent", "演示家长", "PARENT"));
     }
 
+    // ==================== 用户注册 ====================
+
     /**
      * 用户注册
      *
@@ -68,22 +60,22 @@ public class UserAppService {
      */
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        // 验证验证码
-        if (!verifyCode(request.getPhone(), CodeScene.REGISTER, request.getCode())) {
+        // 1. 验证验证码（调用领域服务）
+        if (!verificationCodeService.verify(request.getPhone(), CodeScene.REGISTER, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
-        // 检查用户名是否可用
+        // 2. 检查用户名是否可用（调用领域服务）
         if (!userDomainService.isUsernameAvailable(request.getUsername())) {
             throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS, "用户名已存在");
         }
 
-        // 检查手机号是否可用
+        // 3. 检查手机号是否可用（调用领域服务）
         if (!userDomainService.isPhoneAvailable(request.getPhone())) {
             throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTERED, "手机号已被注册");
         }
 
-        // 创建用户
+        // 4. 创建用户（调用领域服务）
         String encodedPassword = PasswordUtil.encode(request.getPassword());
         User user = userDomainService.createUser(
                 request.getUsername(),
@@ -93,11 +85,13 @@ public class UserAppService {
                 request.getRole()
         );
 
-        // 保存用户
+        // 5. 保存用户
         User savedUser = userRepository.save(user);
 
         return UserAssembler.toResponse(savedUser);
     }
+
+    // ==================== 用户登录 ====================
 
     /**
      * 用户登录（支持三种方式）
@@ -131,9 +125,6 @@ public class UserAppService {
         return UserAssembler.toResponse(user);
     }
 
-    /**
-     * 用户名+密码登录
-     */
     private User loginByUsernameAndPassword(LoginRequest request) {
         if (!StringUtils.hasText(request.getUsername())) {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "用户名不能为空");
@@ -152,9 +143,6 @@ public class UserAppService {
         return user;
     }
 
-    /**
-     * 手机号+密码登录
-     */
     private User loginByPhoneAndPassword(LoginRequest request) {
         if (!StringUtils.hasText(request.getPhone())) {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号不能为空");
@@ -173,9 +161,6 @@ public class UserAppService {
         return user;
     }
 
-    /**
-     * 手机号+验证码登录
-     */
     private User loginByPhoneAndCode(LoginRequest request) {
         if (!StringUtils.hasText(request.getPhone())) {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号不能为空");
@@ -184,14 +169,16 @@ public class UserAppService {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "验证码不能为空");
         }
 
-        // 验证验证码
-        if (!verifyCode(request.getPhone(), CodeScene.LOGIN, request.getCode())) {
+        // 验证验证码（调用领域服务）
+        if (!verificationCodeService.verify(request.getPhone(), CodeScene.LOGIN, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
         return userRepository.findByPhone(request.getPhone())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册"));
     }
+
+    // ==================== 演示登录 ====================
 
     /**
      * 演示账号快捷登录
@@ -222,11 +209,14 @@ public class UserAppService {
         return UserAssembler.toResponse(user);
     }
 
+    // ==================== 验证码 ====================
+
     /**
      * 发送验证码
      *
      * @param phone 手机号
      * @param scene 场景
+     * @return 验证码存储 Key（用于测试）
      */
     public String sendCode(String phone, String scene) {
         // 验证手机号格式
@@ -235,6 +225,19 @@ public class UserAppService {
         }
 
         // 根据场景校验手机号状态
+        validatePhoneForScene(phone, scene);
+
+        // 生成并存储验证码（调用领域服务）
+        VerificationCode verificationCode = verificationCodeService.generateAndSave(phone, scene);
+
+        log.info("验证码已发送: phone={}, scene={}", phone, scene);
+        return verificationCode.toStorageKey();
+    }
+
+    /**
+     * 根据场景校验手机号状态
+     */
+    private void validatePhoneForScene(String phone, String scene) {
         switch (scene) {
             case CodeScene.REGISTER:
                 // 注册场景：手机号不能已注册
@@ -252,17 +255,6 @@ public class UserAppService {
             default:
                 throw new BusinessException(ErrorCode.INVALID_PARAMS, "无效的验证码场景");
         }
-
-        // 生成6位验证码
-        String code = String.format("%06d", new Random().nextInt(1000000));
-
-        // 存储验证码到 Redis（业务逻辑）
-        String key = buildCodeKey(phone, scene);
-        redisService.set(key, code, CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-
-        // 模拟发送（生产环境调用短信服务）
-        log.info("验证码已发送: phone={}, scene={}, code={}, expireMinutes={}", phone, scene, code, CODE_EXPIRE_MINUTES);
-        return key;
     }
 
     /**
@@ -273,39 +265,11 @@ public class UserAppService {
      * @return 验证码
      */
     public String getCode(String phone, String scene) {
-        String key = buildCodeKey(phone, scene);
-        String code = redisService.get(key);
-        log.info("获取验证码: key={}, code={}", key, code);
-        return code != null ? code : "";
+        VerificationCode verificationCode = verificationCodeService.get(phone, scene);
+        return verificationCode != null ? verificationCode.getCode() : "";
     }
 
-    /**
-     * 验证验证码（业务逻辑）
-     *
-     * @param phone 手机号
-     * @param scene 场景
-     * @param code  待验证的验证码
-     * @return 是否验证成功
-     */
-    private boolean verifyCode(String phone, String scene, String code) {
-        String key = buildCodeKey(phone, scene);
-        String storedCode = redisService.get(key);
-        if (storedCode != null && storedCode.equals(code)) {
-            // 验证成功后删除验证码
-            redisService.delete(key);
-            log.info("验证码验证成功: key={}", key);
-            return true;
-        }
-        log.warn("验证码验证失败: key={}, inputCode={}", key, code);
-        return false;
-    }
-
-    /**
-     * 构建验证码 Key（业务逻辑）
-     */
-    private String buildCodeKey(String phone, String scene) {
-        return CODE_KEY_PREFIX + phone + ":" + scene;
-    }
+    // ==================== 密码管理 ====================
 
     /**
      * 重置密码
@@ -314,8 +278,8 @@ public class UserAppService {
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        // 验证验证码
-        if (!verifyCode(request.getPhone(), CodeScene.RESET_PASSWORD, request.getCode())) {
+        // 验证验证码（调用领域服务）
+        if (!verificationCodeService.verify(request.getPhone(), CodeScene.RESET_PASSWORD, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -336,7 +300,7 @@ public class UserAppService {
      * 修改密码
      *
      * @param request 修改密码请求
-     * @param session HTTP Session
+     * @param session  HTTP Session
      */
     @Transactional
     public void changePassword(ChangePasswordRequest request, HttpSession session) {
@@ -366,6 +330,8 @@ public class UserAppService {
 
         log.info("密码修改成功: userId={}", userId);
     }
+
+    // ==================== 用户查询 ====================
 
     /**
      * 获取当前登录用户
@@ -407,9 +373,8 @@ public class UserAppService {
         return UserAssembler.toResponse(user);
     }
 
-    /**
-     * 创建演示用户
-     */
+    // ==================== 私有方法 ====================
+
     @Transactional
     protected User createDemoUser(DemoAccount demoAccount) {
         String encodedPassword = PasswordUtil.encode("123456");
@@ -422,8 +387,5 @@ public class UserAppService {
         return userRepository.save(user);
     }
 
-    /**
-     * 演示账号配置
-     */
     private record DemoAccount(Long id, String username, String realName, String role) {}
 }
