@@ -1,6 +1,8 @@
 package com.ai.edu.domain.homework.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,32 +10,30 @@ import lombok.NoArgsConstructor;
 /**
  * 作业实体
  */
-@Entity
-@Table(name = "t_homework")
+@TableName("t_homework")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Homework {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "student_id", nullable = false)
+    @TableField("student_id")
     private Long studentId;
 
-    @Column(name = "question_id")
+    @TableField("question_id")
     private Long questionId;
 
-    @Column(name = "image_url", length = 500)
+    @TableField("image_url")
     private String imageUrl;
 
-    @Column(name = "status", nullable = false, length = 20)
+    @TableField("status")
     private String status = "PENDING";
 
-    @Column(name = "score")
+    @TableField("score")
     private Integer score;
 
-    @Column(columnDefinition = "TEXT")
+    @TableField("feedback")
     private String feedback;
 
     public static Homework create(Long studentId, Long questionId, String imageUrl) {

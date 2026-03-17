@@ -1,52 +1,52 @@
 package com.ai.edu.domain.question.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 题目实体
  */
-@Entity
-@Table(name = "t_question")
+@TableName(value = "t_question", autoResultMap = true)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Question {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @TableField("content")
     private String content;
 
-    @Column(name = "question_type", nullable = false, length = 20)
+    @TableField("question_type")
     private String questionType;
 
-    @Column(nullable = false, length = 20)
+    @TableField("difficulty")
     private String difficulty;
 
-    @Column(name = "knowledge_point_id")
+    @TableField("knowledge_point_id")
     private Long knowledgePointId;
 
-    @Column(name = "knowledge_point_name", length = 100)
+    @TableField("knowledge_point_name")
     private String knowledgePointName;
 
-    @Column(columnDefinition = "TEXT")
+    @TableField("answer")
     private String answer;
 
-    @Column(columnDefinition = "TEXT")
+    @TableField("analysis")
     private String analysis;
 
-    @Column(name = "created_by")
+    @TableField("created_by")
     private Long createdBy;
 
-    @ElementCollection
-    @CollectionTable(name = "t_question_options", joinColumns = @JoinColumn(name = "question_id"))
-    @Column(name = "option_content")
+    @TableField(value = "options", typeHandler = JacksonTypeHandler.class)
     private List<String> options = new ArrayList<>();
 
     public static Question create(String content, String questionType, String difficulty) {

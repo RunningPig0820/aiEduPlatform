@@ -1,43 +1,44 @@
 package com.ai.edu.domain.learning.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
 /**
  * 错题实体
  */
-@Entity
-@Table(name = "t_error_book")
+@TableName("t_error_book")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ErrorBook {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "student_id", nullable = false)
+    @TableField("student_id")
     private Long studentId;
 
-    @Column(name = "question_id", nullable = false)
+    @TableField("question_id")
     private Long questionId;
 
-    @Column(name = "homework_id")
+    @TableField("homework_id")
     private Long homeworkId;
 
-    @Column(name = "error_count", nullable = false)
+    @TableField("error_count")
     private Integer errorCount = 1;
 
-    @Column(name = "is_corrected", nullable = false)
+    @TableField("is_corrected")
     private Boolean isCorrected = false;
 
-    @Column(name = "created_at", nullable = false)
+    @TableField("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "last_error_at")
+    @TableField("last_error_at")
     private LocalDateTime lastErrorAt;
 
     public static ErrorBook create(Long studentId, Long questionId) {

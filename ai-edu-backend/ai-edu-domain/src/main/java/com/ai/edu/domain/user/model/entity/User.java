@@ -1,6 +1,8 @@
 package com.ai.edu.domain.user.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,35 +10,33 @@ import lombok.NoArgsConstructor;
 /**
  * 用户实体
  */
-@Entity
-@Table(name = "t_user")
+@TableName("t_user")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @TableField("username")
     private String username;
 
-    @Column(nullable = false, length = 100)
+    @TableField("password")
     private String password;
 
-    @Column(name = "real_name", nullable = false, length = 50)
+    @TableField("real_name")
     private String realName;
 
-    @Column(length = 20, unique = true)
+    @TableField("phone")
     private String phone;
 
-    @Column(length = 100)
+    @TableField("email")
     private String email;
 
-    @Column(nullable = false, length = 20)
+    @TableField("role")
     private String role;
 
-    @Column(nullable = false)
+    @TableField("enabled")
     private Boolean enabled = true;
 
     public static User create(String username, String password, String realName, String role) {

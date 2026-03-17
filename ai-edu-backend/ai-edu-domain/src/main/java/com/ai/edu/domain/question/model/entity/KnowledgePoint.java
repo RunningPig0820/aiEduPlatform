@@ -1,6 +1,8 @@
 package com.ai.edu.domain.question.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,29 +10,27 @@ import lombok.NoArgsConstructor;
 /**
  * 知识点实体
  */
-@Entity
-@Table(name = "t_knowledge_point")
+@TableName("t_knowledge_point")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class KnowledgePoint {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    @TableField("name")
     private String name;
 
-    @Column(name = "parent_id")
+    @TableField("parent_id")
     private Long parentId;
 
-    @Column(name = "subject", length = 50)
+    @TableField("subject")
     private String subject;
 
-    @Column(name = "grade_level", length = 20)
+    @TableField("grade_level")
     private String gradeLevel;
 
-    @Column(columnDefinition = "TEXT")
+    @TableField("description")
     private String description;
 
     public static KnowledgePoint create(String name, String subject) {

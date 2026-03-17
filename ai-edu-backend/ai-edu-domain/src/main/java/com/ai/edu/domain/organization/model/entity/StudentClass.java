@@ -1,6 +1,8 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,41 +12,39 @@ import java.time.LocalDate;
 /**
  * 学生-班级关联实体
  */
-@Entity
-@Table(name = "t_student_class")
+@TableName("t_student_class")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudentClass {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "student_id", nullable = false)
+    @TableField("student_id")
     private Long studentId;
 
-    @Column(name = "class_id", nullable = false)
+    @TableField("class_id")
     private Long classId;
 
-    @Column(name = "student_no", length = 50)
+    @TableField("student_no")
     private String studentNo;
 
-    @Column(name = "join_date")
+    @TableField("join_date")
     private LocalDate joinDate;
 
-    @Column(name = "leave_date")
+    @TableField("leave_date")
     private LocalDate leaveDate;
 
-    @Column(nullable = false, length = 20)
+    @TableField("status")
     private String status = "ACTIVE";
 
-    @Column(name = "created_by", nullable = false)
+    @TableField("created_by")
     private Long createdBy = 0L;
 
-    @Column(name = "modified_by", nullable = false)
+    @TableField("modified_by")
     private Long modifiedBy = 0L;
 
-    @Column(name = "is_deleted", nullable = false)
+    @TableField("is_deleted")
     private Boolean deleted = false;
 
     public static StudentClass create(Long studentId, Long classId) {

@@ -1,6 +1,8 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,47 +10,45 @@ import lombok.NoArgsConstructor;
 /**
  * 学校实体
  */
-@Entity
-@Table(name = "t_school")
+@TableName("t_school")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class School {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, length = 200)
+    @TableField("name")
     private String name;
 
-    @Column(length = 50)
+    @TableField("code")
     private String code;
 
-    @Column(length = 50)
+    @TableField("province")
     private String province;
 
-    @Column(length = 50)
+    @TableField("city")
     private String city;
 
-    @Column(length = 50)
+    @TableField("district")
     private String district;
 
-    @Column(length = 500)
+    @TableField("address")
     private String address;
 
-    @Column(name = "school_type", length = 50)
+    @TableField("school_type")
     private String schoolType;
 
-    @Column(columnDefinition = "TEXT")
+    @TableField("description")
     private String description;
 
-    @Column(name = "created_by", nullable = false)
+    @TableField("created_by")
     private Long createdBy = 0L;
 
-    @Column(name = "modified_by", nullable = false)
+    @TableField("modified_by")
     private Long modifiedBy = 0L;
 
-    @Column(name = "is_deleted", nullable = false)
+    @TableField("is_deleted")
     private Boolean deleted = false;
 
     public static School create(String name, String code, String schoolType) {

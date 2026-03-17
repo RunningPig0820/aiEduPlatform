@@ -670,8 +670,7 @@ public class AuthApiControllerTest {
         sendCodeRequest.setScene(CodeScene.RESET_PASSWORD);
         authApiController.sendCode(sendCodeRequest);
 
-
-        String code = userAppService.getCode(TEST_PHONE, CodeScene.LOGIN);
+        String code = userAppService.getCode(TEST_PHONE, CodeScene.RESET_PASSWORD);
 
         // 重置密码
         ResetPasswordRequest request = new ResetPasswordRequest();

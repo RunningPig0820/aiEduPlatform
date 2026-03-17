@@ -40,10 +40,10 @@
             <artifactId>spring-context</artifactId>
         </dependency>
 
-        <!-- Jakarta Persistence -->
+        <!-- MyBatis-Plus -->
         <dependency>
-            <groupId>jakarta.persistence</groupId>
-            <artifactId>jakarta.persistence-api</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
         <!-- Test -->
