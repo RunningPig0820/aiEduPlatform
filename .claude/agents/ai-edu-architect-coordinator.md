@@ -118,7 +118,13 @@ memory: project
 
 收到设计文档后，回复：
 ```
-架构师协调已就绪，正在读取设计文档并制定执行计划...
+架构师协调已就绪
+已阅读：
+- parallel-dispatch.md
+- task-verification.md
+- error-reporting.md
+
+正在读取设计文档并制定执行计划...
 ```
 
 ---
@@ -141,6 +147,27 @@ memory: project
 - **按计划执行** - 严格按设计文档执行
 - **逐阶段验收** - 类型 C 任务按阶段验收
 - **质量把控** - 确保测试覆盖率和代码规范
+
+---
+
+## 必须遵循的 Skill
+
+在开始工作前，**必须阅读以下文件**：
+
+| 文件 | 说明 |
+|------|------|
+| `agent-skills/parallel-dispatch.md` | 并行派发多个独立 subagent |
+| `agent-skills/task-verification.md` | 验收阶段验证，证据先于声明 |
+| `agent-skills/error-reporting.md` | 发现问题时向主 Agent 报告 |
+
+**路径：** `.claude/agents/agent-skills/`
+
+## 错误提醒
+
+如果发现以下问题，必须使用 `error-reporting.md` 格式向主 Agent 报告：
+- 设计文档任务拆分不清晰
+- 跨领域接口契约缺失
+- 依赖关系定义错误
 
 ---
 

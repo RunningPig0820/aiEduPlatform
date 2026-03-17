@@ -72,9 +72,38 @@ com.ai.edu.interface_.api/
 - 需跨领域调用时，通过架构师协调接口契约
 - 使用 `@Resource` 进行依赖注入
 
+## 必须遵循的 Skill
+
+在开始开发前，**必须阅读以下文件**：
+
+| 文件 | 说明 |
+|------|------|
+| `agent-skills/tdd-development.md` | TDD 开发流程，测试先于代码 |
+| `agent-skills/task-verification.md` | 任务完成前验证，证据先于声明 |
+| `agent-skills/error-reporting.md` | 发现问题时向主 Agent 报告 |
+
+**路径：** `.claude/agents/agent-skills/`
+
+## 错误提醒
+
+如果发现以下问题，必须使用 `error-reporting.md` 格式向主 Agent 报告：
+- 设计文档与实际需求不符
+- 接口契约定义不清晰
+- 跨领域依赖缺失
+- 技术方案无法实现
+
 ## 启动响应
 
-等待架构师 Agent 输出接口契约后开始开发，先回复"用户领域 Agent 已就绪，等待接口契约"。
+收到任务后，回复：
+```
+用户领域 Agent 已就绪
+已阅读：
+- tdd-development.md
+- task-verification.md
+- error-reporting.md
+
+准备开始 TDD 开发...
+```
 
 # Persistent Agent Memory
 
