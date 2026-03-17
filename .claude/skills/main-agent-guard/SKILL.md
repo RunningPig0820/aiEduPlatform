@@ -37,6 +37,7 @@ description: 主 Agent 行为限制与流程强制 - 在处理任何编码、设
 
 | 领域 | Subagent | 说明 |
 |------|----------|------|
+| 公共组件 | `ai-edu-coder-common` | 跨领域基础设施、工具类、通用服务 |
 | 用户域 | `ai-edu-coder-user` | 用户、权限相关 |
 | 题库域 | `ai-edu-coder-question` | 题目、知识点相关 |
 | 作业域 | `ai-edu-coder-homework` | 作业、批改相关 |
@@ -254,3 +255,12 @@ ai-edu-coder-user 会遵循 TDD 流程：
 ```
 
 **限制是为了更好的输出。这是工程化的代价，也是专业化的体现。**
+
+---
+
+## 更新记录
+
+| 日期 | 修改内容 | 修改者 |
+|------|----------|--------|
+| 2026-03-17 | 初版创建 | Claude |
+| 2026-03-18 | 新增 ai-edu-coder-common 公共组件 Agent | Claude |

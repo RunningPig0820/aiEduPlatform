@@ -201,6 +201,7 @@ brainstorming skill（需求引导）
 
 | 领域 | Subagent | 说明 |
 |------|----------|------|
+| 公共组件 | `ai-edu-coder-common` | 跨领域基础设施、工具类、通用服务（Redis、MinIO 等） |
 | 用户、权限 | `ai-edu-coder-user` | 用户认证、角色权限 |
 | 题库、知识点 | `ai-edu-coder-question` | 题目管理、知识点管理 |
 | 作业、批改 | `ai-edu-coder-homework` | 作业布置、批改评分 |
@@ -234,6 +235,7 @@ brainstorming skill（需求引导）
 □ 我是否调用了 verification-before-completion skill？
 □ 我是否阅读了 error-reporting.md 内部规范？
 □ 我是否按照 skill 流程执行？
+□ 遇到配置问题时是否先询问用户再假设代码问题？
 □ 我是否在完成前进行了验证？
 □ 我是否输出了验证报告？
 □ 发现问题时是否报告了？
@@ -248,3 +250,4 @@ brainstorming skill（需求引导）
 | 2026-03-17 | 初版创建 | Claude |
 | 2026-03-17 | 添加 agent-skills 目录，限制主 Agent | Claude |
 | 2026-03-17 | 合并重复 skill，优化目录结构 | Claude |
+| 2026-03-18 | 新增 ai-edu-coder-common 公共组件 Agent | Claude |

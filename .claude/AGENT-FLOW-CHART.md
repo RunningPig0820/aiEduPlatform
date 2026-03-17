@@ -32,6 +32,7 @@
     │
     ├── ai-edu-architect-design.md       # 设计角色
     ├── ai-edu-architect-coordinator.md  # 协调角色
+    ├── ai-edu-coder-common.md           # 公共组件开发（跨领域基础设施）
     ├── ai-edu-coder-user.md             # 用户领域开发
     ├── ai-edu-coder-homework.md         # 作业领域开发
     ├── ai-edu-coder-question.md         # 题库领域开发
@@ -306,6 +307,7 @@ Read tool: ".claude/agents/agent-skills/error-reporting.md"
 □ 是否调用了 test-driven-development skill？
 □ 是否调用了 verification-before-completion skill？
 □ 是否显式读取了 error-reporting.md？
+□ 遇到配置问题时是否先询问用户再假设代码问题？
 □ 是否按照 TDD 流程执行？
 □ 是否在完成前进行了验证？
 □ 是否输出了验证报告？
@@ -399,3 +401,4 @@ ai-edu-architect-coordinator:
 | 日期 | 修改内容 | 修改者 |
 |------|----------|--------|
 | 2026-03-17 | 初版创建，完整流程梳理 | Claude |
+| 2026-03-18 | 新增 ai-edu-coder-common 公共组件 Agent | Claude |
