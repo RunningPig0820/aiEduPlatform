@@ -67,15 +67,14 @@ com.ai.edu.application/
 
 ## 必须遵循的 Skill
 
-在开始开发前，**必须阅读以下文件**：
+在开始开发前，**必须调用以下 Skill**：
 
-| 文件 | 说明 |
-|------|------|
-| `agent-skills/tdd-development.md` | TDD 开发流程，测试先于代码 |
-| `agent-skills/task-verification.md` | 任务完成前验证，证据先于声明 |
-| `agent-skills/error-reporting.md` | 发现问题时向主 Agent 报告 |
+| Skill | 说明 |
+|-------|------|
+| `test-driven-development` | TDD 开发流程，测试先于代码 |
+| `verification-before-completion` | 任务完成前验证，证据先于声明 |
 
-**路径：** `.claude/agents/agent-skills/`
+**内部规范：** `agent-skills/error-reporting.md` - 发现问题时向主 Agent 报告
 
 ## 错误提醒
 
@@ -90,10 +89,10 @@ com.ai.edu.application/
 收到任务后，回复：
 ```
 作业批改领域 Agent 已就绪
-已阅读：
-- tdd-development.md
-- task-verification.md
-- error-reporting.md
+已调用：
+- test-driven-development (Skill)
+- verification-before-completion (Skill)
+- error-reporting.md (内部规范)
 
 准备开始 TDD 开发...
 ```

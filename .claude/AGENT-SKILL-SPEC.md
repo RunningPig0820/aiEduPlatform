@@ -2,6 +2,7 @@
 
 > 更新日期：2026-03-17
 > 核心原则：**限制即自由**
+> **完整流程图：** 见 [AGENT-FLOW-CHART.md](./AGENT-FLOW-CHART.md)
 
 ---
 
@@ -37,17 +38,21 @@
 .claude/
 ├── AGENT-SKILL-SPEC.md          # 本规范文档
 │
-├── skills/                       # 主 Agent Skill（统筹类）
+├── skills/                       # 用户可调用 Skill
 │   ├── brainstorming/           # 需求引导
 │   ├── main-agent-guard/        # 主 Agent 行为限制
+│   ├── test-driven-development/ # TDD 开发流程（含 Java/Maven 特定）
+│   ├── verification-before-completion/ # 完成前验证（含 Java/Maven 特定）
 │   └── ...
 │
 └── agents/
-    ├── agent-skills/            # Subagent 专属 Skill
-    │   ├── tdd-development.md   # TDD 开发流程
-    │   ├── task-verification.md # 完成前验证
-    │   ├── parallel-dispatch.md # 并行派发
-    │   └── error-reporting.md   # 错误报告
+    ├── agent-skills/            # Subagent 内部规范
+    │   ├── dispatching-parallel-agents/ # 并行派发
+    │   ├── error-reporting.md   # 错误报告
+    │   ├── executing-plans/
+    │   ├── finishing-a-development-branch/
+    │   ├── subagent-driven-development/
+    │   └── systematic-debugging/
     │
     ├── ai-edu-architect-design.md      # 设计角色
     ├── ai-edu-architect-coordinator.md # 协调角色
@@ -123,8 +128,8 @@ brainstorming skill（需求引导）
 ┌─────────────────────────────────────┐
 │ ai-edu-architect-coordinator        │
 │                                     │
-│ 阅读：parallel-dispatch.md          │
-│ 阅读：task-verification.md          │
+│ 调用：verification-before-completion│
+│ 阅读：dispatching-parallel-agents   │
 │ 阅读：error-reporting.md            │
 │                                     │
 │ 执行：任务派发、验收                 │
@@ -134,8 +139,8 @@ brainstorming skill（需求引导）
 ┌─────────────────────────────────────┐
 │ ai-edu-coder-* (Subagent)           │
 │                                     │
-│ 阅读：tdd-development.md            │
-│ 阅读：task-verification.md          │
+│ 调用：test-driven-development       │
+│ 调用：verification-before-completion│
 │ 阅读：error-reporting.md            │
 │                                     │
 │ 执行：TDD 开发、验证、报告           │
@@ -170,7 +175,7 @@ brainstorming skill（需求引导）
 
 ## 五、Skill 分类
 
-### 主 Agent Skill
+### 用户可调用 Skill（skills/）
 
 | Skill | 位置 | 用途 |
 |-------|------|------|
@@ -178,15 +183,17 @@ brainstorming skill（需求引导）
 | `brainstorming` | skills/ | 需求引导 |
 | `writing-plans` | skills/ | 编写计划 |
 | `writing-skills` | skills/ | 编写 Skill |
+| `test-driven-development` | skills/ | TDD 开发流程（含 Java/Maven） |
+| `verification-before-completion` | skills/ | 完成前验证（含 Java/Maven） |
 
-### Subagent Skill
+### Subagent 内部规范（agents/agent-skills/）
 
-| Skill | 位置 | 使用者 |
+| 规范 | 位置 | 使用者 |
 |-------|------|--------|
-| `tdd-development` | agents/agent-skills/ | ai-edu-coder-* |
-| `task-verification` | agents/agent-skills/ | 所有 subagent |
-| `parallel-dispatch` | agents/agent-skills/ | ai-edu-architect-coordinator |
+| `dispatching-parallel-agents` | agents/agent-skills/ | ai-edu-architect-coordinator |
 | `error-reporting` | agents/agent-skills/ | 所有 subagent |
+| `subagent-driven-development` | agents/agent-skills/ | 通用执行模式 |
+| `systematic-debugging` | agents/agent-skills/ | 调试流程 |
 
 ---
 
@@ -223,7 +230,9 @@ brainstorming skill（需求引导）
 ### Subagent 自检
 
 ```
-□ 我是否阅读了 agent-skills 目录下的 skill？
+□ 我是否调用了 test-driven-development skill？
+□ 我是否调用了 verification-before-completion skill？
+□ 我是否阅读了 error-reporting.md 内部规范？
 □ 我是否按照 skill 流程执行？
 □ 我是否在完成前进行了验证？
 □ 我是否输出了验证报告？
@@ -238,3 +247,4 @@ brainstorming skill（需求引导）
 |------|----------|--------|
 | 2026-03-17 | 初版创建 | Claude |
 | 2026-03-17 | 添加 agent-skills 目录，限制主 Agent | Claude |
+| 2026-03-17 | 合并重复 skill，优化目录结构 | Claude |

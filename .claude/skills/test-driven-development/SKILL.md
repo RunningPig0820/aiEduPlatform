@@ -115,7 +115,11 @@ test('重试有效', async () => {
 **强制性的。绝不跳过。**
 
 ```bash
+# Node.js 项目
 npm test path/to/test.test.ts
+
+# Java/Maven 项目
+mvn test -Dtest=ClassNameTest#methodName
 ```
 
 确认：
@@ -170,7 +174,11 @@ async function retryOperation<T>(
 **强制性的。**
 
 ```bash
+# Node.js 项目
 npm test path/to/test.test.ts
+
+# Java/Maven 项目
+mvn test -Dtest=ClassNameTest#methodName
 ```
 
 确认：
@@ -194,6 +202,138 @@ npm test path/to/test.test.ts
 ### 重复
 
 下一个功能的下一个失败测试。
+
+---
+
+## Java/Maven 项目特定
+
+### 项目结构
+
+```
+com.ai.edu.domain.{context}/
+├── model/
+│   ├── entity/           # 实体
+│   ├── valueobject/      # 值对象
+│   └── aggregate/        # 聚合根
+├── repository/           # 仓储接口
+└── service/              # 领域服务
+
+com.ai.edu.application/
+├── service/              # 应用服务
+├── dto/                  # DTO
+└── assembler/            # 转换器
+
+com.ai.edu.interface_.api/
+└── *Controller.java      # REST API
+```
+
+### 测试命名
+
+```java
+// 格式: should_{expected_behavior}_when_{condition}
+@Test
+void should_throw_exception_when_username_is_empty() { }
+
+@Test
+void should_return_user_when_find_by_id() { }
+```
+
+### 测试结构
+
+```java
+@Test
+void should_xxx() {
+    // given - 准备测试数据
+
+    // when - 执行被测试方法
+
+    // then - 验证结果
+}
+```
+
+### 单元测试示例
+
+```java
+@Test
+void should_create_user_with_valid_username() {
+    // given
+    String username = "testuser";
+
+    // when
+    User user = User.create(username);
+
+    // then
+    assertThat(user.getUsername()).isEqualTo(username);
+}
+```
+
+### 集成测试示例
+
+```java
+@SpringBootTest
+@Transactional
+class UserControllerIntegrationTest {
+
+    @Resource
+    private UserController userController;
+
+    @Test
+    void should_register_user_successfully() {
+        // given
+        RegisterRequest request = new RegisterRequest("user", "password");
+
+        // when
+        ApiResponse<Long> response = userController.register(request);
+
+        // then
+        assertThat(response.getCode()).isEqualTo("00000");
+        assertThat(response.getData()).isNotNull();
+    }
+}
+```
+
+### 运行测试命令
+
+```bash
+# 运行单个测试类
+mvn test -Dtest=ClassNameTest
+
+# 运行单个方法
+mvn test -Dtest=ClassNameTest#methodName
+
+# 运行所有测试
+mvn test
+
+# 运行指定模块测试
+mvn test -pl ai-edu-interface
+```
+
+### 完成前验证
+
+在声称任务完成前，必须：
+
+```bash
+# 1. 运行测试确认通过
+mvn test
+
+# 2. 检查测试覆盖率
+mvn jacoco:report
+
+# 3. 运行构建确认成功
+mvn clean install -DskipTests
+```
+
+### Java 检查清单
+
+- [ ] 每个新方法都有对应测试
+- [ ] 测试先于代码编写
+- [ ] 看到测试失败后再写代码
+- [ ] 所有测试通过
+- [ ] 测试覆盖率 ≥ 80%
+- [ ] 代码遵循 DDD 目录结构
+- [ ] 使用 `@Resource` 注入依赖
+
+---
 
 ## 好测试
 

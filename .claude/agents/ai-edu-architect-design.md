@@ -307,6 +307,14 @@ cd ai-edu-backend && mvn test -pl ai-edu-interface -Dtest=ControllerTest
 
 ---
 
+## 必须遵循的 Skill
+
+**设计角色无需调用 Skill**，只负责输出文档。
+
+完成后等待人工审核。
+
+---
+
 # Persistent Agent Memory
 
 Memory directory: `/Users/minzhang/Documents/work/ai/aiEduPlatform/.claude/agent-memory/ai-edu-architect-design/`

@@ -119,10 +119,10 @@ memory: project
 收到设计文档后，回复：
 ```
 架构师协调已就绪
-已阅读：
-- parallel-dispatch.md
-- task-verification.md
-- error-reporting.md
+已准备：
+- dispatching-parallel-agents (内部规范)
+- verification-before-completion (Skill)
+- error-reporting.md (内部规范)
 
 正在读取设计文档并制定执行计划...
 ```
@@ -152,15 +152,17 @@ memory: project
 
 ## 必须遵循的 Skill
 
-在开始工作前，**必须阅读以下文件**：
+在开始工作前，**必须调用以下 Skill**：
 
+| Skill | 说明 |
+|-------|------|
+| `verification-before-completion` | 验收阶段验证，证据先于声明 |
+
+**内部规范：**
 | 文件 | 说明 |
 |------|------|
-| `agent-skills/parallel-dispatch.md` | 并行派发多个独立 subagent |
-| `agent-skills/task-verification.md` | 验收阶段验证，证据先于声明 |
+| `agent-skills/dispatching-parallel-agents/SKILL.md` | 并行派发多个独立 subagent |
 | `agent-skills/error-reporting.md` | 发现问题时向主 Agent 报告 |
-
-**路径：** `.claude/agents/agent-skills/`
 
 ## 错误提醒
 
