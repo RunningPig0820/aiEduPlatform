@@ -10,6 +10,7 @@ import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.domain.user.service.UserDomainService;
+import com.ai.edu.domain.shared.service.RedisService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
@@ -20,26 +21,33 @@ import org.springframework.util.StringUtils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 用户应用服务
+ *
+ * @author AI Edu Platform
  */
 @Slf4j
 @Service
 public class UserAppService {
 
+    /**
+     * 验证码过期时间（分钟）
+     */
+    private static final long CODE_EXPIRE_MINUTES = 5;
+
+    /**
+     * 验证码 Key 前缀
+     */
+    private static final String CODE_KEY_PREFIX = "ai-edu:code:";
+
     @Resource
     private UserRepository userRepository;
     @Resource
     private UserDomainService userDomainService;
-
-    /**
-     * todo 生产环境应使用 Redis
-     * 模拟验证码存储（生产环境应使用 Redis）
-     * key: phone:scene, value: code
-     */
-    private static final Map<String, String> CODE_STORE = new ConcurrentHashMap<>();
+    @Resource
+    private RedisService redisService;
 
     /**
      * 演示账号配置
@@ -52,10 +60,16 @@ public class UserAppService {
         DEMO_ACCOUNTS.put("PARENT", new DemoAccount(3L, "parent", "演示家长", "PARENT"));
     }
 
+    /**
+     * 用户注册
+     *
+     * @param request 注册请求
+     * @return 用户响应
+     */
     @Transactional
     public UserResponse register(RegisterRequest request) {
         // 验证验证码
-        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.REGISTER)) {
+        if (!verifyCode(request.getPhone(), CodeScene.REGISTER, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -87,6 +101,9 @@ public class UserAppService {
 
     /**
      * 用户登录（支持三种方式）
+     *
+     * @param request 登录请求
+     * @return 用户响应
      */
     public UserResponse login(LoginRequest request) {
         String loginType = request.getLoginType();
@@ -168,7 +185,7 @@ public class UserAppService {
         }
 
         // 验证验证码
-        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.LOGIN)) {
+        if (!verifyCode(request.getPhone(), CodeScene.LOGIN, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -178,6 +195,10 @@ public class UserAppService {
 
     /**
      * 演示账号快捷登录
+     *
+     * @param request 演示登录请求
+     * @param session HTTP Session
+     * @return 用户响应
      */
     public UserResponse demoLogin(DemoLoginRequest request, HttpSession session) {
         String role = request.getRole().toUpperCase();
@@ -203,8 +224,11 @@ public class UserAppService {
 
     /**
      * 发送验证码
+     *
+     * @param phone 手机号
+     * @param scene 场景
      */
-    public void sendCode(String phone, String scene) {
+    public String sendCode(String phone, String scene) {
         // 验证手机号格式
         if (!phone.matches("^1[3-9]\\d{9}$")) {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "手机号格式不正确");
@@ -232,31 +256,66 @@ public class UserAppService {
         // 生成6位验证码
         String code = String.format("%06d", new Random().nextInt(1000000));
 
-        // 存储验证码（生产环境应使用 Redis，设置过期时间）
+        // 存储验证码到 Redis（业务逻辑）
         String key = buildCodeKey(phone, scene);
-        CODE_STORE.put(key, code);
+        redisService.set(key, code, CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
 
         // 模拟发送（生产环境调用短信服务）
-        log.info("验证码已发送: phone={}, scene={}, code={}", phone, scene, code);
+        log.info("验证码已发送: phone={}, scene={}, code={}, expireMinutes={}", phone, scene, code, CODE_EXPIRE_MINUTES);
+        return key;
     }
 
     /**
-     *  获取验证码
+     * 获取验证码（用于测试）
+     *
+     * @param phone 手机号
+     * @param scene 场景
+     * @return 验证码
      */
     public String getCode(String phone, String scene) {
         String key = buildCodeKey(phone, scene);
-        String code = CODE_STORE.getOrDefault(key, "");
-        log.info("获取验证码: key={}, code={}, storeSize={}", key, code, CODE_STORE.size());
-        return code;
+        String code = redisService.get(key);
+        log.info("获取验证码: key={}, code={}", key, code);
+        return code != null ? code : "";
+    }
+
+    /**
+     * 验证验证码（业务逻辑）
+     *
+     * @param phone 手机号
+     * @param scene 场景
+     * @param code  待验证的验证码
+     * @return 是否验证成功
+     */
+    private boolean verifyCode(String phone, String scene, String code) {
+        String key = buildCodeKey(phone, scene);
+        String storedCode = redisService.get(key);
+        if (storedCode != null && storedCode.equals(code)) {
+            // 验证成功后删除验证码
+            redisService.delete(key);
+            log.info("验证码验证成功: key={}", key);
+            return true;
+        }
+        log.warn("验证码验证失败: key={}, inputCode={}", key, code);
+        return false;
+    }
+
+    /**
+     * 构建验证码 Key（业务逻辑）
+     */
+    private String buildCodeKey(String phone, String scene) {
+        return CODE_KEY_PREFIX + phone + ":" + scene;
     }
 
     /**
      * 重置密码
+     *
+     * @param request 重置密码请求
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         // 验证验证码
-        if (!verifyCode(request.getPhone(), request.getCode(), CodeScene.RESET_PASSWORD)) {
+        if (!verifyCode(request.getPhone(), CodeScene.RESET_PASSWORD, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -275,6 +334,9 @@ public class UserAppService {
 
     /**
      * 修改密码
+     *
+     * @param request 修改密码请求
+     * @param session HTTP Session
      */
     @Transactional
     public void changePassword(ChangePasswordRequest request, HttpSession session) {
@@ -306,24 +368,10 @@ public class UserAppService {
     }
 
     /**
-     * 验证验证码
-     */
-    public boolean verifyCode(String phone, String code, String scene) {
-        String key = buildCodeKey(phone, scene);
-        String storedCode = CODE_STORE.get(key);
-        if (storedCode != null && storedCode.equals(code)) {
-            CODE_STORE.remove(key);
-            return true;
-        }
-        return false;
-    }
-
-    private String buildCodeKey(String phone, String scene) {
-        return phone + ":" + scene;
-    }
-
-    /**
      * 获取当前登录用户
+     *
+     * @param session HTTP Session
+     * @return 用户响应
      */
     public UserResponse getCurrentUser(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -339,12 +387,20 @@ public class UserAppService {
 
     /**
      * 登出
+     *
+     * @param session HTTP Session
      */
     public void logout(HttpSession session) {
         session.invalidate();
         log.info("用户已登出");
     }
 
+    /**
+     * 根据ID获取用户
+     *
+     * @param id 用户ID
+     * @return 用户响应
+     */
     public UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在"));

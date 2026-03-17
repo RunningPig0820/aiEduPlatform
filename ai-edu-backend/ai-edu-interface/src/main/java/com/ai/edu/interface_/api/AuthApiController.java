@@ -57,9 +57,9 @@ public class AuthApiController {
      * 发送验证码
      */
     @PostMapping("/send-code")
-    public ApiResponse<Void> sendCode(@Valid @RequestBody SendCodeRequest request) {
-        userAppService.sendCode(request.getPhone(), request.getScene());
-        return ApiResponse.success(null);
+    public ApiResponse<String> sendCode(@Valid @RequestBody SendCodeRequest request) {
+        String code = userAppService.sendCode(request.getPhone(), request.getScene());
+        return ApiResponse.success(code);
     }
 
     /**

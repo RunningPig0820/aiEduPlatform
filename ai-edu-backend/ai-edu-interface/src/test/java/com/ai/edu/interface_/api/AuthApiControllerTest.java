@@ -74,7 +74,7 @@ public class AuthApiControllerTest {
         sendCodeRequest.setPhone(TEST_PHONE);
         sendCodeRequest.setScene(CodeScene.REGISTER);
 
-        ApiResponse<Void> sendResult = authApiController.sendCode(sendCodeRequest);
+        ApiResponse<String> sendResult = authApiController.sendCode(sendCodeRequest);
         assertEquals(ErrorCode.SUCCESS, sendResult.getCode());
 
         String code = userAppService.getCode(sendCodeRequest.getPhone(), sendCodeRequest.getScene());
@@ -542,7 +542,7 @@ public class AuthApiControllerTest {
         request.setPhone(TEST_PHONE);
         request.setScene(CodeScene.REGISTER);
 
-        ApiResponse<Void> response = authApiController.sendCode(request);
+        ApiResponse<String> response = authApiController.sendCode(request);
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
     }
@@ -560,7 +560,7 @@ public class AuthApiControllerTest {
         request.setPhone(TEST_PHONE);
         request.setScene(CodeScene.LOGIN);
 
-        ApiResponse<Void> response = authApiController.sendCode(request);
+        ApiResponse<String> response = authApiController.sendCode(request);
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
     }
@@ -578,7 +578,7 @@ public class AuthApiControllerTest {
         request.setPhone(TEST_PHONE);
         request.setScene(CodeScene.RESET_PASSWORD);
 
-        ApiResponse<Void> response = authApiController.sendCode(request);
+        ApiResponse<String> response = authApiController.sendCode(request);
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
     }
