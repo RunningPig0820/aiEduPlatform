@@ -379,6 +379,16 @@ const response = await fetch('/api/auth/demo-login', {
 | phone | String | 是 | 11 位手机号格式 | 目标手机号 |
 | scene | String | 是 | 枚举值 | 验证码场景，见下表 |
 
+### 响应参数
+
+```json
+{
+  "code": "00000",
+  "message": "success",
+  "data": "string"
+}
+```
+
 ### scene 枚举值
 
 | 值 | 说明 | 用途 |

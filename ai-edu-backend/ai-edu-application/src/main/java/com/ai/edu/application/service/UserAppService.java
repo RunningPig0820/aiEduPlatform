@@ -231,7 +231,7 @@ public class UserAppService {
         VerificationCode verificationCode = verificationCodeService.generateAndSave(phone, scene);
 
         log.info("验证码已发送: phone={}, scene={}", phone, scene);
-        return verificationCode.toStorageKey();
+        return verificationCode.getCode();
     }
 
     /**
