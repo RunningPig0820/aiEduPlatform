@@ -1,0 +1,22 @@
+schema: ai-edu
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+context: |
+  Tech stack: Java 21, Spring Boot 3.2.5, Spring Data JPA, MyBatis-Plus, MySQL, Redis
+  Architecture: Domain-Driven Design (DDD) with 4-layer architecture
+  Bounded Contexts: User, Organization, Question, Homework, Learning
+  REST API: All controllers in com.ai.edu.interface_.api
+  Use @Resource for dependency injection
+  Use ApiResponse<T> as unified response wrapper
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

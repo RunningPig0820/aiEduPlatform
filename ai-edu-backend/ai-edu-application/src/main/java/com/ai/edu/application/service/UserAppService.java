@@ -48,6 +48,7 @@ public class UserAppService {
         DEMO_ACCOUNTS.put("STUDENT", new DemoAccount(1L, "student", "演示学生", "STUDENT"));
         DEMO_ACCOUNTS.put("TEACHER", new DemoAccount(2L, "teacher", "演示老师", "TEACHER"));
         DEMO_ACCOUNTS.put("PARENT", new DemoAccount(3L, "parent", "演示家长", "PARENT"));
+        DEMO_ACCOUNTS.put("ADMIN", new DemoAccount(4L, "admin", "演示管理员", "ADMIN"));
     }
 
     // ==================== 用户注册 ====================
