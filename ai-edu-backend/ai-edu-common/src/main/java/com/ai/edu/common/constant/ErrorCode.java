@@ -38,4 +38,11 @@ public final class ErrorCode {
 
     // 学习模块 5xxxx
     public static final String ERROR_RECORD_NOT_FOUND = "50001";
+
+    // LLM模块 6xxxx
+    public static final String LLM_SERVICE_UNAVAILABLE = "60001";
+    public static final String LLM_MODEL_NOT_ALLOWED = "60002";
+    public static final String LLM_CALL_FAILED = "60003";
+    public static final String LLM_TIMEOUT = "60004";
+    public static final String LLM_INVALID_PARAMS = "60005";
 }

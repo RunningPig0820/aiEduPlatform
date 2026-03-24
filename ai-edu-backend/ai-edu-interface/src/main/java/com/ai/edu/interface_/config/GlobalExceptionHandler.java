@@ -2,6 +2,7 @@ package com.ai.edu.interface_.config;
 
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.EntityNotFoundException;
+import com.ai.edu.common.exception.LlmGatewayException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -33,6 +34,16 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public Map<String, Object> handleEntityNotFoundException(EntityNotFoundException e) {
         log.warn("Entity not found: {}", e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", e.getCode());
+        result.put("message", e.getMessage());
+        return result;
+    }
+
+    @ExceptionHandler(LlmGatewayException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public Map<String, Object> handleLlmGatewayException(LlmGatewayException e) {
+        log.warn("LLM Gateway exception: {} - {}", e.getCode(), e.getMessage());
         Map<String, Object> result = new HashMap<>();
         result.put("code", e.getCode());
         result.put("message", e.getMessage());

@@ -32,6 +32,8 @@ public class SecurityConfig {
                         .requestMatchers("/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         // 允许访问 API
                         .requestMatchers("/api/auth/**").permitAll()
+                        // LLM 公开接口（无需登录）
+                        .requestMatchers("/api/llm/allowed-models", "/api/llm/models", "/api/llm/scenes").permitAll()
                         // 其他请求需要认证
                         .anyRequest().authenticated()
                 )

@@ -40,6 +40,18 @@
             <artifactId>spring-context</artifactId>
         </dependency>
 
+        <!-- Reactor Core (for reactive types in domain interfaces) -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+        </dependency>
+
+        <!-- Spring WebFlux (for ServerSentEvent in streaming interface) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+        </dependency>
+
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
