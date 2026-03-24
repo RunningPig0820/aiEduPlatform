@@ -1,4 +1,4 @@
-package com.ai.edu.domain.shared.model;
+package com.ai.edu.domain.llm.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;

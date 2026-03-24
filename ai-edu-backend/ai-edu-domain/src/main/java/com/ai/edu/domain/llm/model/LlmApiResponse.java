@@ -1,4 +1,4 @@
-package com.ai.edu.domain.shared.model;
+package com.ai.edu.domain.llm.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,26 +1,21 @@
 package com.ai.edu.infrastructure.ai;
 
-import com.ai.edu.domain.shared.model.AllowedModelsResponse;
-import com.ai.edu.domain.shared.model.ChatRequest;
-import com.ai.edu.domain.shared.model.ChatResponse;
-import com.ai.edu.domain.shared.model.ModelsResponse;
-import com.ai.edu.domain.shared.model.ScenesResponse;
-import com.ai.edu.domain.shared.service.LlmGateway;
+import com.ai.edu.domain.llm.model.AllowedModelsResponse;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.model.ModelsResponse;
+import com.ai.edu.domain.llm.service.LlmGateway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.netty.http.client.HttpClient;
-import reactor.test.StepVerifier;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -95,14 +90,14 @@ class LlmGatewayRealIntegrationTest {
     @EnabledIf("isLlmServiceAvailable")
     void chat_RealCall_Success() {
         // Given: 构建请求
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("你好，请用一句话介绍自己")
                 .userId(1001L)
                 .scene("page_assistant")
                 .build();
 
         // When: 调用 LLM Gateway
-        ChatResponse response = llmGateway.chat(request)
+        AiEduChatResponse response = llmGateway.chat(request)
                 .timeout(Duration.ofSeconds(30))
                 .block();
 
@@ -126,7 +121,7 @@ class LlmGatewayRealIntegrationTest {
     @EnabledIf("isLlmServiceAvailable")
     void chat_RealCall_WithSpecificModel() {
         // Given
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("1+1等于几？")
                 .userId(1002L)
                 .provider("zhipu")
@@ -134,7 +129,7 @@ class LlmGatewayRealIntegrationTest {
                 .build();
 
         // When
-        ChatResponse response = llmGateway.chat(request)
+        AiEduChatResponse response = llmGateway.chat(request)
                 .timeout(Duration.ofSeconds(30))
                 .block();
 
@@ -153,13 +148,13 @@ class LlmGatewayRealIntegrationTest {
     @EnabledIf("isLlmServiceAvailable")
     void chat_RealCall_MultiTurn() {
         // 第一轮对话
-        ChatRequest request1 = ChatRequest.builder()
+        AiEduChatRequest request1 = AiEduChatRequest.builder()
                 .message("我的名字叫小明")
                 .userId(1003L)
                 .scene("page_assistant")
                 .build();
 
-        ChatResponse response1 = llmGateway.chat(request1)
+        AiEduChatResponse response1 = llmGateway.chat(request1)
                 .timeout(Duration.ofSeconds(30))
                 .block();
 
@@ -170,14 +165,14 @@ class LlmGatewayRealIntegrationTest {
         System.out.println("[集成测试] 会话ID: " + sessionId);
 
         // 第二轮对话（使用相同的 sessionId）
-        ChatRequest request2 = ChatRequest.builder()
+        AiEduChatRequest request2 = AiEduChatRequest.builder()
                 .message("我叫什么名字？")
                 .userId(1003L)
                 .sessionId(sessionId)
                 .scene("page_assistant")
                 .build();
 
-        ChatResponse response2 = llmGateway.chat(request2)
+        AiEduChatResponse response2 = llmGateway.chat(request2)
                 .timeout(Duration.ofSeconds(30))
                 .block();
 
@@ -193,7 +188,7 @@ class LlmGatewayRealIntegrationTest {
     @EnabledIf("isLlmServiceAvailable")
     void chatStream_RealCall_Success() {
         // Given
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("请用三句话介绍人工智能")
                 .userId(1004L)
                 .scene("page_assistant")

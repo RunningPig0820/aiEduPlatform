@@ -1,11 +1,11 @@
 package com.ai.edu.infrastructure.ai;
 
 import com.ai.edu.common.exception.LlmGatewayException;
-import com.ai.edu.domain.shared.model.AllowedModelsResponse;
-import com.ai.edu.domain.shared.model.ChatRequest;
-import com.ai.edu.domain.shared.model.ChatResponse;
-import com.ai.edu.domain.shared.model.ModelsResponse;
-import com.ai.edu.domain.shared.model.ScenesResponse;
+import com.ai.edu.domain.llm.model.AllowedModelsResponse;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.model.ModelsResponse;
+import com.ai.edu.domain.llm.model.ScenesResponse;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -13,8 +13,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -74,14 +72,14 @@ class LlmGatewayImplTest {
         // Given: 模拟 Python 服务返回成功响应
         mockChatSuccess("这是一个测试响应");
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("你好")
                 .userId(1001L)
                 .scene("homework_help")
                 .build();
 
         // When: 调用 chat 方法
-        Mono<ChatResponse> result = llmGateway.chat(request);
+        Mono<AiEduChatResponse> result = llmGateway.chat(request);
 
         // Then: 验证响应
         StepVerifier.create(result)
@@ -115,13 +113,13 @@ class LlmGatewayImplTest {
             throw new RuntimeException(e);
         }
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("你好")
                 .userId(1001L)
                 .build();
 
         // When: 调用 chat 方法
-        Mono<ChatResponse> result = llmGateway.chat(request);
+        Mono<AiEduChatResponse> result = llmGateway.chat(request);
 
         // Then: 验证抛出 LlmGatewayException
         StepVerifier.create(result)
@@ -140,13 +138,13 @@ class LlmGatewayImplTest {
                 .setHeader("Content-Type", "application/json")
                 .setBody("{\"error\":\"Invalid request parameters\"}"));
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("")
                 .userId(1001L)
                 .build();
 
         // When: 调用 chat 方法
-        Mono<ChatResponse> result = llmGateway.chat(request);
+        Mono<AiEduChatResponse> result = llmGateway.chat(request);
 
         // Then: 验证抛出 LlmGatewayException
         StepVerifier.create(result)
@@ -165,14 +163,14 @@ class LlmGatewayImplTest {
                 .setHeader("Content-Type", "application/json")
                 .setBody("{\"error\":\"Model not allowed\"}"));
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("你好")
                 .userId(1001L)
                 .model("restricted-model")
                 .build();
 
         // When: 调用 chat 方法
-        Mono<ChatResponse> result = llmGateway.chat(request);
+        Mono<AiEduChatResponse> result = llmGateway.chat(request);
 
         // Then: 验证抛出 LlmGatewayException
         StepVerifier.create(result)
@@ -190,7 +188,7 @@ class LlmGatewayImplTest {
         // Given: 模拟 SSE 流式响应
         mockSseStreamResponse();
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("请解释一下牛顿第一定律")
                 .userId(1001L)
                 .scene("knowledge_qa")
@@ -294,7 +292,7 @@ class LlmGatewayImplTest {
         // Given
         mockChatSuccess("测试响应");
 
-        ChatRequest request = ChatRequest.builder()
+        AiEduChatRequest request = AiEduChatRequest.builder()
                 .message("测试消息")
                 .userId(1001L)
                 .scene("test_scene")

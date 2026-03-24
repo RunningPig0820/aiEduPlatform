@@ -1,10 +1,10 @@
-package com.ai.edu.domain.shared.service;
+package com.ai.edu.domain.llm.service;
 
-import com.ai.edu.domain.shared.model.AllowedModelsResponse;
-import com.ai.edu.domain.shared.model.ChatRequest;
-import com.ai.edu.domain.shared.model.ChatResponse;
-import com.ai.edu.domain.shared.model.ModelsResponse;
-import com.ai.edu.domain.shared.model.ScenesResponse;
+import com.ai.edu.domain.llm.model.AllowedModelsResponse;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.model.ModelsResponse;
+import com.ai.edu.domain.llm.model.ScenesResponse;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -23,7 +23,7 @@ public interface LlmGateway {
      * @param request 对话请求
      * @return 对话响应
      */
-    Mono<ChatResponse> chat(ChatRequest request);
+    Mono<AiEduChatResponse> chat(AiEduChatRequest request);
 
     /**
      * 流式对话 (SSE)
@@ -31,7 +31,7 @@ public interface LlmGateway {
      * @param request 对话请求
      * @return SSE 事件流
      */
-    Flux<ServerSentEvent<String>> chatStream(ChatRequest request);
+    Flux<ServerSentEvent<String>> chatStream(AiEduChatRequest request);
 
     /**
      * 获取允许调用的模型列表

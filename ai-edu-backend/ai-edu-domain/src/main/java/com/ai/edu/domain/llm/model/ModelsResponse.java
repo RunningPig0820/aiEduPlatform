@@ -1,4 +1,4 @@
-package com.ai.edu.domain.shared.model;
+package com.ai.edu.domain.llm.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,18 +9,18 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 场景列表响应
+ * 所有模型列表响应
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ScenesResponse implements Serializable {
+public class ModelsResponse implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     /**
-     * 场景列表
+     * Provider 列表
      */
-    private List<SceneInfo> scenes;
+    private List<ProviderInfo> providers;
 }

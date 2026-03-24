@@ -1,4 +1,4 @@
-package com.ai.edu.domain.shared.model;
+package com.ai.edu.domain.llm.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -16,7 +16,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatResponse implements Serializable {
+public class AiEduChatResponse implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

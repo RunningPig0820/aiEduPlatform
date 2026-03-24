@@ -1,4 +1,4 @@
-package com.ai.edu.domain.shared.model;
+package com.ai.edu.domain.llm.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -15,7 +15,7 @@ import java.io.Serializable;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatRequest implements Serializable {
+public class AiEduChatRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -65,8 +65,8 @@ public class ChatRequest implements Serializable {
     /**
      * 创建基本的对话请求
      */
-    public static ChatRequest of(String message, Long userId) {
-        return ChatRequest.builder()
+    public static AiEduChatRequest of(String message, Long userId) {
+        return AiEduChatRequest.builder()
                 .message(message)
                 .userId(userId)
                 .build();
@@ -75,8 +75,8 @@ public class ChatRequest implements Serializable {
     /**
      * 创建带场景的对话请求
      */
-    public static ChatRequest of(String message, Long userId, String scene) {
-        return ChatRequest.builder()
+    public static AiEduChatRequest of(String message, Long userId, String scene) {
+        return AiEduChatRequest.builder()
                 .message(message)
                 .userId(userId)
                 .scene(scene)

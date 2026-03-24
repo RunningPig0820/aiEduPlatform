@@ -6,8 +6,10 @@ import com.ai.edu.application.dto.llm.ChatResponse;
 import com.ai.edu.application.dto.llm.ModelInfo;
 import com.ai.edu.application.dto.llm.ModelsResponse;
 import com.ai.edu.application.dto.llm.ScenesResponse;
-import com.ai.edu.domain.shared.model.Usage;
-import com.ai.edu.domain.shared.service.LlmGateway;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.model.Usage;
+import com.ai.edu.domain.llm.service.LlmGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,8 +45,8 @@ class LlmAppServiceTest {
     private LlmAppService llmAppService;
 
     private ChatRequest dtoRequest;
-    private com.ai.edu.domain.shared.model.ChatRequest domainRequest;
-    private com.ai.edu.domain.shared.model.ChatResponse domainResponse;
+    private AiEduChatRequest domainRequest;
+    private AiEduChatResponse domainResponse;
 
     @BeforeEach
     void setUp() {
@@ -60,7 +62,7 @@ class LlmAppServiceTest {
                 .build();
 
         // 准备领域模型请求
-        domainRequest = com.ai.edu.domain.shared.model.ChatRequest.builder()
+        domainRequest = AiEduChatRequest.builder()
                 .message("请解释一下牛顿第一定律")
                 .userId(1001L)
                 .scene("knowledge_qa")
@@ -71,7 +73,7 @@ class LlmAppServiceTest {
                 .build();
 
         // 准备领域模型响应
-        domainResponse = com.ai.edu.domain.shared.model.ChatResponse.builder()
+        domainResponse = AiEduChatResponse.builder()
                 .response("牛顿第一定律，又称为惯性定律...")
                 .sessionId("session-123")
                 .modelUsed("zhipu/glm-4-flash")
@@ -89,7 +91,7 @@ class LlmAppServiceTest {
     @DisplayName("chat() 成功 - 验证 DTO 到领域模型的转换")
     void chat_Success_VerifyDtoToDomainConversion() {
         // Given: Mock LlmGateway 返回领域模型响应
-        when(llmGateway.chat(any(com.ai.edu.domain.shared.model.ChatRequest.class)))
+        when(llmGateway.chat(any(AiEduChatRequest.class)))
                 .thenReturn(Mono.just(domainResponse));
 
         // When: 调用 chat 方法
@@ -112,7 +114,7 @@ class LlmAppServiceTest {
                 .verifyComplete();
 
         // 验证调用了 LlmGateway.chat
-        verify(llmGateway, times(1)).chat(any(com.ai.edu.domain.shared.model.ChatRequest.class));
+        verify(llmGateway, times(1)).chat(any(AiEduChatRequest.class));
     }
 
     @Test
@@ -146,14 +148,14 @@ class LlmAppServiceTest {
     @DisplayName("chat() 带工具调用响应 - 验证 ToolCalls 转换")
     void chat_WithToolCalls() {
         // Given: 准备带工具调用的领域响应
-        com.ai.edu.domain.shared.model.ToolCall toolCall = com.ai.edu.domain.shared.model.ToolCall.builder()
+        com.ai.edu.domain.llm.model.ToolCall toolCall = com.ai.edu.domain.llm.model.ToolCall.builder()
                 .id("call-123")
                 .type("function")
                 .name("get_weather")
                 .arguments("{\"city\":\"Beijing\"}")
                 .build();
 
-        domainResponse = com.ai.edu.domain.shared.model.ChatResponse.builder()
+        domainResponse = AiEduChatResponse.builder()
                 .response(null)
                 .sessionId("session-123")
                 .modelUsed("zhipu/glm-4-flash")
@@ -215,7 +217,7 @@ class LlmAppServiceTest {
     @DisplayName("getAllowedModels() 成功 - 验证模型列表转换")
     void getAllowedModels_Success() {
         // Given
-        com.ai.edu.domain.shared.model.ModelInfo domainModelInfo = com.ai.edu.domain.shared.model.ModelInfo.builder()
+        com.ai.edu.domain.llm.model.ModelInfo domainModelInfo = com.ai.edu.domain.llm.model.ModelInfo.builder()
                 .provider("zhipu")
                 .model("glm-4-flash")
                 .fullName("zhipu/glm-4-flash")
@@ -226,8 +228,8 @@ class LlmAppServiceTest {
                 .description("智谱轻量模型")
                 .build();
 
-        com.ai.edu.domain.shared.model.AllowedModelsResponse domainResponse =
-                com.ai.edu.domain.shared.model.AllowedModelsResponse.builder()
+        com.ai.edu.domain.llm.model.AllowedModelsResponse domainResponse =
+                com.ai.edu.domain.llm.model.AllowedModelsResponse.builder()
                         .allowedModels(List.of(domainModelInfo))
                         .defaultModel("zhipu/glm-4-flash")
                         .build();
@@ -262,8 +264,8 @@ class LlmAppServiceTest {
     @DisplayName("getAllowedModels() 空列表处理")
     void getAllowedModels_EmptyList() {
         // Given
-        com.ai.edu.domain.shared.model.AllowedModelsResponse domainResponse =
-                com.ai.edu.domain.shared.model.AllowedModelsResponse.builder()
+        com.ai.edu.domain.llm.model.AllowedModelsResponse domainResponse =
+                com.ai.edu.domain.llm.model.AllowedModelsResponse.builder()
                         .allowedModels(Collections.emptyList())
                         .defaultModel(null)
                         .build();
@@ -287,8 +289,8 @@ class LlmAppServiceTest {
     @DisplayName("getAllowedModels() null 列表处理")
     void getAllowedModels_NullList() {
         // Given
-        com.ai.edu.domain.shared.model.AllowedModelsResponse domainResponse =
-                com.ai.edu.domain.shared.model.AllowedModelsResponse.builder()
+        com.ai.edu.domain.llm.model.AllowedModelsResponse domainResponse =
+                com.ai.edu.domain.llm.model.AllowedModelsResponse.builder()
                         .allowedModels(null)
                         .defaultModel(null)
                         .build();
@@ -313,22 +315,22 @@ class LlmAppServiceTest {
     @DisplayName("getModels() 成功 - 验证提供商列表转换")
     void getModels_Success() {
         // Given
-        com.ai.edu.domain.shared.model.ProviderInfo.ModelSummary modelSummary =
-                com.ai.edu.domain.shared.model.ProviderInfo.ModelSummary.builder()
+        com.ai.edu.domain.llm.model.ProviderInfo.ModelSummary modelSummary =
+                com.ai.edu.domain.llm.model.ProviderInfo.ModelSummary.builder()
                         .model("glm-4-flash")
                         .displayName("GLM-4-Flash")
                         .free(true)
                         .build();
 
-        com.ai.edu.domain.shared.model.ProviderInfo providerInfo =
-                com.ai.edu.domain.shared.model.ProviderInfo.builder()
+        com.ai.edu.domain.llm.model.ProviderInfo providerInfo =
+                com.ai.edu.domain.llm.model.ProviderInfo.builder()
                         .name("zhipu")
                         .displayName("智谱 AI")
                         .models(List.of(modelSummary))
                         .build();
 
-        com.ai.edu.domain.shared.model.ModelsResponse domainResponse =
-                com.ai.edu.domain.shared.model.ModelsResponse.builder()
+        com.ai.edu.domain.llm.model.ModelsResponse domainResponse =
+                com.ai.edu.domain.llm.model.ModelsResponse.builder()
                         .providers(List.of(providerInfo))
                         .build();
 
@@ -364,16 +366,16 @@ class LlmAppServiceTest {
     @DisplayName("getScenes() 成功 - 验证场景列表转换")
     void getScenes_Success() {
         // Given
-        com.ai.edu.domain.shared.model.SceneInfo sceneInfo =
-                com.ai.edu.domain.shared.model.SceneInfo.builder()
+        com.ai.edu.domain.llm.model.SceneInfo sceneInfo =
+                com.ai.edu.domain.llm.model.SceneInfo.builder()
                         .code("homework_help")
                         .defaultProvider("zhipu")
                         .defaultModel("glm-4-flash")
                         .description("作业辅导场景")
                         .build();
 
-        com.ai.edu.domain.shared.model.ScenesResponse domainResponse =
-                com.ai.edu.domain.shared.model.ScenesResponse.builder()
+        com.ai.edu.domain.llm.model.ScenesResponse domainResponse =
+                com.ai.edu.domain.llm.model.ScenesResponse.builder()
                         .scenes(List.of(sceneInfo))
                         .build();
 

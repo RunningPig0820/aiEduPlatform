@@ -2,13 +2,13 @@ package com.ai.edu.infrastructure.ai;
 
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.LlmGatewayException;
-import com.ai.edu.domain.shared.model.AllowedModelsResponse;
-import com.ai.edu.domain.shared.model.ChatRequest;
-import com.ai.edu.domain.shared.model.ChatResponse;
-import com.ai.edu.domain.shared.model.LlmApiResponse;
-import com.ai.edu.domain.shared.model.ModelsResponse;
-import com.ai.edu.domain.shared.model.ScenesResponse;
-import com.ai.edu.domain.shared.service.LlmGateway;
+import com.ai.edu.domain.llm.model.AllowedModelsResponse;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.model.LlmApiResponse;
+import com.ai.edu.domain.llm.model.ModelsResponse;
+import com.ai.edu.domain.llm.model.ScenesResponse;
+import com.ai.edu.domain.llm.service.LlmGateway;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -49,7 +49,7 @@ public class LlmGatewayImpl implements LlmGateway {
     }
 
     @Override
-    public Mono<ChatResponse> chat(ChatRequest request) {
+    public Mono<AiEduChatResponse> chat(AiEduChatRequest request) {
         log.debug("Sending chat request for userId: {}, scene: {}", request.getUserId(), request.getScene());
 
         // chat 接口直接返回 ChatResponse，不包装
@@ -58,7 +58,7 @@ public class LlmGatewayImpl implements LlmGateway {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(ChatResponse.class)
+                .bodyToMono(AiEduChatResponse.class)
                 .doOnSuccess(response -> log.debug("Chat response received, modelUsed: {}",
                         response != null ? response.getModelUsed() : null))
                 .doOnError(error -> log.error("Chat request failed: {}", error.getMessage()))
@@ -67,7 +67,7 @@ public class LlmGatewayImpl implements LlmGateway {
     }
 
     @Override
-    public Flux<ServerSentEvent<String>> chatStream(ChatRequest request) {
+    public Flux<ServerSentEvent<String>> chatStream(AiEduChatRequest request) {
         log.debug("Sending stream chat request for userId: {}, scene: {}",
                 request.getUserId(), request.getScene());
 
