@@ -19,19 +19,19 @@ public interface TeacherClassMapper extends BaseMapper<TeacherClass> {
     Optional<TeacherClass> selectByTeacherIdAndClassId(@Param("teacherId") Long teacherId, @Param("classId") Long classId);
 
     @Select("SELECT * FROM t_teacher_class WHERE class_id = #{classId} AND is_deleted = false")
-    List<TeacherClass> selectByClassId(Long classId);
+    List<TeacherClass> selectByClassId(@Param("classId") Long classId);
 
     @Select("SELECT * FROM t_teacher_class WHERE class_id = #{classId} AND status = 'ACTIVE' AND is_deleted = false")
-    List<TeacherClass> selectActiveByClassId(Long classId);
+    List<TeacherClass> selectActiveByClassId(@Param("classId") Long classId);
 
     @Select("SELECT * FROM t_teacher_class WHERE teacher_id = #{teacherId} AND is_deleted = false")
-    List<TeacherClass> selectByTeacherId(Long teacherId);
+    List<TeacherClass> selectByTeacherId(@Param("teacherId") Long teacherId);
 
     @Select("SELECT * FROM t_teacher_class WHERE teacher_id = #{teacherId} AND status = 'ACTIVE' AND is_deleted = false")
-    List<TeacherClass> selectActiveByTeacherId(Long teacherId);
+    List<TeacherClass> selectActiveByTeacherId(@Param("teacherId") Long teacherId);
 
     @Select("SELECT * FROM t_teacher_class WHERE class_id = #{classId} AND is_head_teacher = true AND status = 'ACTIVE' AND is_deleted = false")
-    Optional<TeacherClass> selectHeadTeacherByClassId(Long classId);
+    Optional<TeacherClass> selectHeadTeacherByClassId(@Param("classId") Long classId);
 
     @Select("SELECT * FROM t_teacher_class WHERE teacher_id = #{teacherId} AND subject = #{subject} AND is_deleted = false")
     List<TeacherClass> selectByTeacherIdAndSubject(@Param("teacherId") Long teacherId, @Param("subject") String subject);
@@ -40,7 +40,7 @@ public interface TeacherClassMapper extends BaseMapper<TeacherClass> {
     boolean existsByTeacherIdAndClassId(@Param("teacherId") Long teacherId, @Param("classId") Long classId);
 
     @Select("SELECT COUNT(*) > 0 FROM t_teacher_class WHERE class_id = #{classId} AND is_head_teacher = true AND status = 'ACTIVE' AND is_deleted = false")
-    boolean existsHeadTeacherByClassId(Long classId);
+    boolean existsHeadTeacherByClassId(@Param("classId") Long classId);
 
     @Select("SELECT COUNT(*) FROM t_teacher_class WHERE class_id = #{classId} AND status = #{status} AND is_deleted = false")
     int countByClassIdAndStatus(@Param("classId") Long classId, @Param("status") String status);

@@ -1,5 +1,6 @@
 package com.ai.edu.interface_.api;
 
+import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.*;
 import com.ai.edu.application.service.UserAppService;
 import jakarta.annotation.Resource;
@@ -24,6 +25,7 @@ public class AuthApiController {
      */
     @PostMapping("/register")
     public ApiResponse<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
+        log.info("register: request={}", JSONUtil.toJsonStr(request));
         UserResponse user = userAppService.register(request);
         return ApiResponse.success(user);
     }
@@ -33,6 +35,7 @@ public class AuthApiController {
      */
     @PostMapping("/login")
     public ApiResponse<UserResponse> login(@Valid @RequestBody LoginRequest request, HttpSession session) {
+        log.info("login: request={}", JSONUtil.toJsonStr(request));
         UserResponse user = userAppService.login(request);
 
         // 设置 Session
@@ -49,6 +52,7 @@ public class AuthApiController {
      */
     @PostMapping("/demo-login")
     public ApiResponse<UserResponse> demoLogin(@Valid @RequestBody DemoLoginRequest request, HttpSession session) {
+        log.info("demoLogin: request={}", JSONUtil.toJsonStr(request));
         UserResponse user = userAppService.demoLogin(request, session);
         return ApiResponse.success(user);
     }
@@ -58,6 +62,7 @@ public class AuthApiController {
      */
     @PostMapping("/send-code")
     public ApiResponse<String> sendCode(@Valid @RequestBody SendCodeRequest request) {
+        log.info("sendCode: request={}", JSONUtil.toJsonStr(request));
         String code = userAppService.sendCode(request.getPhone(), request.getScene());
         return ApiResponse.success(code);
     }
@@ -67,6 +72,7 @@ public class AuthApiController {
      */
     @PostMapping("/reset-password")
     public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        log.info("resetPassword: request={}", JSONUtil.toJsonStr(request));
         userAppService.resetPassword(request);
         return ApiResponse.success(null);
     }
@@ -76,6 +82,7 @@ public class AuthApiController {
      */
     @PutMapping("/password")
     public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request, HttpSession session) {
+        log.info("changePassword: request={}", JSONUtil.toJsonStr(request));
         userAppService.changePassword(request, session);
         return ApiResponse.success(null);
     }
@@ -85,6 +92,7 @@ public class AuthApiController {
      */
     @PostMapping("/logout")
     public ApiResponse<Void> logout(HttpSession session) {
+        log.info("logout: session={}", session.getAttribute("userId"));
         userAppService.logout(session);
         return ApiResponse.success(null);
     }
@@ -94,6 +102,7 @@ public class AuthApiController {
      */
     @GetMapping("/current-user")
     public ApiResponse<UserResponse> getCurrentUser(HttpSession session) {
+        log.info("getCurrentUser: session={}", session.getAttribute("userId"));
         UserResponse user = userAppService.getCurrentUser(session);
         return ApiResponse.success(user);
     }
@@ -103,6 +112,7 @@ public class AuthApiController {
      */
     @GetMapping("/user/{id}")
     public ApiResponse<UserResponse> getUser(@PathVariable Long id) {
+        log.info("getUser: id={}", id);
         UserResponse user = userAppService.getUserById(id);
         return ApiResponse.success(user);
     }

@@ -5,6 +5,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
  * 用户登录请求DTO
  *
@@ -14,7 +17,10 @@ import lombok.Data;
  * 3. 手机号+验证码：loginType=PHONE_CODE, phone + code
  */
 @Data
-public class LoginRequest {
+public class LoginRequest implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * 登录类型

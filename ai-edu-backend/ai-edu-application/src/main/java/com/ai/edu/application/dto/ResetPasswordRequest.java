@@ -5,11 +5,17 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
  * 重置密码请求DTO（忘记密码场景）
  */
 @Data
-public class ResetPasswordRequest {
+public class ResetPasswordRequest implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * 手机号

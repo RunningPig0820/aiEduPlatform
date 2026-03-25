@@ -16,25 +16,25 @@ import java.util.Optional;
 public interface ClassMapper extends BaseMapper<Class> {
 
     @Select("SELECT * FROM t_class WHERE code = #{code} AND is_deleted = false")
-    Optional<Class> selectByCode(String code);
+    Optional<Class> selectByCode(@Param("code") String code);
 
     @Select("SELECT * FROM t_class WHERE school_id = #{schoolId} AND is_deleted = false")
-    List<Class> selectBySchoolId(Long schoolId);
+    List<Class> selectBySchoolId(@Param("schoolId") Long schoolId);
 
     @Select("SELECT * FROM t_class WHERE grade = #{grade} AND is_deleted = false")
-    List<Class> selectByGrade(String grade);
+    List<Class> selectByGrade(@Param("grade") String grade);
 
     @Select("SELECT * FROM t_class WHERE school_year = #{schoolYear} AND is_deleted = false")
-    List<Class> selectBySchoolYear(String schoolYear);
+    List<Class> selectBySchoolYear(@Param("schoolYear") String schoolYear);
 
     @Select("SELECT * FROM t_class WHERE status = #{status} AND is_deleted = false")
-    List<Class> selectByStatus(String status);
+    List<Class> selectByStatus(@Param("status") String status);
 
     @Select("SELECT * FROM t_class WHERE school_id = #{schoolId} AND status = 'ACTIVE' AND is_deleted = false")
-    List<Class> selectActiveBySchoolId(Long schoolId);
+    List<Class> selectActiveBySchoolId(@Param("schoolId") Long schoolId);
 
     @Select("SELECT * FROM t_class WHERE id = #{id} AND status = 'ACTIVE' AND is_deleted = false")
-    Optional<Class> selectActiveById(Long id);
+    Optional<Class> selectActiveById(@Param("id") Long id);
 
     @Select("SELECT COUNT(*) > 0 FROM t_class WHERE name = #{name} AND school_year = #{schoolYear} AND is_deleted = false")
     boolean existsByNameAndSchoolYear(@Param("name") String name, @Param("schoolYear") String schoolYear);

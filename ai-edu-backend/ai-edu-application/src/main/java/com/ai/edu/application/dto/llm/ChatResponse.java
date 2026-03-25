@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -16,7 +18,10 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatResponse {
+public class ChatResponse implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * LLM 生成的响应内容
@@ -50,7 +55,10 @@ public class ChatResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class Usage {
+    public static class Usage implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
         /**
          * 输入 Token 数量
          */
@@ -74,7 +82,10 @@ public class ChatResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class ToolCall {
+    public static class ToolCall implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
         /**
          * 工具调用ID
          */

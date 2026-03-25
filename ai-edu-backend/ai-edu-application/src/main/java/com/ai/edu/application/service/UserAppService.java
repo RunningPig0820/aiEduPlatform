@@ -102,16 +102,21 @@ public class UserAppService {
      */
     public UserResponse login(LoginRequest request) {
         String loginType = request.getLoginType();
+        log.info("用户登录请求: loginType={}", loginType);
+
         User user;
 
         switch (loginType) {
             case LoginType.USERNAME_PASSWORD:
+                log.debug("用户名密码登录: username={}", request.getUsername());
                 user = loginByUsernameAndPassword(request);
                 break;
             case LoginType.PHONE_PASSWORD:
+                log.debug("手机号密码登录: phone={}", request.getPhone());
                 user = loginByPhoneAndPassword(request);
                 break;
             case LoginType.PHONE_CODE:
+                log.debug("手机号验证码登录: phone={}", request.getPhone());
                 user = loginByPhoneAndCode(request);
                 break;
             default:
@@ -122,6 +127,8 @@ public class UserAppService {
         if (!user.getEnabled()) {
             throw new BusinessException(ErrorCode.PERMISSION_DENIED, "账号已被禁用");
         }
+
+        log.info("用户登录成功: username={}, role={}", user.getUsername(), user.getRole());
 
         return UserAssembler.toResponse(user);
     }
