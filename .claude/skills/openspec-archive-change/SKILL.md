@@ -91,51 +91,6 @@ Archive a completed change in the experimental workflow.
    - Whether specs were synced (if applicable)
    - Note about any warnings (incomplete artifacts/tasks)
 
-7. **Git operations: commit and push**
-
-   Commit all changes and push to remote:
-
-   ```bash
-   # Get current branch name
-   current_branch=$(git branch --show-current)
-
-   # Check if there are uncommitted changes
-   git status --porcelain
-
-   # If there are changes, commit them
-   if [ -n "$(git status --porcelain)" ]; then
-     git add -A
-     git commit -m "feat(<change-name>): complete change via OpenSpec workflow
-
-- Change: <change-name>
-- Schema: <schema-name>
-- Artifacts: proposal, specs, design, tasks, api, test
-- Status: All tasks completed, archived
-
-🤖 Generated with OpenSpec (openspec-propose → openspec-apply → openspec-archive)
-
-Co-Authored-By: OpenSpec <noreply@openspec.dev>"
-   fi
-
-   # Push to remote (use current branch name)
-   git push -u origin "$current_branch"
-   ```
-
-   **Commit message format:**
-   - Type: `feat` (feature) or `fix` (bug fix) based on change type
-   - Scope: change name
-   - Body: OpenSpec workflow details
-   - Clear indication that this was created via OpenSpec
-
-   **If push fails:**
-   - Check if remote exists: `git remote -v`
-   - If authentication issue, prompt user to check credentials
-   - If conflicts, prompt user for resolution
-
-   **After successful push:**
-   - Optionally offer to create a Pull Request (if user wants)
-   - Optionally offer to merge to main branch
-
 **Output On Success**
 
 ```
@@ -143,22 +98,10 @@ Co-Authored-By: OpenSpec <noreply@openspec.dev>"
 
 **Change:** <change-name>
 **Schema:** <schema-name>
-**Branch:** feature-YYYYMMDD-<change-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs (or "No delta specs" or "Sync skipped")
-**Git:** ✓ Committed and pushed to origin/feature-YYYYMMDD-<change-name>
 
 All artifacts complete. All tasks complete.
-```
-
-**Output Options After Archive**
-
-After successful archive, ask user:
-```
-What would you like to do next?
-1. Create a Pull Request
-2. Merge to main branch
-3. Continue with other work
 ```
 
 **Guardrails**

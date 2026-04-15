@@ -33,37 +33,13 @@ When ready to implement, run /opsx:apply
 
    **IMPORTANT**: Do NOT proceed without understanding what the user wants to build.
 
-2. **Create git branch for the change**
-
-   Create a feature branch from main branch:
-
-   ```bash
-   # Save current branch
-   original_branch=$(git branch --show-current)
-
-   # Switch to main branch and pull latest
-   git checkout main
-   git pull origin main
-
-   # Generate branch name with date: feature-YYYYMMDD-<name>
-   branch_name="feature-$(date +%Y%m%d)-<name>"
-
-   # Create and switch to new feature branch
-   git checkout -b "$branch_name"
-   ```
-
-   **Branch naming convention:** `feature-YYYYMMDD-<change-name>`
-   - Example: `feature-20260319-user-auth`
-
-   Announce: "Created branch: $branch_name (from main)"
-
-3. **Create the change directory**
+2. **Create the change directory**
    ```bash
    openspec new change "<name>"
    ```
    This creates a scaffolded change at `openspec/changes/<name>/` with `.openspec.yaml`.
 
-4. **Get the artifact build order**
+3. **Get the artifact build order**
    ```bash
    openspec status --change "<name>" --json
    ```
@@ -71,7 +47,7 @@ When ready to implement, run /opsx:apply
    - `applyRequires`: array of artifact IDs needed before implementation (e.g., `["tasks"]`)
    - `artifacts`: list of all artifacts with their status and dependencies
 
-5. **Create artifacts in sequence until apply-ready**
+4. **Create artifacts in sequence until apply-ready**
 
    Use the **TodoWrite tool** to track progress through the artifacts.
 
@@ -103,7 +79,7 @@ When ready to implement, run /opsx:apply
       - Use **AskUserQuestion tool** to clarify
       - Then continue with creation
 
-6. **Show final status**
+5. **Show final status**
    ```bash
    openspec status --change "<name>"
    ```
@@ -112,10 +88,9 @@ When ready to implement, run /opsx:apply
 
 After completing all artifacts, summarize:
 - Change name and location
-- Git branch created: `feature-YYYYMMDD-<name>` (from main)
 - List of artifacts created with brief descriptions
 - What's ready: "All artifacts created! Ready for implementation."
-- Prompt: "Run `/opsx:apply` to start working on the tasks."
+- Prompt: "Run `/opsx:apply` or ask me to implement to start working on the tasks."
 
 **Artifact Creation Guidelines**
 
