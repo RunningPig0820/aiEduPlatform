@@ -99,3 +99,5 @@
 - [ ] 8.4 联调年级知识体系页面（与前端）
 - [ ] 8.5 联调年级统计卡片（与前端）
 - [ ] 8.6 端到端流程测试：选择学科→选择教材→浏览章节→查看知识点详情→切换年级知识体系
+
+<!-- yuque-meta: {"repo_id": "zhangmin-jrrer/iu9s4m", "product_dir": "知识图谱页面化", "product_uuid": "3ldLJrKUsTjFP5pp", "change_dir_uuid": "hORjXzINaEuK18r1", "tasks_doc_id": 265947003, "design_doc_id": 265946919, "api_doc_id": 265946772} -->

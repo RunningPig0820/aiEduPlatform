@@ -66,11 +66,23 @@ Implement tasks from an OpenSpec change.
 
 6. **Implement tasks (loop until done or blocked)**
 
+   **Before starting: Read Yuque metadata**
+   - Read the local `tasks.md` or `design.md` file
+   - Parse the `<!-- yuque-meta: {...} -->` comment at the bottom to get:
+     - `repo_id`: Yuque repository ID
+     - `tasks_doc_id`: The doc_id of the tasks document in Yuque
+   - If no yuque-meta found: the change was not synced to Yuque during propose, skip Yuque updates
+
    For each pending task:
    - Show which task is being worked on
    - Make the code changes required
    - Keep changes minimal and focused
-   - Mark task complete in the tasks file: `- [ ]` → `- [x]`
+   - Mark task complete in the local tasks file: `- [ ]` → `- [x]`
+   - **Update Yuque task status** (if yuque-meta exists):
+     - Read the current Yuque tasks document: `mcp__yuque-mcp__yuque_get_doc(doc_id: tasks_doc_id, repo_id: repo_id)`
+     - Replace the corresponding `- [ ]` with `- [x]`
+     - Update via: `mcp__yuque-mcp__yuque_update_doc(doc_id: tasks_doc_id, body: updated_content)`
+     - This keeps Yuque and local tasks.md in sync
    - Continue to next task
 
    **Pause if:**

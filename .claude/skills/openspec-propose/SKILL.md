@@ -84,11 +84,58 @@ When ready to implement, run /opsx:apply
    openspec status --change "<name>"
    ```
 
+6. **Sync artifacts to Yuque (语雀知识库)**
+
+   After all artifacts are created, sync `design.md`, `api.md`, `tasks.md` to Yuque.
+
+   a. **Determine the target Yuque repository**
+      - If the target repo_id is not known from context, use **AskUserQuestion** to ask:
+        > "同步到哪个语雀知识库？"
+      - Record the repo_id for the metadata block
+
+   b. **Determine the target product directory**
+      - Infer from the change name/description which product it belongs to (e.g., `knowledge-graph-ui` → 知识图谱页面化)
+      - Target: `产品中心 → <产品目录> → <change-name>/`
+      - **If uncertain, use AskUserQuestion to ask**:
+        > "这个变更属于哪个产品目录？"
+        with options: 知识图谱页面化, AI答疑, AI作业批改, 学生知识点分析, 教师知识点分析, RAG智能客服, 组织中心, 权限中心, 英语知识图谱, AI听力, llm对接, 其他(请输入)
+      - Record the chosen product directory name and UUID
+
+   c. **Create directory structure in Yuque TOC**
+      ```
+      mcp__yuque-mcp__yuque_update_toc
+      action: appendNode, action_mode: child, target_uuid: <产品目录uuid>, type: TITLE, title: <change-name>
+      ```
+
+   d. **Create/Update three documents**
+      For each file (`api.md`, `design.md`, `tasks.md`):
+      - Read the local file content
+      - Create document via `mcp__yuque-mcp__yuque_create_doc` with format: markdown
+      - Add to TOC as child of the change directory:
+        ```
+        mcp__yuque-mcp__yuque_update_toc
+        action: appendNode, action_mode: child, target_uuid: <change目录uuid>, type: DOC, doc_id: <刚创建的doc_id>
+        ```
+      - Record the created doc_id for each file
+
+   e. **Record Yuque metadata in design.md and tasks.md**
+      Append a metadata block to the bottom of both files so that `opsx:apply` can locate the Yuque document later:
+      ```markdown
+      <!-- yuque-meta: {"repo_id": "{{repo_id}}", "product_dir": "知识图谱页面化", "product_uuid": "<uuid>", "change_dir_uuid": "<uuid>", "tasks_doc_id": <id>, "design_doc_id": <id>, "api_doc_id": <id>} -->
+      ```
+      If the repo_id is unknown, use **AskUserQuestion** to ask for the target repository before syncing.
+      This enables the apply step to update task progress in Yuque without searching.
+
+   f. **Verify sync**
+      - Confirm all three documents are created and visible in TOC
+      - Report Yuque document URLs to user
+
 **Output**
 
-After completing all artifacts, summarize:
+After completing all artifacts and Yuque sync, summarize:
 - Change name and location
 - List of artifacts created with brief descriptions
+- Yuque sync status: "已同步到语雀智启学堂: <产品目录>/<change-name>/"
 - What's ready: "All artifacts created! Ready for implementation."
 - Prompt: "Run `/opsx:apply` or ask me to implement to start working on the tasks."
 

@@ -1,6 +1,6 @@
 ## Context
 
-知识图谱数据已存储在远程 Neo4j（`bolt://81.71.130.57:7687`），包含人教版 K-12 数学教材的完整结构。当前 Java 后端无 Neo4j 集成代码。前端为独立部署（尚无 SPA 项目）。
+知识图谱数据已存储在远程 Neo4j，包含人教版 K-12 数学教材的完整结构。当前 Java 后端无 Neo4j 集成代码。前端为独立部署（尚无 SPA 项目）。
 
 **决策方向**：用户选择方案 B — 将 Neo4j 知识点数据同步到 MySQL，前端 SPA 读取 MySQL。知识点全局存储，后续班级/老师/学生通过关联表引用知识点ID。
 
@@ -344,3 +344,5 @@ GET  /api/kg/neo4j/health            - Neo4j 健康检查
 ## Open Questions
 
 <!-- 已确认，无遗留问题 -->
+
+<!-- yuque-meta: {"repo_id": "zhangmin-jrrer/iu9s4m", "product_dir": "知识图谱页面化", "product_uuid": "3ldLJrKUsTjFP5pp", "change_dir_uuid": "hORjXzINaEuK18r1", "tasks_doc_id": 265947003, "design_doc_id": 265946919, "api_doc_id": 265946772} -->
