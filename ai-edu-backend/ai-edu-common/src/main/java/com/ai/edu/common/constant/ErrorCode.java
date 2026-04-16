@@ -45,4 +45,13 @@ public final class ErrorCode {
     public static final String LLM_CALL_FAILED = "60003";
     public static final String LLM_TIMEOUT = "60004";
     public static final String LLM_INVALID_PARAMS = "60005";
+
+    // 知识图谱模块 7xxxx
+    public static final String KG_TEXTBOOK_NOT_FOUND = "70001";
+    public static final String KG_CHAPTER_NOT_FOUND = "70002";
+    public static final String KG_KNOWLEDGE_POINT_NOT_FOUND = "70003";
+    public static final String KG_SECTION_NOT_FOUND = "70004";
+    public static final String KG_NEO4J_QUERY_FAILED = "70005";
+    public static final String KG_SYNC_IN_PROGRESS = "70006";
+    public static final String KG_SYNC_PARAM_ERROR = "70007";
 }

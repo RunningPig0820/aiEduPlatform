@@ -101,3 +101,5 @@ spring.datasource.dynamic:
 - **Mapper 扫描**: `@MapperScan` 拆分为两个，按包路径分别绑定
 - **连接池**: HikariCP，user 和 kg 各 5-20 连接，共 40 连接上限
 - **Code Review 检查项**: 所有 `edukg/mapper/` 下的 Mapper 必须带 `@DS("kg")`
+
+<!-- yuque-meta: {"repo_id": "zhangmin-jrrer/iu9s4m", "product_dir": "知识图谱页面化", "product_uuid": "3ldLJrKUsTjFP5pp", "change_dir_uuid": "zPdZIV6y8t0uBT3N", "tasks_doc_id": 266052856, "design_doc_id": 266052266, "api_doc_id": 266052368, "proposal_doc_id": 266052087, "specs_doc_id": 266052650, "test_doc_id": 266053002} -->

@@ -108,10 +108,15 @@ public class AuthApiController {
     }
 
     /**
-     * 获取用户信息
+     * 获取用户信息（仅允许查看本人或管理员操作）
      */
     @GetMapping("/user/{id}")
-    public ApiResponse<UserResponse> getUser(@PathVariable Long id) {
+    public ApiResponse<UserResponse> getUser(@PathVariable Long id, HttpSession session) {
+        Long currentUserId = (Long) session.getAttribute("userId");
+        if (currentUserId == null || !currentUserId.equals(id)) {
+            log.warn("getUser: unauthorized access, userId={}, requestedId={}", currentUserId, id);
+            return ApiResponse.error("40300", "无权限查看其他用户信息");
+        }
         log.info("getUser: id={}", id);
         UserResponse user = userAppService.getUserById(id);
         return ApiResponse.success(user);

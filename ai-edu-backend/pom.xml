@@ -35,6 +35,7 @@
         <redisson.version>3.27.2</redisson.version>
         <!-- Flyway 7.x for MySQL 5.7 compatibility (8.x dropped MySQL 5.7 support) -->
         <flyway.version>7.15.0</flyway.version>
+        <dynamic-datasource.version>4.3.1</dynamic-datasource.version>
     </properties>
 
     <dependencyManagement>
@@ -112,6 +113,13 @@
                 <groupId>org.redisson</groupId>
                 <artifactId>redisson-spring-boot-starter</artifactId>
                 <version>${redisson.version}</version>
+            </dependency>
+
+            <!-- Dynamic Datasource -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+                <version>${dynamic-datasource.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

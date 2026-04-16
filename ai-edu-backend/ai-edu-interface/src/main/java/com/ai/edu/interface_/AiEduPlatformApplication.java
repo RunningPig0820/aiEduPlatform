@@ -5,13 +5,18 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.modulith.Modulith;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
 /**
  * AI教育平台启动类
  */
 @SpringBootApplication
 @Modulith
-@MapperScan("com.ai.edu.infrastructure.persistence.mapper")
+@EnableMethodSecurity
+@MapperScan({
+    "com.ai.edu.infrastructure.persistence.mapper",
+    "com.ai.edu.infrastructure.persistence.edukg.mapper"
+})
 @ComponentScan(basePackages = "com.ai.edu")
 public class AiEduPlatformApplication {
 
