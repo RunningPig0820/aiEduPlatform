@@ -31,7 +31,7 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/llm")
+@RequestMapping("/api/auth/llm")
 public class LlmApiController {
 
     @Resource

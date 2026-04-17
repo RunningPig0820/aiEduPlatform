@@ -20,7 +20,7 @@ import java.util.List;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/kg")
+@RequestMapping("/api/auth/kg")
 public class KnowledgeGraphController {
 
     @Resource

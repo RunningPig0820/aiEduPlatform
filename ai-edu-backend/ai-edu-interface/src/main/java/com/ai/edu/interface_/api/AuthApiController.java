@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/unauth")
 public class AuthApiController {
 
     @Resource
