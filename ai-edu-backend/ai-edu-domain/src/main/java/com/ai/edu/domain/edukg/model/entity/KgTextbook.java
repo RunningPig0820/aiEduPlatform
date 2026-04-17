@@ -66,6 +66,13 @@ public class KgTextbook {
         this.mergedToUri = mergedToUri;
     }
 
+    public void updateFrom(KgTextbook other) {
+        this.label = other.label;
+        this.grade = other.grade;
+        this.phase = other.phase;
+        this.subject = other.subject;
+    }
+
     public boolean isMerged() {
         return KgNodeStatus.MERGED.getValue().equals(this.status);
     }

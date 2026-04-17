@@ -864,7 +864,7 @@ public class AuthApiControllerTest {
     void getUser_Success() {
         User user = createTestUser(TEST_USERNAME, TEST_PHONE);
 
-        ApiResponse<UserResponse> response = authApiController.getUser(user.getId());
+        ApiResponse<UserResponse> response = authApiController.getUser(user.getId(), null);
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
         assertEquals(TEST_USERNAME, response.getData().getUsername());
@@ -878,7 +878,7 @@ public class AuthApiControllerTest {
     @Transactional
     void getUser_Fail_UserNotFound() {
         BusinessException exception = assertThrows(BusinessException.class, () -> {
-            authApiController.getUser(999999L);
+            authApiController.getUser(999999L, null);
         });
         assertEquals(ErrorCode.USER_NOT_FOUND, exception.getCode());
     }

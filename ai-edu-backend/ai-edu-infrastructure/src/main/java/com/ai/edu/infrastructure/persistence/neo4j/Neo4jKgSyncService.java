@@ -228,7 +228,8 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
                 count++;
                 log.debug("Inserted textbook: {}", tb.getUri());
             } else {
-                // 更新可变字段
+                // 用 Neo4j 新数据更新 MySQL 旧数据
+                existing.updateFrom(tb);
                 kgTextbookMapper.updateById(existing);
                 log.debug("Updated textbook: {}", tb.getUri());
             }
