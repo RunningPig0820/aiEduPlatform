@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -223,7 +224,8 @@ class KgSyncAppServiceTest {
         try {
             var field = KgSyncAppService.class.getDeclaredField("syncing");
             field.setAccessible(true);
-            field.setBoolean(kgSyncAppService, true);
+            AtomicBoolean syncingField = (AtomicBoolean) field.get(kgSyncAppService);
+            syncingField.set(true);
         } catch (Exception e) {
             fail("Failed to set syncing field: " + e.getMessage());
         }
@@ -253,7 +255,8 @@ class KgSyncAppServiceTest {
         try {
             var field = KgSyncAppService.class.getDeclaredField("syncing");
             field.setAccessible(true);
-            assertFalse((boolean) field.get(kgSyncAppService), "syncing 应在 finally 中重置为 false");
+            AtomicBoolean syncingField = (AtomicBoolean) field.get(kgSyncAppService);
+            assertFalse(syncingField.get(), "syncing 应在 finally 中重置为 false");
         } catch (Exception e) {
             fail("Failed to check syncing field: " + e.getMessage());
         }

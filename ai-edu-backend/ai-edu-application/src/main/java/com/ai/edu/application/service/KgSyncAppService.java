@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -32,7 +33,7 @@ public class KgSyncAppService {
     @Resource
     private KgSyncDomainService kgSyncDomainService;
 
-    private volatile boolean syncing = false;
+    private final AtomicBoolean syncing = new AtomicBoolean(false);
 
     /**
      * 全量/定向同步
@@ -46,41 +47,40 @@ public class KgSyncAppService {
             request = SyncRequest.builder().subject("math").build();
         }
 
-        // 同步锁检查
-        if (syncing) {
+        // 同步锁检查（原子操作）
+        if (!syncing.compareAndSet(false, true)) {
             throw new BusinessException(ErrorCode.KG_SYNC_IN_PROGRESS, "已有同步任务正在执行，请稍后重试");
         }
 
         // 参数校验
         validateSyncRequest(request);
 
-        syncing = true;
         long startTime = System.currentTimeMillis();
         log.info("Starting KG sync: subject={}, phase={}, grade={}, textbookUri={}",
                 request.getSubject(), request.getPhase(), request.getGrade(), request.getTextbookUri());
 
+        KgSyncRecord syncRecord = null;
         try {
             // 构建同步范围
             String scope = buildScope(request);
 
             // 创建同步记录
-            KgSyncRecord syncRecord = kgSyncDomainService.createSyncRecord("full", scope, 0L);
+            syncRecord = kgSyncDomainService.createSyncRecord("full", scope, 0L);
 
             // 执行同步
-            int insertedCount = executeSync(request);
+            SyncExecutionResult syncResult = executeSync(request);
 
             // 状态变更：标记 MySQL 中有但 Neo4j 中无的节点为 deleted
             int statusChangedCount = markDeletedNodes();
 
             // 对账校验
-            int updatedCount = 0;
             KgSyncDomainService.ReconciliationResult reconciliation = reconcile();
 
             // 完成同步记录
             kgSyncDomainService.completeSyncRecord(
                     syncRecord.getId(),
-                    insertedCount,
-                    updatedCount,
+                    syncResult.insertedCount,
+                    syncResult.updatedCount,
                     statusChangedCount,
                     reconciliation.matched ? "matched" : "mismatched",
                     reconciliation.differences.isEmpty() ? "All counts matched"
@@ -89,24 +89,34 @@ public class KgSyncAppService {
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("Sync completed in {}ms: inserted={}, updated={}, deleted={}, reconciled={}",
-                    duration, insertedCount, updatedCount, statusChangedCount,
+                    duration, syncResult.insertedCount, syncResult.updatedCount, statusChangedCount,
                     reconciliation.matched ? "matched" : "mismatched");
 
             return KgConvert.toSyncResult(
                     syncRecord.getId(),
                     "success",
-                    insertedCount,
-                    updatedCount,
+                    syncResult.insertedCount,
+                    syncResult.updatedCount,
                     statusChangedCount,
                     reconciliation.matched ? "matched" : "mismatched",
                     duration
             );
+        } catch (BusinessException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
+            if (syncRecord != null) {
+                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+            }
+            throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
+            if (syncRecord != null) {
+                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+            }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "同步失败: " + e.getMessage());
         } finally {
-            syncing = false;
+            syncing.set(false);
         }
     }
 
@@ -144,8 +154,9 @@ public class KgSyncAppService {
         );
     }
 
-    private int executeSync(SyncRequest request) {
+    private SyncExecutionResult executeSync(SyncRequest request) {
         int totalInserted = 0;
+        int totalUpdated = 0;
 
         // 1. 同步教材节点
         List<KgTextbook> textbooks = kgSyncDomainService.syncTextbookNodes();
@@ -172,21 +183,26 @@ public class KgSyncAppService {
 
         // 2. 同步章节节点
         List<KgChapter> chapters = kgSyncDomainService.syncChapterNodes();
-        totalInserted += kgSyncDomainService.upsertChapters(chapters);
+        int chapterInserts = kgSyncDomainService.upsertChapters(chapters);
+        // TODO: domain service upsert methods currently return total count (insert+update)
+        // For now, treat all as inserted. Future: return separate insert/update counts.
+        totalInserted += chapterInserts;
         Set<String> chapterUris = chapters.stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
 
         // 3. 同步小节节点
         List<KgSection> sections = kgSyncDomainService.syncSectionNodes();
-        totalInserted += kgSyncDomainService.upsertSections(sections);
+        int sectionInserts = kgSyncDomainService.upsertSections(sections);
+        totalInserted += sectionInserts;
         Set<String> sectionUris = sections.stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
 
         // 4. 同步知识点节点
         List<KgKnowledgePoint> kps = kgSyncDomainService.syncKnowledgePointNodes();
-        totalInserted += kgSyncDomainService.upsertKnowledgePoints(kps);
+        int kpInserts = kgSyncDomainService.upsertKnowledgePoints(kps);
+        totalInserted += kpInserts;
         Set<String> kpUris = kps.stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
@@ -199,15 +215,15 @@ public class KgSyncAppService {
 
         // 6. 同步层级关联
         List<KgTextbookChapter> tbChRelations = kgSyncDomainService.syncTextbookChapterRelations();
-        kgSyncDomainService.rebuildTextbookChapterRelations(tbChRelations);
+        totalInserted += kgSyncDomainService.rebuildTextbookChapterRelations(tbChRelations);
 
         List<KgChapterSection> chSecRelations = kgSyncDomainService.syncChapterSectionRelations();
-        kgSyncDomainService.rebuildChapterSectionRelations(chSecRelations);
+        totalInserted += kgSyncDomainService.rebuildChapterSectionRelations(chSecRelations);
 
         List<KgSectionKP> secKpRelations = kgSyncDomainService.syncSectionKPRelations();
-        kgSyncDomainService.rebuildSectionKPRelations(secKpRelations);
+        totalInserted += kgSyncDomainService.rebuildSectionKPRelations(secKpRelations);
 
-        return totalInserted;
+        return new SyncExecutionResult(totalInserted, totalUpdated);
     }
 
     private int markDeletedNodes() {
@@ -258,5 +274,11 @@ public class KgSyncAppService {
                 neo4jTextbookUris, neo4jChapterUris, neo4jSectionUris, neo4jKpUris,
                 tbChRelations, chSecRelations, secKpRelations
         );
+    }
+
+    /**
+     * 同步执行结果
+     */
+    private record SyncExecutionResult(int insertedCount, int updatedCount) {
     }
 }

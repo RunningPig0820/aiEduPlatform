@@ -82,7 +82,7 @@ public class KgNavigationAppService {
                 .collect(Collectors.toSet());
         List<KgChapter> chapters = kgChapterRepository.findByUris(new ArrayList<>(chapterUris));
         Map<String, KgChapter> chapterMap = chapters.stream()
-                .collect(Collectors.toMap(KgChapter::getUri, ch -> ch));
+                .collect(Collectors.toMap(KgChapter::getUri, ch -> ch, (existing, replacement) -> existing));
 
         // 查询所有章节-小节关联（通过章节 URI 过滤）
         List<KgChapterSection> allChSec = kgChapterSectionRepository.findAllActive();
@@ -96,7 +96,7 @@ public class KgNavigationAppService {
                 .collect(Collectors.toSet());
         List<KgSection> sections = kgSectionRepository.findByUris(new ArrayList<>(sectionUris));
         Map<String, KgSection> sectionMap = sections.stream()
-                .collect(Collectors.toMap(KgSection::getUri, sec -> sec));
+                .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
 
         // 统计每个小节的知识点数
         List<KgSectionKP> allSecKp = kgSectionKPRepository.findAllActive();
@@ -145,7 +145,7 @@ public class KgNavigationAppService {
                 .collect(Collectors.toSet());
         List<KgKnowledgePoint> kps = kgKnowledgePointRepository.findByUris(new ArrayList<>(kpUris));
         Map<String, KgKnowledgePoint> kpMap = kps.stream()
-                .collect(Collectors.toMap(KgKnowledgePoint::getUri, kp -> kp));
+                .collect(Collectors.toMap(KgKnowledgePoint::getUri, kp -> kp, (existing, replacement) -> existing));
 
         KgSection section = kgSectionRepository.findByUri(sectionUri).orElse(null);
 

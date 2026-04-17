@@ -77,7 +77,7 @@ public class KgKnowledgeSystemAppService {
             if (allChapterUris.isEmpty()) continue;
 
             Map<String, KgChapter> chapterMap = kgChapterRepository.findByUris(new ArrayList<>(allChapterUris)).stream()
-                    .collect(Collectors.toMap(KgChapter::getUri, ch -> ch));
+                    .collect(Collectors.toMap(KgChapter::getUri, ch -> ch, (existing, replacement) -> existing));
 
             List<KgGradeSystemDTO.GroupDTO.ChapterNode> chapterNodes = new ArrayList<>();
 
@@ -101,7 +101,7 @@ public class KgKnowledgeSystemAppService {
                         .collect(Collectors.toSet());
 
                 Map<String, KgSection> sectionMap = kgSectionRepository.findByUris(new ArrayList<>(sectionUris)).stream()
-                        .collect(Collectors.toMap(KgSection::getUri, sec -> sec));
+                        .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
 
                 for (KgChapterSection secRel : chSecRels) {
                     KgSection section = sectionMap.get(secRel.getSectionUri());
