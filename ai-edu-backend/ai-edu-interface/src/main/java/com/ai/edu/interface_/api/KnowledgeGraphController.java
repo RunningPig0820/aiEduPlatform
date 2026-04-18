@@ -122,6 +122,17 @@ public class KnowledgeGraphController {
         return ApiResponse.success(detail);
     }
 
+    /**
+     * 知识点图谱（用于前端图谱可视化）
+     * GET /api/kg/knowledge-points/{uri}/graph
+     */
+    @GetMapping("/knowledge-points/{uri}/graph")
+    public ApiResponse<KgGraphDTO> getKnowledgePointGraph(@PathVariable String uri) {
+        log.info("获取知识点图谱: kpUri={}", uri);
+        KgGraphDTO graph = kgNeo4jService.getKnowledgePointGraph(uri);
+        return ApiResponse.success(graph);
+    }
+
     // ==================== 年级知识体系 ====================
 
     /**

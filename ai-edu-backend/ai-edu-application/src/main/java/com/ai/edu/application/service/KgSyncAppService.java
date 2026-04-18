@@ -15,7 +15,6 @@ import com.ai.edu.domain.edukg.service.KgSyncDomainService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
@@ -41,7 +40,6 @@ public class KgSyncAppService {
      * @param request 同步请求（可选参数：subject/phase/grade/textbookUri）
      * @return 同步结果
      */
-    @Transactional("kg")
     public SyncResult syncFull(SyncRequest request) {
         if (request == null) {
             request = SyncRequest.builder().subject("math").build();

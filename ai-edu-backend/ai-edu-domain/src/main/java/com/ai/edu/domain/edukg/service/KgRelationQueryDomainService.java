@@ -3,6 +3,7 @@ package com.ai.edu.domain.edukg.service;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
 
 import java.util.List;
 
@@ -26,4 +27,9 @@ public interface KgRelationQueryDomainService {
      * 查询小节-知识点关联
      */
     List<KgSectionKP> getSectionKPRelations(String sectionUri);
+
+    /**
+     * 查询知识点的图谱数据（含层级路径和关联概念）
+     */
+    GraphQueryResult queryGraphForKnowledgePoint(String kpUri);
 }

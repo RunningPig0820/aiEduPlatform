@@ -7,7 +7,14 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 认证API控制器
@@ -38,10 +45,21 @@ public class AuthApiController {
         log.info("login: request={}", JSONUtil.toJsonStr(request));
         UserResponse user = userAppService.login(request);
 
-        // 设置 Session
+        // 设置 Session 自定义属性
         session.setAttribute("userId", user.getId());
         session.setAttribute("username", user.getUsername());
         session.setAttribute("role", user.getRole());
+
+        // 建立 Spring Security 认证上下文（使 /api/auth/** 的 authenticated() 生效）
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                user.getUsername(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+        );
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, securityContext);
 
         log.info("用户登录成功: username={}", user.getUsername());
         return ApiResponse.success(user);
@@ -54,6 +72,18 @@ public class AuthApiController {
     public ApiResponse<UserResponse> demoLogin(@Valid @RequestBody DemoLoginRequest request, HttpSession session) {
         log.info("demoLogin: request={}", JSONUtil.toJsonStr(request));
         UserResponse user = userAppService.demoLogin(request, session);
+
+        // 建立 Spring Security 认证上下文
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                user.getUsername(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+        );
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, securityContext);
+
         return ApiResponse.success(user);
     }
 

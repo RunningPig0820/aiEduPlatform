@@ -3,6 +3,9 @@ package com.ai.edu.infrastructure.neo4j;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
+import com.ai.edu.domain.edukg.model.result.RelatedConcept;
+import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
 import com.ai.edu.domain.edukg.service.KgRelationQueryDomainService;
 import com.ai.edu.infrastructure.cache.Neo4jRelationCacheService;
 import jakarta.annotation.Resource;
@@ -10,8 +13,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Neo4j 图谱关系查询服务
@@ -170,5 +176,67 @@ public class Neo4jRelationQueryService implements KgRelationQueryDomainService {
             });
         }
         return results;
+    }
+
+    /**
+     * 查询知识点的图谱数据（层级路径 + 关联概念）
+     */
+    @Override
+    public GraphQueryResult queryGraphForKnowledgePoint(String kpUri) {
+        String query = """
+                MATCH (kp:KnowledgePoint {uri: $kpUri})
+                OPTIONAL MATCH (s:Section)-[:HAS_KNOWLEDGE_POINT]->(kp)
+                OPTIONAL MATCH (c:Chapter)-[:CONTAINS]->(s)
+                OPTIONAL MATCH (t:Textbook)-[:CONTAINS]->(c)
+                OPTIONAL MATCH (kp)-[:MATCHES_KG]->(concept:Concept)
+                RETURN t.uri AS textbookUri, t.label AS textbookLabel,
+                       c.uri AS chapterUri, c.label AS chapterLabel,
+                       s.uri AS sectionUri, s.label AS sectionLabel,
+                       concept.uri AS conceptUri, concept.label AS conceptLabel,
+                       kp.uri AS kpUri, kp.label AS kpLabel,
+                       kp.difficulty AS kpDifficulty, kp.cognitive_level AS kpCognitiveLevel
+                """;
+
+        Set<TextbookHierarchy> hierarchies = new LinkedHashSet<>();
+        Set<RelatedConcept> concepts = new LinkedHashSet<>();
+        String kpLabel = null, kpDifficulty = null, kpCognitiveLevel = null;
+
+        try (var session = neo4jDriver.session()) {
+            var result = session.readTransaction(tx -> {
+                var r = tx.run(query, org.neo4j.driver.Values.parameters("kpUri", kpUri));
+                return r.list();
+            });
+
+            for (var record : result) {
+                kpLabel = record.get("kpLabel").isNull() ? null : record.get("kpLabel").asString();
+                kpDifficulty = record.get("kpDifficulty").isNull() ? null : record.get("kpDifficulty").asString();
+                kpCognitiveLevel = record.get("kpCognitiveLevel").isNull() ? null : record.get("kpCognitiveLevel").asString();
+
+                String tbUri = record.get("textbookUri").isNull() ? null : record.get("textbookUri").asString();
+                String tbLabel = record.get("textbookLabel").isNull() ? null : record.get("textbookLabel").asString();
+                String chUri = record.get("chapterUri").isNull() ? null : record.get("chapterUri").asString();
+                String chLabel = record.get("chapterLabel").isNull() ? null : record.get("chapterLabel").asString();
+                String secUri = record.get("sectionUri").isNull() ? null : record.get("sectionUri").asString();
+                String secLabel = record.get("sectionLabel").isNull() ? null : record.get("sectionLabel").asString();
+                String cUri = record.get("conceptUri").isNull() ? null : record.get("conceptUri").asString();
+                String cLabel = record.get("conceptLabel").isNull() ? null : record.get("conceptLabel").asString();
+
+                // 收集层级路径
+                if (secUri != null) {
+                    hierarchies.add(new TextbookHierarchy(
+                            tbUri, tbLabel, chUri, chLabel, secUri, secLabel));
+                }
+
+                // 收集关联概念
+                if (cUri != null) {
+                    concepts.add(new RelatedConcept(cUri, cLabel));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Neo4j query failed for graph query of {}: {}", kpUri, e.getMessage());
+        }
+
+        return new GraphQueryResult(kpUri, kpLabel, kpDifficulty, kpCognitiveLevel, null,
+                new ArrayList<>(hierarchies), new ArrayList<>(concepts));
     }
 }
