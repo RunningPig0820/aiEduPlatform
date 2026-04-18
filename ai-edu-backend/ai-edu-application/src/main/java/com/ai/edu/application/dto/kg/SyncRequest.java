@@ -21,7 +21,7 @@ public class SyncRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String subject;
-    private String phase;
+    private String stage;
     private String grade;
     private String textbookUri;
 }

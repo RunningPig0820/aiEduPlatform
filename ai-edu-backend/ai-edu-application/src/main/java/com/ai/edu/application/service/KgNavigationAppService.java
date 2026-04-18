@@ -11,7 +11,7 @@ import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
-import com.ai.edu.domain.edukg.model.valueobject.KgPhaseEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgStageEnum;
 import com.ai.edu.domain.edukg.model.valueobject.KgSubjectEnum;
 import com.ai.edu.domain.edukg.model.valueobject.KgTextbookEnum;
 import com.ai.edu.domain.edukg.repository.*;
@@ -48,10 +48,10 @@ public class KgNavigationAppService {
     /**
      * 获取教材列表
      */
-    public List<KgTextbookDTO> getTextbooks(String subject, String phase) {
+    public List<KgTextbookDTO> getTextbooks(String subject, String stage) {
         List<KgTextbook> textbooks;
-        if (subject != null && phase != null) {
-            textbooks = kgTextbookRepository.findBySubjectAndPhase(subject, phase);
+        if (subject != null && stage != null) {
+            textbooks = kgTextbookRepository.findBySubjectAndStage(subject, stage);
         } else if (subject != null) {
             textbooks = kgTextbookRepository.findBySubject(subject);
         } else {
@@ -219,9 +219,9 @@ public class KgNavigationAppService {
     /**
      * 获取学段列表（从枚举读取）
      */
-    public List<KgDimensionDTO> getPhases() {
-        return Arrays.stream(KgPhaseEnum.values())
-                .sorted(Comparator.comparingInt(KgPhaseEnum::getOrderIndex))
+    public List<KgDimensionDTO> getStages() {
+        return Arrays.stream(KgStageEnum.values())
+                .sorted(Comparator.comparingInt(KgStageEnum::getOrderIndex))
                 .map(e -> KgDimensionDTO.builder()
                         .code(e.getCode())
                         .label(e.getLabel())
@@ -231,14 +231,14 @@ public class KgNavigationAppService {
     }
 
     /**
-     * 获取教材列表（从枚举读取）
+     * 获取教材版本列表（从枚举读取）
      */
     public List<KgDimensionDTO> getTextbooks() {
         return Arrays.stream(KgTextbookEnum.values())
                 .sorted(Comparator.comparingInt(KgTextbookEnum::getOrderIndex))
                 .map(e -> KgDimensionDTO.builder()
                         .code(e.getCode())
-                        .desc(e.getDesc())
+                        .label(e.getDesc())
                         .orderIndex(e.getOrderIndex())
                         .build())
                 .toList();

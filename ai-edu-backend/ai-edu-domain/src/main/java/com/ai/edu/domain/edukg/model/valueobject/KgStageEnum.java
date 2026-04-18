@@ -6,7 +6,7 @@ import lombok.Getter;
  * 知识图谱-学段枚举
  */
 @Getter
-public enum KgPhaseEnum {
+public enum KgStageEnum {
 
     PRIMARY("primary", "小学", 1),
     MIDDLE("middle", "初中", 2),
@@ -16,7 +16,7 @@ public enum KgPhaseEnum {
     private final String label;
     private final int orderIndex;
 
-    KgPhaseEnum(String code, String label, int orderIndex) {
+    KgStageEnum(String code, String label, int orderIndex) {
         this.code = code;
         this.label = label;
         this.orderIndex = orderIndex;

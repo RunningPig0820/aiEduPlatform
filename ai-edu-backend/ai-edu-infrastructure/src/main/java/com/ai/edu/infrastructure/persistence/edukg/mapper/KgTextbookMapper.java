@@ -23,10 +23,10 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbook> {
     @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY grade")
     List<KgTextbook> selectBySubject(@Param("subject") String subject);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND phase = #{phase} AND is_deleted = false ORDER BY grade")
-    List<KgTextbook> selectBySubjectAndPhase(@Param("subject") String subject, @Param("phase") String phase);
+    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND stage = #{stage} AND is_deleted = false ORDER BY grade")
+    List<KgTextbook> selectBySubjectAndStage(@Param("subject") String subject, @Param("stage") String stage);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, phase")
+    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, order_index")
     List<KgTextbook> selectAllActive();
 
     @Update("UPDATE t_kg_textbook SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")

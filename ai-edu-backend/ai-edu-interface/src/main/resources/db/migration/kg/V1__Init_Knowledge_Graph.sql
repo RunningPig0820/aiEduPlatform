@@ -9,8 +9,10 @@ CREATE TABLE IF NOT EXISTS `t_kg_textbook` (
     `uri` VARCHAR(500) NOT NULL,
     `label` VARCHAR(200) NOT NULL,
     `grade` VARCHAR(50) NOT NULL,
-    `phase` VARCHAR(50) NOT NULL,
+    `stage` VARCHAR(50) NOT NULL,
+    `edition` VARCHAR(100) DEFAULT NULL,
     `subject` VARCHAR(50) NOT NULL,
+    `order_index` INT DEFAULT 0,
     `status` VARCHAR(20) DEFAULT 'active',
     `merged_to_uri` VARCHAR(500) DEFAULT NULL,
     `created_by` BIGINT DEFAULT 0,
@@ -20,7 +22,7 @@ CREATE TABLE IF NOT EXISTS `t_kg_textbook` (
     UNIQUE KEY `uk_uri` (`uri`(255)),
     KEY `idx_grade` (`grade`),
     KEY `idx_subject` (`subject`),
-    KEY `idx_phase` (`phase`)
+    KEY `idx_stage` (`stage`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. 章节表

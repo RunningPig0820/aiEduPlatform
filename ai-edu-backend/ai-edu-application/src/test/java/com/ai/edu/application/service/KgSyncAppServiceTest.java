@@ -60,7 +60,7 @@ class KgSyncAppServiceTest {
 
     private void mockFullSyncChain() {
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "math")
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
         );
         List<KgChapter> chapters = List.of(KgChapter.create("uri:ch1", "第一章"));
         List<KgSection> sections = List.of(KgSection.create("uri:sec1", "第一节"));
@@ -139,8 +139,8 @@ class KgSyncAppServiceTest {
         SyncRequest request = SyncRequest.builder().subject("math").textbookUri(targetUri).build();
 
         List<KgTextbook> allTextbooks = List.of(
-                KgTextbook.create(targetUri, "教材1", "七年级", "junior", "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "math")
+                KgTextbook.create(targetUri, "教材1", "七年级", "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "人教版", "math")
         );
         when(kgSyncDomainService.syncTextbookNodes()).thenReturn(allTextbooks);
         when(kgSyncDomainService.syncChapterNodes()).thenReturn(List.of());
@@ -181,8 +181,8 @@ class KgSyncAppServiceTest {
         SyncRequest request = SyncRequest.builder().subject("english").build();
 
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:math", "数学教材", "七年级", "junior", "math"),
-                KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "english")
+                KgTextbook.create("uri:math", "数学教材", "七年级", "junior", "人教版", "math"),
+                KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "人教版", "english")
         );
         when(kgSyncDomainService.syncTextbookNodes()).thenReturn(textbooks);
         when(kgSyncDomainService.syncChapterNodes()).thenReturn(List.of());

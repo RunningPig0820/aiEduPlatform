@@ -18,7 +18,7 @@ public interface KgTextbookRepository {
 
     List<KgTextbook> findBySubject(String subject);
 
-    List<KgTextbook> findBySubjectAndPhase(String subject, String phase);
+    List<KgTextbook> findBySubjectAndStage(String subject, String stage);
 
     List<KgTextbook> findAllActive();
 

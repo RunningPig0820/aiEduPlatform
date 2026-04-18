@@ -256,7 +256,7 @@ class KgDomainServiceInterfaceTest {
         assertNotNull(clazz.getMethod("findById", Long.class));
         assertNotNull(clazz.getMethod("findByUri", String.class));
         assertNotNull(clazz.getMethod("findBySubject", String.class));
-        assertNotNull(clazz.getMethod("findBySubjectAndPhase", String.class, String.class));
+        assertNotNull(clazz.getMethod("findBySubjectAndStage", String.class, String.class));
         assertNotNull(clazz.getMethod("findAllActive"));
         assertNotNull(clazz.getMethod("updateStatus", String.class, String.class));
     }

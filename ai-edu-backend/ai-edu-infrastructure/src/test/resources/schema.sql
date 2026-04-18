@@ -4,8 +4,10 @@ CREATE TABLE IF NOT EXISTS t_kg_textbook (
     uri VARCHAR(500) NOT NULL,
     label VARCHAR(200),
     grade VARCHAR(50),
-    phase VARCHAR(50),
+    stage VARCHAR(50),
+    edition VARCHAR(100),
     subject VARCHAR(50),
+    order_index INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'active',
     merged_to_uri VARCHAR(500),
     created_by BIGINT DEFAULT 0,
@@ -102,7 +104,7 @@ CREATE TABLE IF NOT EXISTS t_kg_sync_record (
 -- Indexes
 CREATE INDEX idx_kg_textbook_grade ON t_kg_textbook(grade);
 CREATE INDEX idx_kg_textbook_subject ON t_kg_textbook(subject);
-CREATE INDEX idx_kg_textbook_phase ON t_kg_textbook(phase);
+CREATE INDEX idx_kg_textbook_stage ON t_kg_textbook(stage);
 CREATE INDEX idx_kg_chapter_status ON t_kg_chapter(status);
 CREATE INDEX idx_kg_section_status ON t_kg_section(status);
 CREATE INDEX idx_kg_kp_status ON t_kg_knowledge_point(status);

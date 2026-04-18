@@ -37,7 +37,7 @@ public class KgSyncAppService {
     /**
      * 全量/定向同步
      *
-     * @param request 同步请求（可选参数：subject/phase/grade/textbookUri）
+     * @param request 同步请求（可选参数：subject/stage/grade/textbookUri）
      * @return 同步结果
      */
     public SyncResult syncFull(SyncRequest request) {
@@ -54,8 +54,8 @@ public class KgSyncAppService {
         validateSyncRequest(request);
 
         long startTime = System.currentTimeMillis();
-        log.info("Starting KG sync: subject={}, phase={}, grade={}, textbookUri={}",
-                request.getSubject(), request.getPhase(), request.getGrade(), request.getTextbookUri());
+        log.info("Starting KG sync: subject={}, stage={}, grade={}, textbookUri={}",
+                request.getSubject(), request.getStage(), request.getGrade(), request.getTextbookUri());
 
         KgSyncRecord syncRecord = null;
         try {
@@ -144,9 +144,9 @@ public class KgSyncAppService {
 
     private String buildScope(SyncRequest request) {
         return String.format(
-                "{\"subject\":\"%s\",\"phase\":\"%s\",\"grade\":\"%s\",\"textbookUri\":\"%s\"}",
+                "{\"subject\":\"%s\",\"stage\":\"%s\",\"grade\":\"%s\",\"textbookUri\":\"%s\"}",
                 request.getSubject() != null ? request.getSubject() : "math",
-                request.getPhase() != null ? request.getPhase() : "",
+                request.getStage() != null ? request.getStage() : "",
                 request.getGrade() != null ? request.getGrade() : "",
                 request.getTextbookUri() != null ? request.getTextbookUri() : ""
         );

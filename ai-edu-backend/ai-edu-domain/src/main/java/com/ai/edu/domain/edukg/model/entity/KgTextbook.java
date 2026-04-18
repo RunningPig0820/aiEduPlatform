@@ -29,8 +29,14 @@ public class KgTextbook {
     @TableField("grade")
     private String grade;
 
-    @TableField("phase")
-    private String phase;
+    @TableField("stage")
+    private String stage;
+
+    @TableField("edition")
+    private String edition;
+
+    @TableField("order_index")
+    private Integer orderIndex = 0;
 
     @TableField("subject")
     private String subject;
@@ -50,13 +56,15 @@ public class KgTextbook {
     @TableField("is_deleted")
     private Boolean deleted = false;
 
-    public static KgTextbook create(String uri, String label, String grade, String phase, String subject) {
+    public static KgTextbook create(String uri, String label, String grade, String stage, String edition, String subject) {
         KgTextbook textbook = new KgTextbook();
         textbook.uri = uri;
         textbook.label = label;
         textbook.grade = grade;
-        textbook.phase = phase;
+        textbook.stage = stage;
+        textbook.edition = edition;
         textbook.subject = subject;
+        textbook.orderIndex = 0;
         textbook.status = "active";
         return textbook;
     }
@@ -69,8 +77,10 @@ public class KgTextbook {
     public void updateFrom(KgTextbook other) {
         this.label = other.label;
         this.grade = other.grade;
-        this.phase = other.phase;
+        this.stage = other.stage;
+        this.edition = other.edition;
         this.subject = other.subject;
+        this.orderIndex = other.orderIndex;
     }
 
     public boolean isMerged() {

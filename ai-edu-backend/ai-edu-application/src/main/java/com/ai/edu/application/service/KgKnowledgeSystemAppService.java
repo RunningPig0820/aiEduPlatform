@@ -53,7 +53,7 @@ public class KgKnowledgeSystemAppService {
 
         Map<String, List<KgTextbook>> grouped = textbooks.stream()
                 .collect(Collectors.groupingBy(tb ->
-                        "phase".equals(effectiveGroupBy) ? tb.getPhase() : tb.getSubject()
+                        "stage".equals(effectiveGroupBy) ? tb.getStage() : tb.getSubject()
                 ));
 
         List<KgChapterSection> allChSec = kgChapterSectionRepository.findAllActive();
@@ -136,7 +136,7 @@ public class KgKnowledgeSystemAppService {
                     .sum();
             totalKp += groupKpCount;
 
-            String groupLabel = "phase".equals(effectiveGroupBy) ? phaseToLabel(groupKey) : subjectToLabel(groupKey);
+            String groupLabel = "stage".equals(effectiveGroupBy) ? stageToLabel(groupKey) : subjectToLabel(groupKey);
 
             groups.add(KgGradeSystemDTO.GroupDTO.builder()
                     .key(groupKey)
@@ -195,12 +195,12 @@ public class KgKnowledgeSystemAppService {
         );
     }
 
-    private String phaseToLabel(String phase) {
-        return switch (phase) {
+    private String stageToLabel(String stage) {
+        return switch (stage) {
             case "primary" -> "小学";
             case "middle" -> "初中";
             case "high" -> "高中";
-            default -> phase;
+            default -> stage;
         };
     }
 

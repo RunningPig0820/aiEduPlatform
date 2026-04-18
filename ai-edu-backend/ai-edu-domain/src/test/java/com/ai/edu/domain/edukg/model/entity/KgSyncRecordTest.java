@@ -46,7 +46,7 @@ class KgSyncRecordTest {
         assertEquals(5, record.getUpdatedCount());
         assertEquals(2, record.getStatusChangedCount());
         assertEquals("matched", record.getReconciliationStatus());
-        assertEquals("All counts matched", record.getReconciliationDetails());
+        assertEquals("\"All counts matched\"", record.getReconciliationDetails());
         assertNotNull(record.getFinishedAt());
         assertNull(record.getErrorMessage());
     }

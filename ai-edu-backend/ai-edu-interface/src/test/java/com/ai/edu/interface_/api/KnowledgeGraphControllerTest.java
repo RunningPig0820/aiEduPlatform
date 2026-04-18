@@ -173,14 +173,16 @@ class KnowledgeGraphControllerTest {
 
     @Test
     @Order(5)
-    @DisplayName("getTextbooks 列表查询（含 subject/phase 过滤参数）")
+    @DisplayName("getTextbooks 列表查询（含 subject/stage 过滤参数）")
     void getTextbooks_withFilters() {
         List<KgTextbookDTO> textbooks = List.of(
                 KgTextbookDTO.builder()
                         .uri("uri:tb1")
                         .label("数学上册")
                         .grade("七年级")
-                        .phase("middle")
+                        .stage("middle")
+                        .edition("人教版")
+                        .orderIndex(1)
                         .subject("math")
                         .status("active")
                         .build(),
@@ -188,7 +190,9 @@ class KnowledgeGraphControllerTest {
                         .uri("uri:tb2")
                         .label("数学下册")
                         .grade("七年级")
-                        .phase("middle")
+                        .stage("middle")
+                        .edition("人教版")
+                        .orderIndex(2)
                         .subject("math")
                         .status("active")
                         .build()
@@ -200,7 +204,7 @@ class KnowledgeGraphControllerTest {
         assertEquals(2, response.size());
         assertEquals("uri:tb1", response.get(0).getUri());
         assertEquals("math", response.get(0).getSubject());
-        assertEquals("middle", response.get(0).getPhase());
+        assertEquals("middle", response.get(0).getStage());
     }
 
     @Test
@@ -212,7 +216,9 @@ class KnowledgeGraphControllerTest {
                         .uri("uri:tb1")
                         .label("数学上册")
                         .grade("七年级")
-                        .phase("middle")
+                        .stage("middle")
+                        .edition("人教版")
+                        .orderIndex(1)
                         .subject("math")
                         .status("active")
                         .build()

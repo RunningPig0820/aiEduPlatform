@@ -79,9 +79,9 @@ public class KnowledgeGraphController {
     @GetMapping("/textbooks")
     public ApiResponse<List<KgTextbookDTO>> getTextbooks(
             @RequestParam(required = false) String subject,
-            @RequestParam(required = false) String phase) {
-        log.info("获取教材列表: subject={}, phase={}", subject, phase);
-        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooks(subject, phase);
+            @RequestParam(required = false) String stage) {
+        log.info("获取教材列表: subject={}, stage={}", subject, stage);
+        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooks(subject, stage);
         return ApiResponse.success(textbooks);
     }
 
@@ -159,13 +159,13 @@ public class KnowledgeGraphController {
 
     /**
      * 获取学段列表（枚举，前端下拉用）
-     * GET /api/kg/dimensions/phases
+     * GET /api/kg/dimensions/stages
      */
-    @GetMapping("/dimensions/phases")
-    public ApiResponse<List<KgDimensionDTO>> getPhases() {
+    @GetMapping("/dimensions/stages")
+    public ApiResponse<List<KgDimensionDTO>> getStages() {
         log.info("获取学段下拉列表");
-        List<KgDimensionDTO> phases = kgNavigationAppService.getPhases();
-        return ApiResponse.success(phases);
+        List<KgDimensionDTO> stages = kgNavigationAppService.getStages();
+        return ApiResponse.success(stages);
     }
 
     /**

@@ -50,7 +50,7 @@ class KgTextbookRepositoryImplTest {
     @Order(1)
     @DisplayName("save 新增教材 — id 为 null 时应 INSERT")
     void save_newEntity_shouldInsert() {
-        KgTextbook textbook = KgTextbook.create(TEST_URI, "测试教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(TEST_URI, "测试教材", "七年级", "junior", "人教版", "math");
         assertNull(textbook.getId());
 
         KgTextbook saved = kgTextbookRepository.save(textbook);
@@ -63,7 +63,7 @@ class KgTextbookRepositoryImplTest {
         assertEquals(TEST_URI, found.getUri());
         assertEquals("测试教材", found.getLabel());
         assertEquals("七年级", found.getGrade());
-        assertEquals("junior", found.getPhase());
+        assertEquals("junior", found.getStage());
         assertEquals("math", found.getSubject());
         assertEquals("active", found.getStatus());
         assertFalse(found.getDeleted());
@@ -76,12 +76,12 @@ class KgTextbookRepositoryImplTest {
     @DisplayName("save 更新教材 — id 已存在时应 UPDATE")
     void save_existingEntity_shouldUpdate() {
         // 先插入一条
-        KgTextbook original = KgTextbook.create(TEST_URI, "旧标签", "旧年级", "junior", "math");
+        KgTextbook original = KgTextbook.create(TEST_URI, "旧标签", "旧年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(original);
         assertNotNull(original.getId());
 
         // 修改后再次 save
-        original.updateFrom(KgTextbook.create(TEST_URI, "新标签", "新年级", "junior", "math"));
+        original.updateFrom(KgTextbook.create(TEST_URI, "新标签", "新年级", "junior", "人教版", "math"));
         KgTextbook updated = kgTextbookRepository.save(original);
 
         // 验证更新
@@ -98,7 +98,7 @@ class KgTextbookRepositoryImplTest {
     @Order(3)
     @DisplayName("findByUri 查找已存在的教材")
     void findByUri_shouldReturnPresent() {
-        KgTextbook textbook = KgTextbook.create(TEST_URI, "测试教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(TEST_URI, "测试教材", "七年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(textbook);
 
         var result = kgTextbookRepository.findByUri(TEST_URI);
@@ -125,8 +125,8 @@ class KgTextbookRepositoryImplTest {
     @Order(5)
     @DisplayName("findAllActive 应只返回活跃教材")
     void findAllActive_shouldReturnOnlyActive() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "math");
+        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "人教版", "math");
+        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(tb1);
         kgTextbookMapper.insert(tb2);
 
@@ -139,8 +139,8 @@ class KgTextbookRepositoryImplTest {
     @Order(6)
     @DisplayName("findAllActive 应排除 status 为 deleted 的教材")
     void findAllActive_shouldExcludeDeletedStatus() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "math");
+        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "人教版", "math");
+        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(tb1);
         kgTextbookMapper.insert(tb2);
 
@@ -165,7 +165,7 @@ class KgTextbookRepositoryImplTest {
     @Order(7)
     @DisplayName("updateStatus 应更新 status 字段")
     void updateStatus_shouldChangeStatus() {
-        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(textbook);
 
         kgTextbookRepository.updateStatus(TEST_URI, "deleted");
@@ -183,14 +183,14 @@ class KgTextbookRepositoryImplTest {
     @Order(8)
     @DisplayName("findBySubject 应返回指定学科的所有教材")
     void findBySubject_shouldReturnMatching() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "数学教材1", "七年级", "junior", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "数学教材2", "八年级", "junior", "math");
+        KgTextbook tb1 = KgTextbook.create(TEST_URI, "数学教材1", "七年级", "junior", "人教版", "math");
+        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "数学教材2", "八年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(tb1);
         kgTextbookMapper.insert(tb2);
 
         // 插入另一个学科的
         KgTextbook tb3 = KgTextbook.create("http://edukg.org/knowledge/3.1/textbook/english_1",
-                "英语教材", "七年级", "junior", "english");
+                "英语教材", "七年级", "junior", "人教版", "english");
         kgTextbookMapper.insert(tb3);
 
         List<KgTextbook> mathTextbooks = kgTextbookRepository.findBySubject("math");
@@ -212,29 +212,29 @@ class KgTextbookRepositoryImplTest {
 
     @Test
     @Order(10)
-    @DisplayName("findBySubjectAndPhase 应返回匹配的教材")
-    void findBySubjectAndPhase_shouldReturnMatching() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "初中数学", "七年级", "junior", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "初中数学2", "八年级", "junior", "math");
+    @DisplayName("findBySubjectAndStage 应返回匹配的教材")
+    void findBySubjectAndStage_shouldReturnMatching() {
+        KgTextbook tb1 = KgTextbook.create(TEST_URI, "初中数学", "七年级", "junior", "人教版", "math");
+        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "初中数学2", "八年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(tb1);
         kgTextbookMapper.insert(tb2);
 
-        // 插入 phase 不同的
+        // 插入 stage 不同的
         KgTextbook tb3 = KgTextbook.create("http://edukg.org/knowledge/3.1/textbook/senior_math",
-                "高中数学", "高一", "senior", "math");
+                "高中数学", "高一", "senior", "人教版", "math");
         kgTextbookMapper.insert(tb3);
 
-        List<KgTextbook> result = kgTextbookRepository.findBySubjectAndPhase("math", "junior");
+        List<KgTextbook> result = kgTextbookRepository.findBySubjectAndStage("math", "junior");
 
         assertEquals(2, result.size());
-        assertTrue(result.stream().allMatch(tb -> "math".equals(tb.getSubject()) && "junior".equals(tb.getPhase())));
+        assertTrue(result.stream().allMatch(tb -> "math".equals(tb.getSubject()) && "junior".equals(tb.getStage())));
     }
 
     @Test
     @Order(11)
-    @DisplayName("findBySubjectAndPhase 无匹配时应返回空列表")
-    void findBySubjectAndPhase_noMatch_shouldReturnEmpty() {
-        List<KgTextbook> result = kgTextbookRepository.findBySubjectAndPhase("physics", "junior");
+    @DisplayName("findBySubjectAndStage 无匹配时应返回空列表")
+    void findBySubjectAndStage_noMatch_shouldReturnEmpty() {
+        List<KgTextbook> result = kgTextbookRepository.findBySubjectAndStage("physics", "junior");
 
         assertTrue(result.isEmpty());
     }
@@ -245,7 +245,7 @@ class KgTextbookRepositoryImplTest {
     @Order(12)
     @DisplayName("软删除后 findByUri 仍能查到（updateStatus 不改 is_deleted）")
     void softDelete_findByUri_shouldStillFind() {
-        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(textbook);
 
         // updateStatus 只改 status
@@ -263,7 +263,7 @@ class KgTextbookRepositoryImplTest {
     @Order(13)
     @DisplayName("findById 应通过主键查找")
     void findById_shouldReturnPresent() {
-        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "人教版", "math");
         kgTextbookMapper.insert(textbook);
         Long id = textbook.getId();
 

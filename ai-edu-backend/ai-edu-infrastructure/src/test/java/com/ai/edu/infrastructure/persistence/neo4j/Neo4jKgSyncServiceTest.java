@@ -85,7 +85,7 @@ class Neo4jKgSyncServiceTest {
         // H2 是空的，selectByUri 应返回 null
         assertNull(kgTextbookMapper.selectByUri(TEST_URI));
 
-        KgTextbook tb = KgTextbook.create(TEST_URI, "测试教材", "一年级", "primary", "math");
+        KgTextbook tb = KgTextbook.create(TEST_URI, "测试教材", "一年级", "primary", "人教版", "math");
         int count = syncService.upsertTextbooks(List.of(tb));
 
         assertEquals(1, count);
@@ -102,11 +102,11 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("upsertTextbooks 更新场景 — H2 中已存在应用 Neo4j 新数据更新")
     void upsertTextbooks_updateExisting() {
         // 先插入一条旧数据
-        KgTextbook old = KgTextbook.create(TEST_URI, "旧标签", "旧年级", "primary", "旧学科");
+        KgTextbook old = KgTextbook.create(TEST_URI, "旧标签", "旧年级", "primary", "人教版", "旧学科");
         kgTextbookMapper.insert(old);
 
         // 模拟从 Neo4j 来的新数据
-        KgTextbook neo = KgTextbook.create(TEST_URI, "新标签", "新年级", "primary", "新学科");
+        KgTextbook neo = KgTextbook.create(TEST_URI, "新标签", "新年级", "primary", "人教版", "新学科");
         int count = syncService.upsertTextbooks(List.of(neo));
 
         assertEquals(0, count); // 更新不计入 insert 计数
@@ -329,7 +329,7 @@ class Neo4jKgSyncServiceTest {
     @Order(17)
     @DisplayName("markDeletedNodes Textbook — H2 有但 Neo4j 无应标记 deleted")
     void markDeletedNodes_textbook() {
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "math"));
+        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math"));
 
         int count = syncService.markDeletedNodes("Textbook", Set.of());
 
@@ -385,7 +385,7 @@ class Neo4jKgSyncServiceTest {
     @Order(21)
     @DisplayName("markDeletedNodes Neo4j 中有该 URI 不标记删除")
     void markDeletedNodes_shouldNotDeleteIfInNeo4j() {
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "math"));
+        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math"));
 
         int count = syncService.markDeletedNodes("Textbook", Set.of(TEST_URI));
 
@@ -449,7 +449,7 @@ class Neo4jKgSyncServiceTest {
     void validateAllUris_allValid() {
         String base = "http://edukg.org/knowledge/3.1/";
         var result = syncService.validateAllUris(
-                List.of(KgTextbook.create(base + "textbook/1", "教材1", "一年级", "primary", "math")),
+                List.of(KgTextbook.create(base + "textbook/1", "教材1", "一年级", "primary", "人教版", "math")),
                 List.of(KgChapter.create(base + "chapter/1", "章节1")),
                 List.of(KgSection.create(base + "section/1", "小节1")),
                 List.of(KgKnowledgePoint.create(base + "kp/1", "知识点1")));
@@ -462,7 +462,7 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("validateAllUris 部分非法应报错")
     void validateAllUris_partialInvalid() {
         var result = syncService.validateAllUris(
-                List.of(KgTextbook.create("short", "非法", "一年级", "primary", "math")),
+                List.of(KgTextbook.create("short", "非法", "一年级", "primary", "人教版", "math")),
                 List.of(KgChapter.create("http://edukg.org/knowledge/3.1/chapter/1", "章节1")),
                 Collections.emptyList(), Collections.emptyList());
         assertFalse(result.valid);
@@ -490,8 +490,8 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("reconcile 数量不一致应 mismatched")
     void reconcile_countsMismatch() {
         // H2 插入 2 条教材，Neo4j 传 1 条
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "1", "教材1", "一年级", "primary", "math"));
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "2", "教材2", "一年级", "primary", "math"));
+        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "1", "教材1", "一年级", "primary", "人教版", "math"));
+        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "2", "教材2", "一年级", "primary", "人教版", "math"));
 
         var result = syncService.reconcile(
                 Set.of("uri1"), Set.of(), Set.of(), Set.of(),

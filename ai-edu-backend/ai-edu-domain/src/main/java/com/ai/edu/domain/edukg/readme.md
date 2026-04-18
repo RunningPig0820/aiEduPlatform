@@ -55,7 +55,7 @@ EduKG is proposed and maintained by the Knowledge Engineering Group of Tsinghua 
 
 | 类型 | 标签 | 含义 | 数量 | 核心属性 |
 |------|------|------|------|----------|
-| 教材 | Textbook | 人教版教材册次 | 23 | `label`(名称), `grade`(年级), `phase`(学段: primary/middle/high) |
+| 教材 | Textbook | 人教版教材册次 | 23 | `label`(名称), `grade`(年级), `stage`(学段: primary/middle/high), `edition`(版本) |
 | 章节 | Chapter | 教材中的章节 | 148 | `label`, `topic`(专题), `textbook_id` |
 | 小节 | Section | 教材中的小节 | 580 | `label`, `chapter_id` |
 | 教材知识点 | TextbookKP | 教材关联的知识点 | 1,740 | `label`, `section_id`, `textbook_id`, `difficulty`, `importance`, `cognitive_level` |

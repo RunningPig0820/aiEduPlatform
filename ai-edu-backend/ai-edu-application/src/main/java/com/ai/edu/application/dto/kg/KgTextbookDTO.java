@@ -23,7 +23,9 @@ public class KgTextbookDTO implements Serializable {
     private String uri;
     private String label;
     private String grade;
-    private String phase;
+    private String stage;
+    private String edition;
+    private Integer orderIndex;
     private String subject;
     private String status;
 }

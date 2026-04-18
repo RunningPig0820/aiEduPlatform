@@ -44,8 +44,8 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     }
 
     @Override
-    public List<KgTextbook> findBySubjectAndPhase(String subject, String phase) {
-        return kgTextbookMapper.selectBySubjectAndPhase(subject, phase);
+    public List<KgTextbook> findBySubjectAndStage(String subject, String stage) {
+        return kgTextbookMapper.selectBySubjectAndStage(subject, stage);
     }
 
     @Override

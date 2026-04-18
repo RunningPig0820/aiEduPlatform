@@ -68,9 +68,10 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
             String uri = getUri(record);
             String label = getLabel(record);
             String grade = getStringProperty(record, "grade");
-            String phase = getStringProperty(record, "phase");
+            String stage = getStringProperty(record, "stage");
+            String edition = getStringProperty(record, "edition");
             String subject = getStringProperty(record, "subject");
-            return KgTextbook.create(uri, label, grade, phase, subject);
+            return KgTextbook.create(uri, label, grade, stage, edition, subject);
         });
     }
 

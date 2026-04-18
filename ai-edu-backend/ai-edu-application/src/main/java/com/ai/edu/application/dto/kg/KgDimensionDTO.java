@@ -49,5 +49,10 @@ public class KgDimensionDTO implements Serializable {
     /**
      * 所属学段（教材维度）
      */
-    private String phase;
+    private String stage;
+
+    /**
+     * 教材版本（教材维度）
+     */
+    private String edition;
 }

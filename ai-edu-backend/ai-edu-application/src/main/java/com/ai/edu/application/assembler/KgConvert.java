@@ -21,7 +21,9 @@ public final class KgConvert {
                 .uri(textbook.getUri())
                 .label(textbook.getLabel())
                 .grade(textbook.getGrade())
-                .phase(textbook.getPhase())
+                .stage(textbook.getStage())
+                .edition(textbook.getEdition())
+                .orderIndex(textbook.getOrderIndex())
                 .subject(textbook.getSubject())
                 .status(textbook.getStatus())
                 .build();

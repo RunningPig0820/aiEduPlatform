@@ -57,8 +57,8 @@ class KgKnowledgeSystemAppServiceTest {
 
         // 两本数学教材
         List<KgTextbook> allTextbooks = List.of(
-                KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "math"),
-                KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "math")
+                KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "人教版", "math")
         );
         when(kgTextbookRepository.findAllActive()).thenReturn(allTextbooks);
 
@@ -114,12 +114,12 @@ class KgKnowledgeSystemAppServiceTest {
 
     @Test
     @Order(2)
-    @DisplayName("getGradeSystem 按 phase 分组 — 应返回 phase 分组结构")
-    void getGradeSystem_byPhase_shouldReturnGroupedByPhase() {
+    @DisplayName("getGradeSystem 按 stage 分组 — 应返回 stage 分组结构")
+    void getGradeSystem_byStage_shouldReturnGroupedByStage() {
         String grade = "七年级";
         List<KgTextbook> allTextbooks = List.of(
-                KgTextbook.create("uri:tb1", "数学教材", grade, "middle", "math"),
-                KgTextbook.create("uri:tb2", "英语教材", grade, "middle", "english")
+                KgTextbook.create("uri:tb1", "数学教材", grade, "middle", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "英语教材", grade, "middle", "人教版", "english")
         );
         when(kgTextbookRepository.findAllActive()).thenReturn(allTextbooks);
 
@@ -137,10 +137,10 @@ class KgKnowledgeSystemAppServiceTest {
         when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
         when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
 
-        KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "phase");
+        KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "stage");
 
         assertNotNull(result);
-        assertEquals("phase", result.getGroupBy());
+        assertEquals("stage", result.getGroupBy());
         assertEquals(1, result.getGroups().size());
         assertEquals("middle", result.getGroups().get(0).getKey());
         assertEquals("初中", result.getGroups().get(0).getLabel());
@@ -181,7 +181,7 @@ class KgKnowledgeSystemAppServiceTest {
         String grade = "七年级";
         // 需要提供非空教材列表，使代码走到 effectiveGroupBy 的逻辑（而非早期返回）
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
-                KgTextbook.create("uri:tb1", "教材", grade, "junior", "math")
+                KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
         when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of());
         when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
@@ -198,7 +198,7 @@ class KgKnowledgeSystemAppServiceTest {
     void getGradeSystem_textbooksWithoutChapters_shouldHaveZeroKpCount() {
         String grade = "七年级";
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
-                KgTextbook.create("uri:tb1", "教材", grade, "junior", "math")
+                KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
         when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of());
         when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
@@ -222,8 +222,8 @@ class KgKnowledgeSystemAppServiceTest {
 
         // 两本教材
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "math"),
-                KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "math")
+                KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "人教版", "math")
         );
         when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
 
@@ -295,7 +295,7 @@ class KgKnowledgeSystemAppServiceTest {
     void getGradeStats_nullDifficulty_shouldBeUnknown() {
         String grade = "七年级";
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
-                KgTextbook.create("uri:tb1", "教材", grade, "junior", "math")
+                KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
         when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of(
                 KgTextbookChapter.create("uri:tb1", "uri:ch1", 1)

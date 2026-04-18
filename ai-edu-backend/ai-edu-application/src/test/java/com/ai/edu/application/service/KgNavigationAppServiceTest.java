@@ -9,7 +9,7 @@ import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
-import com.ai.edu.domain.edukg.model.valueobject.KgPhaseEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgStageEnum;
 import com.ai.edu.domain.edukg.model.valueobject.KgSubjectEnum;
 import com.ai.edu.domain.edukg.model.valueobject.KgTextbookEnum;
 import com.ai.edu.domain.edukg.repository.*;
@@ -60,8 +60,8 @@ class KgNavigationAppServiceTest {
     @DisplayName("getTextbooks 全部查询 — 无参数时应返回所有教材")
     void getTextbooks_noFilter_shouldReturnAll() {
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "english")
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "人教版", "english")
         );
         when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
 
@@ -72,7 +72,7 @@ class KgNavigationAppServiceTest {
         assertEquals("uri:tb1", result.get(0).getUri());
         assertEquals("教材1", result.get(0).getLabel());
         assertEquals("七年级", result.get(0).getGrade());
-        assertEquals("junior", result.get(0).getPhase());
+        assertEquals("junior", result.get(0).getStage());
         assertEquals("math", result.get(0).getSubject());
         assertEquals("active", result.get(0).getStatus());
         verify(kgTextbookRepository).findAllActive();
@@ -83,7 +83,7 @@ class KgNavigationAppServiceTest {
     @DisplayName("getTextbooks 按 subject 过滤")
     void getTextbooks_bySubject_shouldFilter() {
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "数学教材1", "七年级", "junior", "math")
+                KgTextbook.create("uri:tb1", "数学教材1", "七年级", "junior", "人教版", "math")
         );
         when(kgTextbookRepository.findBySubject("math")).thenReturn(textbooks);
 
@@ -96,19 +96,19 @@ class KgNavigationAppServiceTest {
 
     @Test
     @Order(3)
-    @DisplayName("getTextbooks 按 subject+phase 过滤")
-    void getTextbooks_bySubjectAndPhase_shouldFilter() {
+    @DisplayName("getTextbooks 按 subject+stage 过滤")
+    void getTextbooks_bySubjectAndStage_shouldFilter() {
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "初中数学", "七年级", "junior", "math")
+                KgTextbook.create("uri:tb1", "初中数学", "七年级", "junior", "人教版", "math")
         );
-        when(kgTextbookRepository.findBySubjectAndPhase("math", "junior")).thenReturn(textbooks);
+        when(kgTextbookRepository.findBySubjectAndStage("math", "junior")).thenReturn(textbooks);
 
         List<KgTextbookDTO> result = kgNavigationAppService.getTextbooks("math", "junior");
 
         assertEquals(1, result.size());
         assertEquals("math", result.get(0).getSubject());
-        assertEquals("junior", result.get(0).getPhase());
-        verify(kgTextbookRepository).findBySubjectAndPhase("math", "junior");
+        assertEquals("junior", result.get(0).getStage());
+        verify(kgTextbookRepository).findBySubjectAndStage("math", "junior");
     }
 
     @Test
@@ -130,7 +130,7 @@ class KgNavigationAppServiceTest {
     @DisplayName("getChaptersByTextbook 教材存在 — 应返回章节树含小节和知识点计数")
     void getChaptersByTextbook_textbookExists_shouldReturnChapterTree() {
         String tbUri = "uri:tb1";
-        KgTextbook textbook = KgTextbook.create(tbUri, "数学教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create(tbUri, "数学教材", "七年级", "junior", "人教版", "math");
         when(kgTextbookRepository.findByUri(tbUri)).thenReturn(Optional.of(textbook));
 
         // 教材-章节关系
@@ -218,7 +218,7 @@ class KgNavigationAppServiceTest {
     @DisplayName("getChaptersByTextbook 无章节关系 — 应返回空列表")
     void getChaptersByTextbook_noChapters_shouldReturnEmpty() {
         String tbUri = "uri:tb1";
-        when(kgTextbookRepository.findByUri(tbUri)).thenReturn(Optional.of(KgTextbook.create(tbUri, "教材", "七年级", "junior", "math")));
+        when(kgTextbookRepository.findByUri(tbUri)).thenReturn(Optional.of(KgTextbook.create(tbUri, "教材", "七年级", "junior", "人教版", "math")));
         when(kgTextbookChapterRepository.findByTextbookUri(tbUri)).thenReturn(List.of());
 
         List<ChapterTreeNode> result = kgNavigationAppService.getChaptersByTextbook(tbUri);
@@ -232,7 +232,7 @@ class KgNavigationAppServiceTest {
     @DisplayName("getChaptersByTextbook 空章节自动过滤 — 章节无小节时应被排除")
     void getChaptersByTextbook_emptyChapter_shouldBeFiltered() {
         String tbUri = "uri:tb1";
-        when(kgTextbookRepository.findByUri(tbUri)).thenReturn(Optional.of(KgTextbook.create(tbUri, "教材", "七年级", "junior", "math")));
+        when(kgTextbookRepository.findByUri(tbUri)).thenReturn(Optional.of(KgTextbook.create(tbUri, "教材", "七年级", "junior", "人教版", "math")));
 
         // 两个章节
         when(kgTextbookChapterRepository.findByTextbookUri(tbUri)).thenReturn(List.of(
@@ -426,7 +426,7 @@ class KgNavigationAppServiceTest {
     @Order(15)
     @DisplayName("getTextbookDetail 应验证 Entity → DTO 字段映射")
     void getTextbookDetail_shouldMapEntityToDto() {
-        KgTextbook textbook = KgTextbook.create("uri:tb1", "测试教材", "七年级", "junior", "math");
+        KgTextbook textbook = KgTextbook.create("uri:tb1", "测试教材", "七年级", "junior", "人教版", "math");
         when(kgTextbookRepository.findByUri("uri:tb1")).thenReturn(Optional.of(textbook));
 
         KgTextbookDTO result = kgNavigationAppService.getTextbookDetail("uri:tb1");
@@ -434,7 +434,7 @@ class KgNavigationAppServiceTest {
         assertEquals("uri:tb1", result.getUri());
         assertEquals("测试教材", result.getLabel());
         assertEquals("七年级", result.getGrade());
-        assertEquals("junior", result.getPhase());
+        assertEquals("junior", result.getStage());
         assertEquals("math", result.getSubject());
         assertEquals("active", result.getStatus());
     }
@@ -539,16 +539,16 @@ class KgNavigationAppServiceTest {
         verify(kgTextbookRepository).findDistinctGrades();
     }
 
-    // ==================== 6.15.3 getPhases ====================
+    // ==================== 6.15.3 getStages ====================
 
     @Test
     @Order(103)
-    @DisplayName("getPhases — 应从枚举读取固定学段列表，按 orderIndex 排序返回")
-    void getPhases_shouldReturnFromEnumOrderedByOrderIndex() {
-        List<KgDimensionDTO> result = kgNavigationAppService.getPhases();
+    @DisplayName("getStages — 应从枚举读取固定学段列表，按 orderIndex 排序返回")
+    void getStages_shouldReturnFromEnumOrderedByOrderIndex() {
+        List<KgDimensionDTO> result = kgNavigationAppService.getStages();
 
         assertNotNull(result);
-        assertEquals(KgPhaseEnum.values().length, result.size());
+        assertEquals(KgStageEnum.values().length, result.size());
         assertEquals("primary", result.get(0).getCode());
         assertEquals("小学", result.get(0).getLabel());
         assertEquals(1, result.get(0).getOrderIndex());
@@ -560,7 +560,7 @@ class KgNavigationAppServiceTest {
 
     @Test
     @Order(104)
-    @DisplayName("getTextbooks — 应从枚举读取固定教材列表，含 uri/label/subject/grade/phase")
+    @DisplayName("getTextbooks — 应从枚举读取固定教材版本列表，含 code/label/orderIndex")
     void getTextbooks_shouldReturnFromEnumWithAllFields() {
         List<KgDimensionDTO> result = kgNavigationAppService.getTextbooks();
 
@@ -568,12 +568,9 @@ class KgNavigationAppServiceTest {
         assertEquals(KgTextbookEnum.values().length, result.size());
 
         KgDimensionDTO first = result.get(0);
-        assertEquals("pep-math-primary-g1-v1", first.getCode());
-        assertEquals("人教版小学数学一年级上册", first.getLabel());
-        assertEquals("math", first.getSubject());
-        assertEquals("一年级", first.getGrade());
-        assertEquals("primary", first.getPhase());
-        assertEquals(1, first.getOrderIndex());
+        assertEquals("REN_JIAO_BAN", first.getCode());
+        assertEquals("人教版", first.getLabel());
+        assertEquals(0, first.getOrderIndex());
     }
 
     // ==================== 6.15.4 getGradesBySubject ====================
@@ -599,8 +596,8 @@ class KgNavigationAppServiceTest {
     @DisplayName("getTextbooksByGrade — 应返回指定年级下 active textbooks")
     void getTextbooksByGrade_shouldReturnActiveTextbooksForGrade() {
         List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "人教版一年级", "一年级", "primary", "math"),
-                KgTextbook.create("uri:tb2", "北师大版一年级", "一年级", "primary", "math")
+                KgTextbook.create("uri:tb1", "人教版一年级", "一年级", "primary", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "北师大版一年级", "一年级", "primary", "北师大版", "math")
         );
         when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
 
@@ -643,7 +640,7 @@ class KgNavigationAppServiceTest {
     @DisplayName("getTextbooksByGrade 无匹配年级 — 应返回空数组")
     void getTextbooksByGrade_noMatch_shouldReturnEmpty() {
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
-                KgTextbook.create("uri:tb1", "七年级教材", "七年级", "middle", "math")
+                KgTextbook.create("uri:tb1", "七年级教材", "七年级", "middle", "人教版", "math")
         ));
 
         List<KgTextbookDTO> result = kgNavigationAppService.getTextbooksByGrade("一年级");
@@ -654,18 +651,18 @@ class KgNavigationAppServiceTest {
 
     @Test
     @Order(110)
-    @DisplayName("getSubjects/getPhases 枚举始终返回值，不受 MySQL 数据影响")
+    @DisplayName("getSubjects/getStages 枚举始终返回值，不受 MySQL 数据影响")
     void enumMethods_alwaysReturnValuesRegardlessOfMysqlData() {
         // 即使 MySQL 返回空
         when(kgTextbookRepository.findDistinctGrades()).thenReturn(List.of());
 
         List<KgDimensionDTO> subjects = kgNavigationAppService.getSubjects();
-        List<KgDimensionDTO> phases = kgNavigationAppService.getPhases();
+        List<KgDimensionDTO> stages = kgNavigationAppService.getStages();
         List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
 
         // 枚举方法仍返回值
         assertFalse(subjects.isEmpty());
-        assertFalse(phases.isEmpty());
+        assertFalse(stages.isEmpty());
         assertFalse(textbooks.isEmpty());
         // 但 MySQL 方法返回空
         assertTrue(kgNavigationAppService.getGrades().isEmpty());

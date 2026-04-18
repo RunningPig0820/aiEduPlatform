@@ -22,13 +22,15 @@ class KgDtoSerializationTest {
 
     @Test
     @Order(1)
-    @DisplayName("KgTextbookDTO — Entity -> DTO 字段映射完整（uri/label/grade/phase/subject/status）")
+    @DisplayName("KgTextbookDTO — Entity -> DTO 字段映射完整（uri/label/grade/stage/edition/orderIndex/subject/status）")
     void kgTextbookDTO_allFieldsMapped() throws Exception {
         KgTextbookDTO dto = KgTextbookDTO.builder()
                 .uri("uri:tb1")
                 .label("数学上册")
                 .grade("七年级")
-                .phase("middle")
+                .stage("middle")
+                .edition("人教版")
+                .orderIndex(1)
                 .subject("math")
                 .status("active")
                 .build();
@@ -36,7 +38,9 @@ class KgDtoSerializationTest {
         assertEquals("uri:tb1", dto.getUri());
         assertEquals("数学上册", dto.getLabel());
         assertEquals("七年级", dto.getGrade());
-        assertEquals("middle", dto.getPhase());
+        assertEquals("middle", dto.getStage());
+        assertEquals("人教版", dto.getEdition());
+        assertEquals(1, dto.getOrderIndex());
         assertEquals("math", dto.getSubject());
         assertEquals("active", dto.getStatus());
     }
@@ -49,7 +53,9 @@ class KgDtoSerializationTest {
                 .uri("uri:tb1")
                 .label("数学")
                 .grade("七年级")
-                .phase("middle")
+                .stage("middle")
+                .edition("人教版")
+                .orderIndex(1)
                 .subject("math")
                 .status("active")
                 .build();
@@ -59,7 +65,7 @@ class KgDtoSerializationTest {
         assertTrue(json.contains("\"uri\":\"uri:tb1\""));
         assertTrue(json.contains("\"label\":\"数学\""));
         assertTrue(json.contains("\"grade\":\"七年级\""));
-        assertTrue(json.contains("\"phase\":\"middle\""));
+        assertTrue(json.contains("\"stage\":\"middle\""));
         assertTrue(json.contains("\"subject\":\"math\""));
         assertTrue(json.contains("\"status\":\"active\""));
     }
@@ -231,7 +237,7 @@ class KgDtoSerializationTest {
 
     @Test
     @Order(9)
-    @DisplayName("KgGradeSystemDTO — 分组结构正确（按 subject/phase）、知识点嵌套完整")
+    @DisplayName("KgGradeSystemDTO — 分组结构正确（按 subject/stage）、知识点嵌套完整")
     void kgGradeSystemDTO_groupStructure() throws Exception {
         KgGradeSystemDTO.GroupDTO.ChapterNode chapter = KgGradeSystemDTO.GroupDTO.ChapterNode.builder()
                 .uri("uri:ch1")
@@ -353,13 +359,13 @@ class KgDtoSerializationTest {
     @Order(13)
     @DisplayName("JSON 反序列化 — KgTextbookDTO 可从 JSON 反序列化")
     void kgTextbookDTO_jsonDeserialization() throws Exception {
-        String json = "{\"uri\":\"uri:tb1\",\"label\":\"数学上册\",\"grade\":\"七年级\",\"phase\":\"middle\",\"subject\":\"math\",\"status\":\"active\"}";
+        String json = "{\"uri\":\"uri:tb1\",\"label\":\"数学上册\",\"grade\":\"七年级\",\"stage\":\"middle\",\"edition\":\"人教版\",\"orderIndex\":1,\"subject\":\"math\",\"status\":\"active\"}";
 
         KgTextbookDTO dto = objectMapper.readValue(json, KgTextbookDTO.class);
 
         assertEquals("uri:tb1", dto.getUri());
         assertEquals("数学上册", dto.getLabel());
-        assertEquals("middle", dto.getPhase());
+        assertEquals("middle", dto.getStage());
         assertEquals("math", dto.getSubject());
     }
 
