@@ -1,6 +1,7 @@
 package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.ChapterTreeNode;
+import com.ai.edu.application.dto.kg.KgDimensionDTO;
 import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
 import com.ai.edu.application.dto.kg.KgTextbookDTO;
 import com.ai.edu.common.exception.BusinessException;
@@ -8,6 +9,9 @@ import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.domain.edukg.model.valueobject.KgPhaseEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgSubjectEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgTextbookEnum;
 import com.ai.edu.domain.edukg.repository.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
@@ -495,5 +499,175 @@ class KgNavigationAppServiceTest {
         assertNull(result.get(0).getSectionLabel());
         assertNull(result.get(0).getChapterUri());
         assertNull(result.get(0).getChapterLabel());
+    }
+
+    // ==================== 6.15 下拉选项查询测试 ====================
+
+    // ==================== 6.15.1 getSubjects ====================
+
+    @Test
+    @Order(101)
+    @DisplayName("getSubjects — 应从枚举读取固定学科列表，按 orderIndex 排序返回")
+    void getSubjects_shouldReturnFromEnumOrderedByOrderIndex() {
+        List<KgDimensionDTO> result = kgNavigationAppService.getSubjects();
+
+        assertNotNull(result);
+        assertEquals(KgSubjectEnum.values().length, result.size());
+        assertEquals("math", result.get(0).getCode());
+        assertEquals("数学", result.get(0).getLabel());
+        assertEquals(1, result.get(0).getOrderIndex());
+        assertEquals("chinese", result.get(1).getCode());
+        assertEquals("biology", result.get(result.size() - 1).getCode());
+        assertEquals(6, result.get(result.size() - 1).getOrderIndex());
+    }
+
+    // ==================== 6.15.2 getGrades ====================
+
+    @Test
+    @Order(102)
+    @DisplayName("getGrades — 应从 t_kg_textbook 查询 DISTINCT grade")
+    void getGrades_shouldQueryDistinctFromMysql() {
+        List<String> grades = List.of("一年级", "二年级", "七年级");
+        when(kgTextbookRepository.findDistinctGrades()).thenReturn(grades);
+
+        List<String> result = kgNavigationAppService.getGrades();
+
+        assertNotNull(result);
+        assertEquals(3, result.size());
+        assertEquals("一年级", result.get(0));
+        assertEquals("七年级", result.get(2));
+        verify(kgTextbookRepository).findDistinctGrades();
+    }
+
+    // ==================== 6.15.3 getPhases ====================
+
+    @Test
+    @Order(103)
+    @DisplayName("getPhases — 应从枚举读取固定学段列表，按 orderIndex 排序返回")
+    void getPhases_shouldReturnFromEnumOrderedByOrderIndex() {
+        List<KgDimensionDTO> result = kgNavigationAppService.getPhases();
+
+        assertNotNull(result);
+        assertEquals(KgPhaseEnum.values().length, result.size());
+        assertEquals("primary", result.get(0).getCode());
+        assertEquals("小学", result.get(0).getLabel());
+        assertEquals(1, result.get(0).getOrderIndex());
+        assertEquals("middle", result.get(1).getCode());
+        assertEquals("high", result.get(2).getCode());
+    }
+
+    // ==================== 6.15.3.1 getTextbooks ====================
+
+    @Test
+    @Order(104)
+    @DisplayName("getTextbooks — 应从枚举读取固定教材列表，含 uri/label/subject/grade/phase")
+    void getTextbooks_shouldReturnFromEnumWithAllFields() {
+        List<KgDimensionDTO> result = kgNavigationAppService.getTextbooks();
+
+        assertNotNull(result);
+        assertEquals(KgTextbookEnum.values().length, result.size());
+
+        KgDimensionDTO first = result.get(0);
+        assertEquals("pep-math-primary-g1-v1", first.getCode());
+        assertEquals("人教版小学数学一年级上册", first.getLabel());
+        assertEquals("math", first.getSubject());
+        assertEquals("一年级", first.getGrade());
+        assertEquals("primary", first.getPhase());
+        assertEquals(1, first.getOrderIndex());
+    }
+
+    // ==================== 6.15.4 getGradesBySubject ====================
+
+    @Test
+    @Order(105)
+    @DisplayName("getGradesBySubject — 应返回指定学科下 DISTINCT grade")
+    void getGradesBySubject_shouldReturnDistinctGradesForSubject() {
+        List<String> grades = List.of("一年级", "二年级");
+        when(kgTextbookRepository.findDistinctGradesBySubject("math")).thenReturn(grades);
+
+        List<String> result = kgNavigationAppService.getGradesBySubject("math");
+
+        assertEquals(2, result.size());
+        assertEquals("一年级", result.get(0));
+        verify(kgTextbookRepository).findDistinctGradesBySubject("math");
+    }
+
+    // ==================== 6.15.5 getTextbooksByGrade ====================
+
+    @Test
+    @Order(106)
+    @DisplayName("getTextbooksByGrade — 应返回指定年级下 active textbooks")
+    void getTextbooksByGrade_shouldReturnActiveTextbooksForGrade() {
+        List<KgTextbook> textbooks = List.of(
+                KgTextbook.create("uri:tb1", "人教版一年级", "一年级", "primary", "math"),
+                KgTextbook.create("uri:tb2", "北师大版一年级", "一年级", "primary", "math")
+        );
+        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+
+        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooksByGrade("一年级");
+
+        assertEquals(2, result.size());
+        assertEquals("人教版一年级", result.get(0).getLabel());
+        assertEquals("一年级", result.get(0).getGrade());
+        verify(kgTextbookRepository).findAllActive();
+    }
+
+    // ==================== 6.15.6 空数据场景 ====================
+
+    @Test
+    @Order(107)
+    @DisplayName("getGrades 空数据 — t_kg_textbook 无数据时应返回空数组")
+    void getGrades_emptyData_shouldReturnEmptyArray() {
+        when(kgTextbookRepository.findDistinctGrades()).thenReturn(List.of());
+
+        List<String> result = kgNavigationAppService.getGrades();
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @Order(108)
+    @DisplayName("getGradesBySubject 无匹配学科 — 应返回空数组")
+    void getGradesBySubject_noMatch_shouldReturnEmpty() {
+        when(kgTextbookRepository.findDistinctGradesBySubject("physics")).thenReturn(List.of());
+
+        List<String> result = kgNavigationAppService.getGradesBySubject("physics");
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @Order(109)
+    @DisplayName("getTextbooksByGrade 无匹配年级 — 应返回空数组")
+    void getTextbooksByGrade_noMatch_shouldReturnEmpty() {
+        when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
+                KgTextbook.create("uri:tb1", "七年级教材", "七年级", "middle", "math")
+        ));
+
+        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooksByGrade("一年级");
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @Order(110)
+    @DisplayName("getSubjects/getPhases 枚举始终返回值，不受 MySQL 数据影响")
+    void enumMethods_alwaysReturnValuesRegardlessOfMysqlData() {
+        // 即使 MySQL 返回空
+        when(kgTextbookRepository.findDistinctGrades()).thenReturn(List.of());
+
+        List<KgDimensionDTO> subjects = kgNavigationAppService.getSubjects();
+        List<KgDimensionDTO> phases = kgNavigationAppService.getPhases();
+        List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
+
+        // 枚举方法仍返回值
+        assertFalse(subjects.isEmpty());
+        assertFalse(phases.isEmpty());
+        assertFalse(textbooks.isEmpty());
+        // 但 MySQL 方法返回空
+        assertTrue(kgNavigationAppService.getGrades().isEmpty());
     }
 }

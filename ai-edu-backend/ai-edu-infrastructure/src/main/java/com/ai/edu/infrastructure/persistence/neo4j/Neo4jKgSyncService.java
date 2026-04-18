@@ -786,6 +786,6 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         if (node.containsKey(property)) {
             return node.get(property).asString("");
         }
-        return null;
+        return "";
     }
 }

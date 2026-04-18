@@ -15,6 +15,9 @@
 - [x] 2.3 创建 `domain/edukg/model/entity/KgSyncRecord.java` 同步记录实体（含 scope/reconciliationStatus/details 字段）
 - [x] 2.4 创建 `domain/edukg/model/valueobject/` 枚举类（KgDifficulty, KgImportance, KgCognitiveLevel, KgNodeStatus）
 - [x] 2.5 创建 `domain/edukg/repository/` 目录及 7 个 Repository 接口（4 节点 + 3 关联）
+- [x] 2.6 创建 `domain/edukg/model/valueobject/KgSubjectEnum.java` 学科枚举（math/chinese/english/physics/chemistry/biology）
+- [x] 2.7 创建 `domain/edukg/model/valueobject/KgPhaseEnum.java` 学段枚举（primary/middle/high）
+- [x] 2.8 创建 `domain/edukg/model/valueobject/KgTextbookEnum.java` 教材枚举（uri/label/subject/grade/phase）
 
 ## 3. Infrastructure 层实现
 
@@ -51,6 +54,11 @@
 - [x] 4.15 实现 `getGradeStats(grade)` 年级知识点统计
 - [x] 4.16 实现 `getNeo4jHealth()` Neo4j 健康检查
 - [x] 4.17 实现 `batchGetConceptRelations(uris)` 批量获取概念关联（Redis 缓存 + 降级）
+- [x] 4.18 实现 `getSubjects()` 学科列表查询（从枚举读取）
+- [x] 4.19 实现 `getGrades()` 年级列表查询（从 t_kg_textbook DISTINCT grade）
+- [x] 4.20 实现 `getPhases()` 学段列表查询（从枚举读取）
+- [x] 4.21 实现 `getGradesBySubject(subject)` 学科下年级查询（WHERE subject=? DISTINCT grade）
+- [x] 4.22 实现 `getTextbooksByGrade(grade)` 年级下教材查询（WHERE grade=?）
 
 ## 5. Interface 层 API
 
@@ -67,6 +75,23 @@
 - [x] 5.11 实现 `GET /api/kg/neo4j/health` Neo4j 健康检查接口
 - [x] 5.12 实现 `POST /api/kg/concepts/batch-relations` 批量概念关联接口
 - [x] 5.13 为所有接口添加 `ApiResponse<T>` 统一包装和 CORS 配置
+
+## 5.5 维度配置 API（下拉选择器数据源）
+
+- [x] 5.14 实现 `GET /api/kg/dimensions/subjects` 学科列表接口
+- [x] 5.15 实现 `GET /api/kg/dimensions/grades` 年级列表接口
+- [x] 5.16 实现 `GET /api/kg/dimensions/phases` 学段列表接口
+- [x] 5.16.1 实现 `GET /api/kg/dimensions/textbooks` 教材列表接口
+
+## 5.6 导航树扩展 API（6 级：学科→年级→教材→章节→小节→知识点）
+
+- [ ] 5.17 实现 `GET /api/kg/subjects` 学科列表（导航树根节点）
+- [x] 5.18 实现 `GET /api/kg/subjects/{subject}/grades` 学科下年级列表
+- [x] 5.19 实现 `GET /api/kg/grades/{grade}/textbooks` 年级下教材列表
+
+## 5.7 图谱关系 API
+
+- [ ] 5.20 实现 `GET /api/kg/knowledge-points/{uri}/graph` 知识点图谱关系接口
 
 ## 6. 单元测试
 
@@ -225,6 +250,30 @@
 - [x] 6.14.1 验证所有 edukg Mapper 的 `@DS("kg")` 注解存在
 - [x] 6.14.2 验证业务 Mapper（User 等）不携带 `@DS("kg")` 注解，走默认 user 库
 - [x] 6.14.3 验证 `@Transactional("kg")` 在 KgSyncAppService.syncFull() 上生效
+
+### 6.15 下拉选项查询测试
+
+> 测试目标：验证学科/学段/教材从枚举类读取、年级从 MySQL 聚合查询的逻辑正确
+
+- [x] 6.15.1 `getSubjects()` — 从枚举读取固定学科列表（如 math/chinese/english/physics/chemistry/biology），按 orderIndex 排序返回
+- [x] 6.15.2 `getGrades()` — 从 t_kg_textbook 查询 DISTINCT grade，按年级顺序排序（小学→初中→高中）
+- [x] 6.15.3 `getPhases()` — 从枚举文件读取固定学段列表（如 primary/middle/high），按 orderIndex 排序返回
+- [x] 6.15.3.1 `getTextbooks()` — 从枚举读取固定教材列表（含 uri/label/subject/grade/phase），按 orderIndex 排序返回
+- [x] 6.15.4 `getGradesBySubject(subject)` — 返回指定学科下 DISTINCT grade（从 t_kg_textbook WHERE subject=? 查询）
+- [x] 6.15.5 `getTextbooksByGrade(grade)` — 返回指定年级下 active textbooks（从 t_kg_textbook WHERE grade=? 查询）
+- [x] 6.15.6 空数据场景 — t_kg_textbook 无数据时 getGrades 返回空数组，getSubjects/getPhases/getTextbooks 仍返回枚举值
+- [x] 6.15.7 `KnowledgeGraphControllerTest` — GET /dimensions/subjects、GET /dimensions/grades、GET /dimensions/phases、GET /dimensions/textbooks 响应格式正确
+- [x] 6.15.8 枚举学科列表变更测试 — 修改枚举后 API 返回对应更新
+- [x] 6.15.9 枚举教材列表变更测试 — 修改枚举后 API 返回对应更新
+
+### 6.16 导航树扩展测试
+
+> 测试目标：验证 6 级导航树接口正确性
+
+- [ ] 6.16.1 `GET /api/kg/subjects` — 返回学科列表，数据来自 KgSubjectEnum 枚举
+- [ ] 6.16.2 `GET /api/kg/subjects/{subject}/grades` — 返回学科下的年级列表（有数据的年级）
+- [ ] 6.16.3 `GET /api/kg/grades/{grade}/textbooks` — 返回年级下的教材列表（WHERE grade=?）
+- [ ] 6.16.4 导航树完整链路测试：学科→年级→教材→章节→小节→知识点
 
 ## 7. 前端对接/
 

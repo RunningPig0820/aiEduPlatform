@@ -133,6 +133,74 @@ public class KnowledgeGraphController {
         return ApiResponse.success(graph);
     }
 
+    // ==================== 维度配置（下拉选择器） ====================
+
+    /**
+     * 获取学科列表（枚举，前端下拉用）
+     * GET /api/kg/dimensions/subjects
+     */
+    @GetMapping("/dimensions/subjects")
+    public ApiResponse<List<KgDimensionDTO>> getSubjects() {
+        log.info("获取学科下拉列表");
+        List<KgDimensionDTO> subjects = kgNavigationAppService.getSubjects();
+        return ApiResponse.success(subjects);
+    }
+
+    /**
+     * 获取年级列表（MySQL 聚合，前端下拉用）
+     * GET /api/kg/dimensions/grades
+     */
+    @GetMapping("/dimensions/grades")
+    public ApiResponse<List<String>> getGrades() {
+        log.info("获取年级下拉列表");
+        List<String> grades = kgNavigationAppService.getGrades();
+        return ApiResponse.success(grades);
+    }
+
+    /**
+     * 获取学段列表（枚举，前端下拉用）
+     * GET /api/kg/dimensions/phases
+     */
+    @GetMapping("/dimensions/phases")
+    public ApiResponse<List<KgDimensionDTO>> getPhases() {
+        log.info("获取学段下拉列表");
+        List<KgDimensionDTO> phases = kgNavigationAppService.getPhases();
+        return ApiResponse.success(phases);
+    }
+
+    /**
+     * 获取教材列表（枚举，前端下拉用）
+     * GET /api/kg/dimensions/textbooks
+     */
+    @GetMapping("/dimensions/textbooks")
+    public ApiResponse<List<KgDimensionDTO>> getTextbooks() {
+        log.info("获取教材下拉列表");
+        List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
+        return ApiResponse.success(textbooks);
+    }
+
+    /**
+     * 获取学科下的年级列表
+     * GET /api/kg/subjects/{subject}/grades
+     */
+    @GetMapping("/subjects/{subject}/grades")
+    public ApiResponse<List<String>> getGradesBySubject(@PathVariable String subject) {
+        log.info("获取学科下的年级: subject={}", subject);
+        List<String> grades = kgNavigationAppService.getGradesBySubject(subject);
+        return ApiResponse.success(grades);
+    }
+
+    /**
+     * 获取年级下的教材列表
+     * GET /api/kg/grades/{grade}/textbooks
+     */
+    @GetMapping("/grades/{grade}/textbooks")
+    public ApiResponse<List<KgTextbookDTO>> getTextbooksByGrade(@PathVariable String grade) {
+        log.info("获取年级下的教材: grade={}", grade);
+        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooksByGrade(grade);
+        return ApiResponse.success(textbooks);
+    }
+
     // ==================== 年级知识体系 ====================
 
     /**

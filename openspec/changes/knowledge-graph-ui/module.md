@@ -80,19 +80,30 @@ com.ai.edu.infrastructure.edukg/
 
 | Method | Path | Auth | Input | Output | Description |
 |--------|------|------|-------|--------|-------------|
-| POST | /api/kg/sync/full | No (TODO: Auth) | SyncRequest | SyncResult | 触发全量/定向同步 |
+| POST | /api/kg/sync/full | No (TODO: Auth) | SyncRequest | SyncResult | 触发全量/定向同步（下拉选项 code 值） |
 | GET | /api/kg/sync/status | No | - | SyncStatus | 查询当前同步状态 |
 | GET | /api/kg/sync/records | No | page, size | Page<SyncRecord> | 同步历史记录 |
 
-#### 导航相关（无需登录）
+#### 维度配置（下拉选择器）
 
 | Method | Path | Auth | Input | Output | Description |
 |--------|------|------|-------|--------|-------------|
+| GET | /api/kg/dimensions/subjects | No | - | List<DimensionDTO> | 学科下拉选项 |
+| GET | /api/kg/dimensions/grades | No | - | List<DimensionDTO> | 年级下拉选项 |
+| GET | /api/kg/dimensions/phases | No | - | List<DimensionDTO> | 学段下拉选项 |
+
+#### 导航相关（6 级：学科→年级→教材→章节→小节→知识点）
+
+| Method | Path | Auth | Input | Output | Description |
+|--------|------|------|-------|--------|-------------|
+| GET | /api/kg/subjects | No | - | List\<String\> | 导航树根节点（学科列表） |
+| GET | /api/kg/subjects/{subject}/grades | No | path: subject | List\<{uri,label}\> | 学科下的年级 |
+| GET | /api/kg/grades/{grade}/textbooks | No | path: grade | List<TextbookDTO> | 年级下的教材 |
 | GET | /api/kg/textbooks | No | grade?, subject? | List<TextbookDTO> | 教材列表 |
-| GET | /api/kg/textbooks/{uri} | No | path: uri | TextbookDTO | 教材详情 |
 | GET | /api/kg/textbooks/{uri}/chapters | No | path: uri | List<ChapterTreeNode> | 教材章节树 |
 | GET | /api/kg/sections/{uri}/points | No | path: uri | List<KgKnowledgePointDetailDTO> | 小节知识点 |
 | GET | /api/kg/knowledge-points/{uri} | No | path: uri | KgKnowledgePointDetailDTO | 知识点详情 |
+| GET | /api/kg/knowledge-points/{uri}/graph | No | path: uri | KgGraphDTO | 知识点图谱关系 |
 
 #### 知识体系（无需登录）
 

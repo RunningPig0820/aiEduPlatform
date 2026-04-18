@@ -54,6 +54,16 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     }
 
     @Override
+    public List<String> findDistinctGrades() {
+        return kgTextbookMapper.selectDistinctGrades();
+    }
+
+    @Override
+    public List<String> findDistinctGradesBySubject(String subject) {
+        return kgTextbookMapper.selectDistinctGradesBySubject(subject);
+    }
+
+    @Override
     public void updateStatus(String uri, String status) {
         kgTextbookMapper.updateStatus(uri, status, 0L);
     }

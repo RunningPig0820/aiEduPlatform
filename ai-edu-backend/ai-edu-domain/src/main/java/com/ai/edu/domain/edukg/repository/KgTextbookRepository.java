@@ -22,5 +22,15 @@ public interface KgTextbookRepository {
 
     List<KgTextbook> findAllActive();
 
+    /**
+     * 查询所有不重复的年级列表（用于下拉选择器）
+     */
+    List<String> findDistinctGrades();
+
+    /**
+     * 按学科查询不重复的年级列表（用于导航树）
+     */
+    List<String> findDistinctGradesBySubject(String subject);
+
     void updateStatus(String uri, String status);
 }

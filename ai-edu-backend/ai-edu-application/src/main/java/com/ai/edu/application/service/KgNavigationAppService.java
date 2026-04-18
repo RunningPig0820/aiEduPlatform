@@ -2,6 +2,7 @@ package com.ai.edu.application.service;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.ChapterTreeNode;
+import com.ai.edu.application.dto.kg.KgDimensionDTO;
 import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
 import com.ai.edu.application.dto.kg.KgTextbookDTO;
 import com.ai.edu.common.constant.ErrorCode;
@@ -10,6 +11,9 @@ import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.domain.edukg.model.valueobject.KgPhaseEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgSubjectEnum;
+import com.ai.edu.domain.edukg.model.valueobject.KgTextbookEnum;
 import com.ai.edu.domain.edukg.repository.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -187,5 +191,73 @@ public class KgNavigationAppService {
         }
 
         return KgConvert.toKpDetailDTO(kp, section, chapter);
+    }
+
+    // ==================== 维度配置（下拉选择器） ====================
+
+    /**
+     * 获取学科列表（从枚举读取）
+     */
+    public List<KgDimensionDTO> getSubjects() {
+        return Arrays.stream(KgSubjectEnum.values())
+                .sorted(Comparator.comparingInt(KgSubjectEnum::getOrderIndex))
+                .map(e -> KgDimensionDTO.builder()
+                        .code(e.getCode())
+                        .label(e.getLabel())
+                        .orderIndex(e.getOrderIndex())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * 获取年级列表（从 MySQL 聚合查询）
+     */
+    public List<String> getGrades() {
+        return kgTextbookRepository.findDistinctGrades();
+    }
+
+    /**
+     * 获取学段列表（从枚举读取）
+     */
+    public List<KgDimensionDTO> getPhases() {
+        return Arrays.stream(KgPhaseEnum.values())
+                .sorted(Comparator.comparingInt(KgPhaseEnum::getOrderIndex))
+                .map(e -> KgDimensionDTO.builder()
+                        .code(e.getCode())
+                        .label(e.getLabel())
+                        .orderIndex(e.getOrderIndex())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * 获取教材列表（从枚举读取）
+     */
+    public List<KgDimensionDTO> getTextbooks() {
+        return Arrays.stream(KgTextbookEnum.values())
+                .sorted(Comparator.comparingInt(KgTextbookEnum::getOrderIndex))
+                .map(e -> KgDimensionDTO.builder()
+                        .code(e.getCode())
+                        .desc(e.getDesc())
+                        .orderIndex(e.getOrderIndex())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * 获取学科下的年级列表（从 MySQL 聚合查询）
+     */
+    public List<String> getGradesBySubject(String subject) {
+        return kgTextbookRepository.findDistinctGradesBySubject(subject);
+    }
+
+    /**
+     * 获取年级下的教材列表（从 MySQL 查询）
+     */
+    public List<KgTextbookDTO> getTextbooksByGrade(String grade) {
+        List<KgTextbook> textbooks = kgTextbookRepository.findAllActive().stream()
+                .filter(tb -> grade.equals(tb.getGrade()))
+                .toList();
+        return KgConvert.toTextbookDTOs(textbooks);
     }
 }

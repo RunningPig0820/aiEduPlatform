@@ -12,14 +12,17 @@
 - [1. 全量同步](#1-全量同步)
 - [2. 查询同步状态](#2-查询同步状态)
 - [3. 同步历史记录](#3-同步历史记录)
-- [4. 获取教材列表](#4-获取教材列表)
-- [5. 获取教材章节树](#5-获取教材章节树)
-- [6. 获取小节知识点](#6-获取小节知识点)
-- [7. 获取知识点详情](#7-获取知识点详情)
-- [8. 获取年级知识体系](#8-获取年级知识体系)
-- [9. 获取年级统计](#9-获取年级统计)
-- [10. Neo4j 健康检查](#10-neo4j-健康检查)
-- [11. 批量获取概念关联](#11-批量获取概念关联)
+- [4. 维度配置（下拉选择器）](#4-维度配置下拉选择器)
+- [5. 导航树扩展（6 级）](#5-导航树扩展6-级)
+- [6. 获取教材列表](#6-获取教材列表)
+- [7. 获取教材章节树](#7-获取教材章节树)
+- [8. 获取小节知识点](#8-获取小节知识点)
+- [9. 获取知识点详情](#9-获取知识点详情)
+- [10. 获取知识点图谱关系](#10-获取知识点图谱关系)
+- [11. 获取年级知识体系](#11-获取年级知识体系)
+- [12. 获取年级统计](#12-获取年级统计)
+- [13. Neo4j 健康检查](#13-neo4j-健康检查)
+- [14. 批量获取概念关联](#14-批量获取概念关联)
 - [错误码说明](#错误码说明)
 - [前端调用注意事项](#前端调用注意事项)
 
@@ -67,10 +70,17 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| subject | String | 否 | 学科过滤，如 `math` |
-| phase | String | 否 | 学段过滤，如 `primary` |
-| grade | String | 否 | 年级过滤，如 `一年级` |
+| subject | String | 否 | 学科编码，来自 `GET /api/kg/dimensions/subjects` 的 `code` 字段，如 `math` |
+| phase | String | 否 | 学段编码，来自 `GET /api/kg/dimensions/phases` 的 `code` 字段，如 `primary` |
+| grade | String | 否 | 年级名称，来自 `GET /api/kg/dimensions/grades` 的 `code` 字段，如 `一年级` |
 | textbookUri | String | 否 | 指定教材 URI，精确同步某一本教材 |
+
+**前端同步对话框交互**:
+- 学科下拉：选项来自 `GET /api/kg/dimensions/subjects`（t_kg_textbook DISTINCT subject）
+- 年级下拉：选项来自 `GET /api/kg/dimensions/grades`（t_kg_textbook DISTINCT grade）
+- 学段下拉：选项来自 `GET /api/kg/dimensions/phases`（t_kg_textbook DISTINCT phase）
+- 三个下拉均为可选，不选则全量同步
+- 首次使用时如果 t_kg_textbook 无数据，下拉为空，提示用户先执行全量同步
 
 ### 响应参数 (`SyncResult`)
 
@@ -208,7 +218,177 @@ curl -X POST http://localhost:8080/api/kg/sync/full \
 
 ---
 
-## 4. 获取教材列表
+## 4. 维度配置（下拉选择器）
+
+> 用于前端同步对话框中的下拉选择器，避免手动输入错误。
+> - **学科/学段/教材**：从 Java 枚举类读取（固定值）
+> - **年级**：从 `t_kg_textbook` 表聚合查询（取决于已同步数据）
+
+### 4.1 获取学科列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/dimensions/subjects` |
+| 需要登录 | 否 |
+| 数据来源 | `KgSubjectEnum` 枚举类 |
+
+**响应参数**:
+```json
+[
+  { "code": "math", "label": "数学", "orderIndex": 1 },
+  { "code": "chinese", "label": "语文", "orderIndex": 2 },
+  { "code": "english", "label": "英语", "orderIndex": 3 },
+  { "code": "physics", "label": "物理", "orderIndex": 4 },
+  { "code": "chemistry", "label": "化学", "orderIndex": 5 },
+  { "code": "biology", "label": "生物", "orderIndex": 6 }
+]
+```
+
+### 4.2 获取年级列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/dimensions/grades` |
+| 需要登录 | 否 |
+| 数据来源 | `SELECT DISTINCT grade FROM t_kg_textbook WHERE status='active'` |
+
+**响应参数**:
+```json
+["一年级", "二年级", "七年级", "八年级"]
+```
+
+**说明**: 首次同步前 `t_kg_textbook` 无数据时返回空数组 `[]`。
+
+### 4.3 获取学段列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/dimensions/phases` |
+| 需要登录 | 否 |
+| 数据来源 | `KgPhaseEnum` 枚举类 |
+
+**响应参数**:
+```json
+[
+  { "code": "primary", "label": "小学", "orderIndex": 1 },
+  { "code": "middle", "label": "初中", "orderIndex": 2 },
+  { "code": "high", "label": "高中", "orderIndex": 3 }
+]
+```
+
+### 4.4 获取教材列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/dimensions/textbooks` |
+| 需要登录 | 否 |
+| 数据来源 | `KgTextbookEnum` 枚举类 |
+
+**响应参数**:
+```json
+[
+  {
+    "uri": "pep-math-primary-g1-v1",
+    "label": "人教版小学数学一年级上册",
+    "subject": "math",
+    "grade": "一年级",
+    "phase": "primary",
+    "orderIndex": 1
+  },
+  {
+    "uri": "bsv-math-primary-g1-v1",
+    "label": "北师大版小学数学一年级上册",
+    "subject": "math",
+    "grade": "一年级",
+    "phase": "primary",
+    "orderIndex": 2
+  }
+]
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| uri | String | 教材 URI（同步用） |
+| label | String | 教材名称（前端显示） |
+| subject | String | 所属学科 |
+| grade | String | 所属年级 |
+| phase | String | 所属学段 |
+| orderIndex | Integer | 排序序号 |
+
+---
+
+## 5. 导航树扩展（6 级）
+
+> 导航树层级：**学科 → 年级 → 教材 → 章节 → 小节 → 知识点**
+>
+> 所有层级数据均来自 `t_kg_textbook` 聚合查询，无需额外配置表。
+
+### 5.1 获取学科列表（导航树根节点）
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/subjects` |
+| 需要登录 | 否 |
+| 数据来源 | `SELECT DISTINCT subject FROM t_kg_textbook WHERE status='active' ORDER BY subject` |
+
+**响应参数**:
+```json
+["math", "chinese", "english", "physics", "chemistry", "biology"]
+```
+
+### 5.2 获取学科下的年级列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/subjects/{subject}/grades` |
+| 需要登录 | 否 |
+| 数据来源 | `SELECT DISTINCT grade FROM t_kg_textbook WHERE subject=? AND status='active'` |
+
+**请求参数**:
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| subject | Path | String | 是 | 学科名称，如"math" |
+
+**响应参数**:
+```json
+["一年级", "二年级", "七年级", "八年级"]
+```
+
+**说明**: 返回该学科下**有实际教材数据**的年级列表。如果学科下没有教材，返回空数组。
+
+### 5.3 获取年级下的教材列表
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/grades/{grade}/textbooks` |
+| 需要登录 | 否 |
+| 数据来源 | `SELECT * FROM t_kg_textbook WHERE grade=? AND status='active' ORDER BY uri` |
+
+**响应参数**: 与现有 `GET /api/kg/textbooks` 的 `KgTextbookDTO` 格式一致
+```json
+[
+  {
+    "uri": "math-primary-g1-pep-v1",
+    "label": "人教版小学数学一年级上册",
+    "grade": "一年级",
+    "subject": "数学",
+    "phase": "primary",
+    "status": "active"
+  }
+]
+```
+
+---
+
+## 6. 获取教材列表
 
 ### 基本信息
 
@@ -415,7 +595,90 @@ curl -X POST http://localhost:8080/api/kg/sync/full \
 
 ---
 
-## 8. 获取年级知识体系
+## 10. 获取知识点图谱关系
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kg/knowledge-points/{uri}/graph` |
+| 需要登录 | 否 |
+
+> 注：`{uri}` 需要 URL 编码。
+
+### 响应参数 (`KgGraphDTO`)
+
+```json
+{
+  "nodes": [
+    {
+      "id": "math-add-meaning",
+      "type": "kp",
+      "label": "加法的意义",
+      "data": {
+        "uri": "math-add-meaning",
+        "difficulty": "easy",
+        "importance": "core"
+      }
+    },
+    {
+      "id": "math-add-intro",
+      "type": "textbook_kp",
+      "label": "加法的初步认识",
+      "data": {
+        "uri": "math-add-intro",
+        "difficulty": "easy",
+        "importance": "high"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "math-add-meaning",
+      "target": "math-add-intro",
+      "label": "前置"
+    }
+  ]
+}
+```
+
+**nodes[]（节点数组）**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | String | 是 | 节点唯一标识，前端 React Flow 渲染用 |
+| type | String | 是 | 节点类型：`kp`（普通知识点）、`textbook_kp`（教材知识点） |
+| label | String | 是 | 节点显示名称 |
+| data | Object | 否 | 额外数据对象 |
+| data.uri | String | 否 | 知识点 URI，点击节点后查看详情用 |
+| data.difficulty | String | 否 | 难度等级：EASY / MEDIUM / HARD |
+| data.importance | String | 否 | 重要性等级：LOW / MEDIUM / HIGH / CORE |
+
+**edges[]（边数组）**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| source | String | 是 | 源节点 id（对应 nodes 中的 id） |
+| target | String | 是 | 目标节点 id（对应 nodes 中的 id） |
+| label | String | 否 | 边的关系类型，如"前置"、"后续"、"相关"、"包含" |
+
+**说明**:
+- 选中知识点本身包含在 nodes 数组中
+- 如果知识点没有关联关系，返回空数组 `{"nodes": [], "edges": []}`
+- 节点数量建议不超过 50 个，避免前端渲染性能问题
+- 前端使用 React Flow 的力导向布局自动计算节点位置
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 70003 | 知识点不存在 | 请求的知识点不存在 |
+| 70005 | Neo4j 查询失败 | 图谱关系查询异常 |
+
+---
+
+## 11. 获取年级知识体系
 
 ### 基本信息
 
@@ -522,7 +785,7 @@ curl -X POST http://localhost:8080/api/kg/sync/full \
 
 ---
 
-## 9. 获取年级统计
+## 12. 获取年级统计
 
 ### 基本信息
 
@@ -560,7 +823,7 @@ curl -X POST http://localhost:8080/api/kg/sync/full \
 
 ---
 
-## 10. Neo4j 健康检查
+## 13. Neo4j 健康检查
 
 ### 基本信息
 
@@ -598,7 +861,7 @@ Neo4j 不可用：
 
 ---
 
-## 11. 批量获取概念关联
+## 14. 批量获取概念关联
 
 ### 基本信息
 
@@ -682,6 +945,8 @@ Neo4j 不可用：
 | 70005 | Neo4j 查询失败 | 图数据库查询异常 |
 | 70006 | 同步正在进行 | 已有同步任务在执行 |
 | 70007 | 同步参数错误 | 同步请求参数格式不正确 |
+| 70008 | 学科不存在 | 请求的学科不在维度配置中 |
+| 70009 | 年级不存在 | 请求的年级不在维度配置中 |
 
 ---
 

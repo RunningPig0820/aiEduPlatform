@@ -12,6 +12,10 @@ The system SHALL provide a full synchronization capability that is manually trig
 - **WHEN** user sends POST request to `/api/kg/sync/full` with body `{"subject":"math","grade":"一年级"}`
 - **THEN** system only syncs textbooks matching the specified subject and grade, and records the scope in the sync record
 
+#### Scenario: Trigger sync from UI dropdown selectors
+- **WHEN** admin opens sync dialog, selects subject="数学" (code: "math"), grade="一年级", and leaves phase empty, then clicks "Start Sync"
+- **THEN** frontend sends `{"subject":"math","grade":"一年级"}` using the `code` values from dimension config API responses
+
 #### Scenario: Node UPSERT by URI
 - **WHEN** Neo4j contains a textbook with uri="xxx" that exists in MySQL with different label
 - **THEN** system UPDATEs the existing row's label field and increments updatedCount

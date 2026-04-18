@@ -1,5 +1,21 @@
 ## ADDED Requirements
 
+### Requirement: Navigate textbook hierarchy (6-level tree)
+
+The system SHALL support a 6-level navigation tree: **学科 → 年级 → 教材 → 章节 → 小节 → 知识点**. Each level provides the data needed to render the next level.
+
+#### Scenario: Get subject root nodes
+- **WHEN** user sends GET request to `/api/kg/subjects`
+- **THEN** system returns an array of subject label strings: `["数学", "语文", "英语", ...]`
+
+#### Scenario: Get grades under a subject
+- **WHEN** user sends GET request to `/api/kg/subjects/{subject}/grades`
+- **THEN** system returns `{uri, label}` pairs for grades that have actual textbook data under the specified subject
+
+#### Scenario: Get textbooks under a grade
+- **WHEN** user sends GET request to `/api/kg/grades/{grade}/textbooks`
+- **THEN** system returns active textbooks belonging to the grade with uri, label, grade, subject, phase, status fields
+
 ### Requirement: List textbooks with filters
 
 The system SHALL return a list of textbooks, optionally filtered by subject, grade, and phase.

@@ -83,7 +83,10 @@ public class KgSyncRecord {
         this.updatedCount = updatedCount;
         this.statusChangedCount = statusChangedCount;
         this.reconciliationStatus = reconciliationStatus;
-        this.reconciliationDetails = reconciliationDetails;
+        // JSON 列需要合法的 JSON 值，将字符串包装为 JSON 字符串值
+        this.reconciliationDetails = reconciliationDetails != null
+                ? "\"" + reconciliationDetails.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                : null;
         this.finishedAt = LocalDateTime.now();
     }
 

@@ -4,7 +4,7 @@
 
 **决策方向**：用户选择方案 B — 将 Neo4j 知识点数据同步到 MySQL，前端 SPA 读取 MySQL。知识点全局存储，后续班级/老师/学生通过关联表引用知识点ID。
 
-**数据范围**：当前阶段先做数学学科的人教版教材知识点同步 + 导航 + 知识体系。
+**数据范围**：当前阶段先做数学学科的人教版教材知识点同步 + 导航 + 知识体系。后续扩展多学科。
 
 **前端职责**：后端负责 API 设计和接口实现，前端页面由前端同学根据 API 文档开发。
 
@@ -12,20 +12,20 @@
 
 **Goals:**
 - 提供一键同步按钮，将 Neo4j 的 Textbook/Chapter/Section/TextbookKP 同步到 MySQL
-- 提供知识点导航 API，支持教材→章节→小节→知识点逐级浏览
+- 提供知识点导航 API，支持学科→年级→教材→章节→小节→知识点 6 级逐级浏览
 - 提供年级知识体系 API，构建某年级完整知识结构
 - 知识点详情接口返回 2 层父级（小节 + 章节），不过度展示
 - 知识点全局存储，预留关联引用字段供后续班级/老师/学生关联
 - 提供前端可参考的 API 接口定义和 DTO 结构
+- 同步对话框提供学科/年级/学段下拉选择器（从 t_kg_textbook 聚合查询），避免手动输入
 
 **Non-Goals:**
 - 不做前端页面开发（后端提供 API，前端自行开发）
 - 不做 Neo4j 实时查询（同步到 MySQL 后，前端只读 MySQL）
-- 不做知识图谱关系可视化（Statement/Class/PART_OF 等复杂关系）
+- 不做知识图谱关系可视化（Statement/Class/PART_OF 等复杂关系）— **知识点图谱关系已通过 Neo4j 查询**
 - 不做管理员审核/重跑功能（后续阶段）
 - 不做 AI 批改/举一反三（Python 服务负责）
 - 当前不实现权限控制（后续组织结构/权限模块补充）
-- 当前仅覆盖数学学科
 
 ## Decisions
 
@@ -177,7 +177,7 @@ CREATE TABLE t_kg_sync_record (
 
 **支持定向同步参数**:
 - `POST /api/kg/sync/full` 支持可选参数：`subject`（学科）、`phase`（学段）、`grade`（年级）、`textbookUri`（指定教材）
-- 不传参数则全量同步所有数学学科数据
+- 不传参数则全量同步所有数据
 - 同步记录表 `t_kg_sync_record` 增加 `scope` 字段（JSON 格式）记录本次同步范围
 
 **状态机说明**:
@@ -186,7 +186,7 @@ CREATE TABLE t_kg_sync_record (
 |------|------|---------|
 | `active` | 正常节点 | 正常展示 |
 | `deleted` | Neo4j 中已删除 | 导航/知识体系查询中过滤掉（视为不存在），但进度记录不受影响（进度查询不过滤 deleted） |
-| `merged` | 被合并到其他知识点 | 同上过滤，运营后台可通过 `merged_to_uri` 做进度迁移 |
+| `merged` | 被合并到其他知识点 | 同上过滤，运营可通过 `merged_to_uri` 做进度迁移 |
 
 **查询过滤**: 所有导航/知识体系查询自动加 `WHERE status = 'active'`。**进度查询例外**：学习进度查询需要包含已删除知识点的历史记录，通过 `isDeprecated` 字段标识，前端展示为"已归档"。
 
@@ -299,7 +299,89 @@ public class KgKnowledgePointDetailDTO {
 }
 ```
 
-### 10. API 设计
+### 10. 同步下拉选项数据源（枚举 + MySQL 混合）
+
+**决策**: 同步对话框中的下拉选项数据源采用**枚举 + MySQL 混合**方式：
+- **学科列表**：在 Java 枚举类中定义（固定值，学科种类不会变化）
+- **学段列表**：在 Java 枚举类中定义（小学/初中/高中，固定三个值）
+- **教材列表**：在 Java 枚举类中定义（固定值，教材相对固定）
+- **年级列表**：从 MySQL `t_kg_textbook` 表 `DISTINCT grade` 查询（年级取决于实际同步的教材数据）
+
+**枚举类定义**：
+```java
+// 学科枚举
+public enum KgSubjectEnum {
+    MATH("math", "数学", 1),
+    CHINESE("chinese", "语文", 2),
+    ENGLISH("english", "英语", 3),
+    PHYSICS("physics", "物理", 4),
+    CHEMISTRY("chemistry", "化学", 5),
+    BIOLOGY("biology", "生物", 6);
+
+    private final String code;
+    private final String label;
+    private final int orderIndex;
+}
+
+// 学段枚举
+public enum KgPhaseEnum {
+    PRIMARY("primary", "小学", 1),
+    MIDDLE("middle", "初中", 2),
+    HIGH("high", "高中", 3);
+
+    private final String code;
+    private final String label;
+    private final int orderIndex;
+}
+
+// 教材枚举
+public enum KgTextbookEnum {
+    PEP_MATH_PRIMARY_G1("pep-math-primary-g1-v1", "人教版小学数学一年级上册", "math", "一年级", "primary", 1),
+    BSV_MATH_PRIMARY_G1("bsv-math-primary-g1-v1", "北师大版小学数学一年级上册", "math", "一年级", "primary", 2);
+
+    private final String uri;
+    private final String label;
+    private final String subject;
+    private final String grade;
+    private final String phase;
+    private final int orderIndex;
+}
+```
+
+**同步前置要求**:
+- 首次使用时，管理员需**先执行一次全量同步**，将 Neo4j 中的教材数据同步到 `t_kg_textbook`
+- 全量同步完成后，年级下拉选项才有数据
+- 学科和学段下拉选项始终可用（来自枚举）
+
+**下拉选项 API**:
+- `GET /api/kg/dimensions/subjects` → 从 `KgSubjectEnum` 枚举读取，按 orderIndex 排序
+- `GET /api/kg/dimensions/grades` → `SELECT DISTINCT grade FROM t_kg_textbook WHERE status='active' ORDER BY grade`
+- `GET /api/kg/dimensions/phases` → 从 `KgPhaseEnum` 枚举读取，按 orderIndex 排序
+- `GET /api/kg/dimensions/textbooks` → 从 `KgTextbookEnum` 枚举读取，按 orderIndex 排序
+
+### 11. 导航树扩展为 6 级
+
+**决策**: 导航树从原有的 4 级（教材→章节→小节→知识点）扩展为 6 级（学科→年级→教材→章节→小节→知识点）。
+
+**新增接口**:
+- `GET /api/kg/subjects` — 根节点：学科列表（从 t_kg_textbook DISTINCT subject 查询）
+- `GET /api/kg/subjects/{subject}/grades` — 学科下的年级列表（从 t_kg_textbook WHERE subject=? DISTINCT grade 查询）
+- `GET /api/kg/grades/{grade}/textbooks` — 年级下的教材列表（从 t_kg_textbook WHERE grade=? 查询）
+
+**数据来源**: 所有导航树层级数据均来自 `t_kg_textbook` 表聚合查询，不依赖额外配置表。
+
+**前端导航流程**:
+```
+1. 用户进入知识图谱页面
+2. GET /subjects -> 显示学科列表（数学、语文、英语...）
+3. 用户点击"数学" -> GET /subjects/数学/grades -> 显示年级列表
+4. 用户点击"一年级" -> GET /grades/一年级/textbooks -> 显示教材列表
+5. 用户点击教材 -> GET /textbooks/{uri}/chapters -> 展开章节
+6. 逐级展开 -> 小节 -> 知识点
+7. 用户点击知识点 -> GET /knowledge-points/{uri}/graph -> 展示图谱关系
+```
+
+### 12. API 设计
 
 ```
 # 同步相关（当前阶段不实现权限控制）
@@ -307,12 +389,22 @@ POST /api/kg/sync/full              - 触发全量同步（可选参数：subjec
 GET  /api/kg/sync/status            - 查询同步状态
 GET  /api/kg/sync/records           - 同步历史记录
 
-# 导航相关（无需登录）
+# 维度配置（下拉选择器数据源，从枚举+MySQL读取，无需登录）
+GET  /api/kg/dimensions/subjects    - 获取学科列表（前端下拉用，枚举）
+GET  /api/kg/dimensions/grades      - 获取年级列表（前端下拉用，MySQL）
+GET  /api/kg/dimensions/phases      - 获取学段列表（前端下拉用，枚举）
+GET  /api/kg/dimensions/textbooks   - 获取教材列表（前端下拉用，枚举）
+
+# 导航相关（扩展为 6 级：学科→年级→教材→章节→小节→知识点）
+GET  /api/kg/subjects               - 获取学科列表（导航树根节点）
+GET  /api/kg/subjects/{subject}/grades - 获取学科下的年级列表
+GET  /api/kg/grades/{grade}/textbooks  - 获取年级下的教材列表
 GET  /api/kg/textbooks              - 获取教材列表
 GET  /api/kg/textbooks/{uri}        - 获取教材详情
 GET  /api/kg/textbooks/{uri}/chapters - 获取教材章节树
 GET  /api/kg/sections/{uri}/points    - 获取小节知识点
 GET  /api/kg/knowledge-points/{uri}   - 获取知识点详情（含 2 层父级）
+GET  /api/kg/knowledge-points/{uri}/graph - 获取知识点图谱关系
 
 # 知识体系（无需登录）
 GET  /api/kg/system/grade/{grade}    - 获取某年级完整知识体系
@@ -340,9 +432,8 @@ GET  /api/kg/neo4j/health            - Neo4j 健康检查
 | URI 脏数据写入 | 同步时校验 URI 格式/非空/唯一性，异常记录日志并跳过 |
 | 同步后数据不一致 | 对账校验：同步完成自动对比 MySQL vs Neo4j 节点数/关联数 |
 | URI 主键性能问题 | 当前 < 1 万节点，VARCHAR(255) 主键完全可行；若后续暴涨可引入整型代理键 |
+| 首次使用下拉选项为空 | 提示用户先执行全量同步，t_kg_textbook 有数据后下拉选项自动可用 |
 
 ## Open Questions
 
 <!-- 已确认，无遗留问题 -->
-
-<!-- yuque-meta: {"repo_id": "zhangmin-jrrer/iu9s4m", "product_dir": "知识图谱页面化", "product_uuid": "3ldLJrKUsTjFP5pp", "change_dir_uuid": "hORjXzINaEuK18r1", "tasks_doc_id": 265947003, "design_doc_id": 265946919, "api_doc_id": 265946772} -->
