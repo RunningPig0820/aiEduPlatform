@@ -1,6 +1,5 @@
 package com.ai.edu.domain.edukg.model.entity;
 
-import com.ai.edu.domain.edukg.model.valueobject.KgDifficulty;
 import com.ai.edu.domain.edukg.model.valueobject.KgImportance;
 import lombok.AccessLevel;
 import lombok.Getter;
