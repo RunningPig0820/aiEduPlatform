@@ -10,8 +10,7 @@ import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.model.valueobject.VerificationCode;
 import com.ai.edu.domain.user.repository.UserRepository;
-import com.ai.edu.domain.user.service.UserDomainService;
-import com.ai.edu.domain.user.service.VerificationCodeService;
+import com.ai.edu.domain.user.repository.VerificationCodeRepository;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +23,7 @@ import java.util.Map;
 
 /**
  * 用户应用服务
- * 职责：编排领域服务，处理用例流转，不包含业务逻辑
+ * 职责：编排领域对象，处理用例流转
  *
  * @author AI Edu Platform
  */
@@ -35,9 +34,7 @@ public class UserAppService {
     @Resource
     private UserRepository userRepository;
     @Resource
-    private UserDomainService userDomainService;
-    @Resource
-    private VerificationCodeService verificationCodeService;
+    private VerificationCodeRepository verificationCodeRepository;
 
     /**
      * 演示账号配置
@@ -61,32 +58,24 @@ public class UserAppService {
      */
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        // 1. 验证验证码（调用领域服务）
-        if (!verificationCodeService.verify(request.getPhone(), CodeScene.REGISTER, request.getCode())) {
+        // 1. 验证验证码
+        if (!verifyCode(request.getPhone(), CodeScene.REGISTER, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
-        // 2. 检查用户名是否可用（调用领域服务）
-        if (!userDomainService.isUsernameAvailable(request.getUsername())) {
+        // 2. 检查用户名是否可用
+        if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS, "用户名已存在");
         }
 
-        // 3. 检查手机号是否可用（调用领域服务）
-        if (!userDomainService.isPhoneAvailable(request.getPhone())) {
+        // 3. 检查手机号是否可用
+        if (userRepository.existsByPhone(request.getPhone())) {
             throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTERED, "手机号已被注册");
         }
 
-        // 4. 创建用户（调用领域服务）
+        // 4. 创建并保存用户
         String encodedPassword = PasswordUtil.encode(request.getPassword());
-        User user = userDomainService.createUser(
-                request.getUsername(),
-                encodedPassword,
-                request.getRealName(),
-                request.getPhone(),
-                request.getRole()
-        );
-
-        // 5. 保存用户
+        User user = User.create(request.getUsername(), encodedPassword, request.getRealName(), request.getPhone(), request.getRole());
         User savedUser = userRepository.save(user);
 
         return UserAssembler.toResponse(savedUser);
@@ -177,8 +166,8 @@ public class UserAppService {
             throw new BusinessException(ErrorCode.INVALID_PARAMS, "验证码不能为空");
         }
 
-        // 验证验证码（调用领域服务）
-        if (!verificationCodeService.verify(request.getPhone(), CodeScene.LOGIN, request.getCode())) {
+        // 验证验证码
+        if (!verifyCode(request.getPhone(), CodeScene.LOGIN, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -224,7 +213,7 @@ public class UserAppService {
      *
      * @param phone 手机号
      * @param scene 场景
-     * @return 验证码存储 Key（用于测试）
+     * @return 验证码值（用于测试）
      */
     public String sendCode(String phone, String scene) {
         // 验证手机号格式
@@ -235,8 +224,9 @@ public class UserAppService {
         // 根据场景校验手机号状态
         validatePhoneForScene(phone, scene);
 
-        // 生成并存储验证码（调用领域服务）
-        VerificationCode verificationCode = verificationCodeService.generateAndSave(phone, scene);
+        // 生成并存储验证码
+        VerificationCode verificationCode = VerificationCode.generate(phone, scene);
+        verificationCodeRepository.save(verificationCode);
 
         log.info("验证码已发送: phone={}, scene={}", phone, scene);
         return verificationCode.getCode();
@@ -248,14 +238,12 @@ public class UserAppService {
     private void validatePhoneForScene(String phone, String scene) {
         switch (scene) {
             case CodeScene.REGISTER:
-                // 注册场景：手机号不能已注册
                 if (userRepository.existsByPhone(phone)) {
                     throw new BusinessException(ErrorCode.PHONE_ALREADY_REGISTERED, "手机号已被注册");
                 }
                 break;
             case CodeScene.LOGIN:
             case CodeScene.RESET_PASSWORD:
-                // 登录/重置密码场景：手机号必须已注册
                 if (!userRepository.existsByPhone(phone)) {
                     throw new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册");
                 }
@@ -273,7 +261,7 @@ public class UserAppService {
      * @return 验证码
      */
     public String getCode(String phone, String scene) {
-        VerificationCode verificationCode = verificationCodeService.get(phone, scene);
+        VerificationCode verificationCode = verificationCodeRepository.findByPhoneAndScene(phone, scene);
         return verificationCode != null ? verificationCode.getCode() : "";
     }
 
@@ -286,8 +274,8 @@ public class UserAppService {
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        // 验证验证码（调用领域服务）
-        if (!verificationCodeService.verify(request.getPhone(), CodeScene.RESET_PASSWORD, request.getCode())) {
+        // 验证验证码
+        if (!verifyCode(request.getPhone(), CodeScene.RESET_PASSWORD, request.getCode())) {
             throw new BusinessException(ErrorCode.CODE_INVALID, "验证码错误或已过期");
         }
 
@@ -383,15 +371,20 @@ public class UserAppService {
 
     // ==================== 私有方法 ====================
 
+    private boolean verifyCode(String phone, String scene, String code) {
+        boolean result = verificationCodeRepository.verifyAndDelete(phone, scene, code);
+        if (result) {
+            log.info("验证码验证成功: phone={}, scene={}", phone, scene);
+        } else {
+            log.warn("验证码验证失败: phone={}, scene={}", phone, scene);
+        }
+        return result;
+    }
+
     @Transactional
     protected User createDemoUser(DemoAccount demoAccount) {
         String encodedPassword = PasswordUtil.encode("123456");
-        User user = userDomainService.createUser(
-                demoAccount.username,
-                encodedPassword,
-                demoAccount.realName,
-                demoAccount.role
-        );
+        User user = User.create(demoAccount.username, encodedPassword, demoAccount.realName, demoAccount.role);
         return userRepository.save(user);
     }
 
