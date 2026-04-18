@@ -1,6 +1,6 @@
 package com.ai.edu.infrastructure.persistence.edukg.mapper;
 
-import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.dynamic.datasource.annotation.DS;
 import org.apache.ibatis.annotations.Mapper;
@@ -15,20 +15,20 @@ import java.util.List;
  */
 @Mapper
 @DS("kg")
-public interface KgKnowledgePointMapper extends BaseMapper<KgKnowledgePoint> {
+public interface KgKnowledgePointMapper extends BaseMapper<KgKnowledgePointPo> {
 
     @Select("SELECT * FROM t_kg_knowledge_point WHERE uri = #{uri} AND is_deleted = false")
-    KgKnowledgePoint selectByUri(@Param("uri") String uri);
+    KgKnowledgePointPo selectByUri(@Param("uri") String uri);
 
     @Select("<script>" +
             "SELECT * FROM t_kg_knowledge_point WHERE uri IN " +
             "<foreach item='uri' collection='uris' open='(' separator=',' close=')'>#{uri}</foreach>" +
             " AND is_deleted = false" +
             "</script>")
-    List<KgKnowledgePoint> selectByUris(@Param("uris") List<String> uris);
+    List<KgKnowledgePointPo> selectByUris(@Param("uris") List<String> uris);
 
     @Select("SELECT * FROM t_kg_knowledge_point WHERE status = #{status} AND is_deleted = false")
-    List<KgKnowledgePoint> selectByStatus(@Param("status") String status);
+    List<KgKnowledgePointPo> selectByStatus(@Param("status") String status);
 
     @Update("UPDATE t_kg_knowledge_point SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")
     int updateStatus(@Param("uri") String uri, @Param("status") String status, @Param("modifiedBy") Long modifiedBy);

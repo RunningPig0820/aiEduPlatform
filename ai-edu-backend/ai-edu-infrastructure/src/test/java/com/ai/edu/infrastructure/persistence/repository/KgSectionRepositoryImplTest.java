@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.KgSection;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgSectionPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.*;
@@ -60,7 +61,7 @@ class KgSectionRepositoryImplTest {
         // 验证 id 被自动填充
         assertNotNull(saved.getId());
         // 验证真实写入 H2
-        KgSection found = kgSectionMapper.selectByUri(TEST_URI);
+        KgSectionPo found = kgSectionMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals(TEST_URI, found.getUri());
         assertEquals("测试小节", found.getLabel());
@@ -76,8 +77,9 @@ class KgSectionRepositoryImplTest {
     void save_existingEntity_shouldUpdate() {
         // 先插入一条
         KgSection original = KgSection.create(TEST_URI, "旧标签");
-        kgSectionMapper.insert(original);
-        Long savedId = original.getId();
+        KgSectionPo insertedPo = KgSectionPo.from(original);
+        kgSectionMapper.insert(insertedPo);
+        Long savedId = insertedPo.getId();
         assertNotNull(savedId);
 
         // 使用 MyBatis-Plus 直接更新来验证 save(id 非 null) 走 updateById 路径
@@ -94,7 +96,7 @@ class KgSectionRepositoryImplTest {
 
         // 验证更新
         assertEquals(savedId, updated.getId());
-        KgSection found = kgSectionMapper.selectByUri(TEST_URI);
+        KgSectionPo found = kgSectionMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("新标签", found.getLabel());
     }
@@ -106,7 +108,7 @@ class KgSectionRepositoryImplTest {
     @DisplayName("findByUri 查找已存在的小节")
     void findByUri_shouldReturnPresent() {
         KgSection section = KgSection.create(TEST_URI, "测试小节");
-        kgSectionMapper.insert(section);
+        kgSectionMapper.insert(KgSectionPo.from(section));
 
         var result = kgSectionRepository.findByUri(TEST_URI);
 
@@ -135,9 +137,9 @@ class KgSectionRepositoryImplTest {
         KgSection sec1 = KgSection.create(TEST_URI, "小节1");
         KgSection sec2 = KgSection.create(TEST_URI_2, "小节2");
         KgSection sec3 = KgSection.create(TEST_URI_3, "小节3");
-        kgSectionMapper.insert(sec1);
-        kgSectionMapper.insert(sec2);
-        kgSectionMapper.insert(sec3);
+        kgSectionMapper.insert(KgSectionPo.from(sec1));
+        kgSectionMapper.insert(KgSectionPo.from(sec2));
+        kgSectionMapper.insert(KgSectionPo.from(sec3));
 
         List<KgSection> result = kgSectionRepository.findByUris(
                 List.of(TEST_URI, TEST_URI_2));
@@ -162,7 +164,7 @@ class KgSectionRepositoryImplTest {
     @DisplayName("findByUris 部分匹配应只返回存在的")
     void findByUris_partialMatch_shouldReturnExisting() {
         KgSection sec1 = KgSection.create(TEST_URI, "小节1");
-        kgSectionMapper.insert(sec1);
+        kgSectionMapper.insert(KgSectionPo.from(sec1));
 
         List<KgSection> result = kgSectionRepository.findByUris(
                 List.of(TEST_URI, "http://nonexistent/uri"));
@@ -178,11 +180,11 @@ class KgSectionRepositoryImplTest {
     @DisplayName("updateStatus 应更新 status 字段")
     void updateStatus_shouldChangeStatus() {
         KgSection section = KgSection.create(TEST_URI, "小节");
-        kgSectionMapper.insert(section);
+        kgSectionMapper.insert(KgSectionPo.from(section));
 
         kgSectionRepository.updateStatus(TEST_URI, "deleted");
 
-        KgSection found = kgSectionMapper.selectByUri(TEST_URI);
+        KgSectionPo found = kgSectionMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("deleted", found.getStatus());
         // is_deleted 不会被 updateStatus 修改
@@ -196,7 +198,7 @@ class KgSectionRepositoryImplTest {
     @DisplayName("软删除后 findByUri 仍能查到（updateStatus 不改 is_deleted）")
     void softDelete_findByUri_shouldStillFind() {
         KgSection section = KgSection.create(TEST_URI, "小节");
-        kgSectionMapper.insert(section);
+        kgSectionMapper.insert(KgSectionPo.from(section));
 
         kgSectionRepository.updateStatus(TEST_URI, "deleted");
 
@@ -211,8 +213,8 @@ class KgSectionRepositoryImplTest {
     void softDelete_findByUris_shouldStillFind() {
         KgSection sec1 = KgSection.create(TEST_URI, "小节1");
         KgSection sec2 = KgSection.create(TEST_URI_2, "小节2");
-        kgSectionMapper.insert(sec1);
-        kgSectionMapper.insert(sec2);
+        kgSectionMapper.insert(KgSectionPo.from(sec1));
+        kgSectionMapper.insert(KgSectionPo.from(sec2));
 
         kgSectionRepository.updateStatus(TEST_URI, "deleted");
 
@@ -229,8 +231,9 @@ class KgSectionRepositoryImplTest {
     @DisplayName("findById 应通过主键查找")
     void findById_shouldReturnPresent() {
         KgSection section = KgSection.create(TEST_URI, "小节");
-        kgSectionMapper.insert(section);
-        Long id = section.getId();
+        KgSectionPo insertedPo = KgSectionPo.from(section);
+        kgSectionMapper.insert(insertedPo);
+        Long id = insertedPo.getId();
 
         var result = kgSectionRepository.findById(id);
 

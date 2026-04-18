@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgChapterSectionMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgChapterSectionPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import jakarta.annotation.Resource;
@@ -64,7 +65,7 @@ class KgChapterSectionRepositoryImplTest {
         assertFalse(saved.getDeleted());
 
         // 验证数据库中真实存在
-        List<KgChapterSection> found = mapper.selectByChapterUri(CHAPTER_URI);
+        List<KgChapterSectionPo> found = mapper.selectByChapterUri(CHAPTER_URI);
         assertEquals(1, found.size());
         assertEquals(SECTION_URI_1, found.get(0).getSectionUri());
     }
@@ -81,12 +82,12 @@ class KgChapterSectionRepositoryImplTest {
         Long id = relation.getId();
 
         // 通过 mapper 直接更新 orderIndex（实体无 setter）
-        UpdateWrapper<KgChapterSection> wrapper = new UpdateWrapper<>();
+        UpdateWrapper<KgChapterSectionPo> wrapper = new UpdateWrapper<>();
         wrapper.eq("id", id).set("order_index", 5);
         mapper.update(null, wrapper);
 
         // 验证 orderIndex 已更新
-        List<KgChapterSection> found = mapper.selectByChapterUri(CHAPTER_URI);
+        List<KgChapterSectionPo> found = mapper.selectByChapterUri(CHAPTER_URI);
         assertEquals(1, found.size());
         assertEquals(5, found.get(0).getOrderIndex());
         assertEquals(id, found.get(0).getId());
@@ -98,9 +99,9 @@ class KgChapterSectionRepositoryImplTest {
     @Order(3)
     @DisplayName("findByChapterUri — 查找指定章节的所有小节关联")
     void findByChapterUri_returnsAllSectionsForChapter() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2));
-        mapper.insert(KgChapterSection.create("other_chapter", SECTION_URI_3, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_3, 1)));
 
         List<KgChapterSection> results = repository.findByChapterUri(CHAPTER_URI);
 
@@ -116,9 +117,9 @@ class KgChapterSectionRepositoryImplTest {
     @Order(4)
     @DisplayName("findBySectionUri — 查找指定小节的所有章节关联")
     void findBySectionUri_returnsAllChaptersForSection() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
-        mapper.insert(KgChapterSection.create("other_chapter", SECTION_URI_1, 2));
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_1, 2)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 1)));
 
         List<KgChapterSection> results = repository.findBySectionUri(SECTION_URI_1);
 
@@ -132,8 +133,8 @@ class KgChapterSectionRepositoryImplTest {
     @Order(5)
     @DisplayName("findAllActive — 仅返回未删除的关联")
     void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2)));
 
         List<KgChapterSection> results = repository.findAllActive();
 
@@ -150,9 +151,9 @@ class KgChapterSectionRepositoryImplTest {
     @Order(6)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2));
-        mapper.insert(KgChapterSection.create("other_chapter", SECTION_URI_3, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_3, 1)));
 
         int beforeCount = repository.findAllActive().size();
 
@@ -170,7 +171,7 @@ class KgChapterSectionRepositoryImplTest {
     @Order(7)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findByChapterUri 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindByChapterUri() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
 
         repository.deleteByChapterUri(CHAPTER_URI);
 
@@ -184,9 +185,9 @@ class KgChapterSectionRepositoryImplTest {
     @Order(8)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
-        mapper.insert(KgChapterSection.create("other_chapter", SECTION_URI_1, 2));
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_1, 2)));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 1)));
 
         repository.deleteBySectionUri(SECTION_URI_1);
 
@@ -201,7 +202,7 @@ class KgChapterSectionRepositoryImplTest {
     @Order(9)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findBySectionUri 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindBySectionUri() {
-        mapper.insert(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1));
+        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
 
         repository.deleteBySectionUri(SECTION_URI_1);
 
@@ -223,7 +224,7 @@ class KgChapterSectionRepositoryImplTest {
 
         repository.saveBatch(relations);
 
-        List<KgChapterSection> results = mapper.selectByChapterUri(CHAPTER_URI);
+        List<KgChapterSectionPo> results = mapper.selectByChapterUri(CHAPTER_URI);
         assertEquals(3, results.size());
         assertTrue(results.stream().anyMatch(r -> r.getSectionUri().equals(SECTION_URI_1)));
         assertTrue(results.stream().anyMatch(r -> r.getSectionUri().equals(SECTION_URI_2)));

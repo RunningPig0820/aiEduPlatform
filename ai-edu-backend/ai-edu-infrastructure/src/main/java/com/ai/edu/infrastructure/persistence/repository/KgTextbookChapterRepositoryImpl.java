@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgTextbookChapterMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookChapterPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -19,10 +20,12 @@ public class KgTextbookChapterRepositoryImpl implements KgTextbookChapterReposit
 
     @Override
     public KgTextbookChapter save(KgTextbookChapter relation) {
-        if (relation.getId() == null) {
-            kgTextbookChapterMapper.insert(relation);
+        KgTextbookChapterPo po = KgTextbookChapterPo.from(relation);
+        if (po.getId() == null) {
+            kgTextbookChapterMapper.insert(po);
+            relation.setId(po.getId());
         } else {
-            kgTextbookChapterMapper.updateById(relation);
+            kgTextbookChapterMapper.updateById(po);
         }
         return relation;
     }
@@ -30,7 +33,7 @@ public class KgTextbookChapterRepositoryImpl implements KgTextbookChapterReposit
     @Override
     public void saveBatch(List<KgTextbookChapter> relations) {
         if (relations != null && !relations.isEmpty()) {
-            kgTextbookChapterMapper.batchInsert(relations);
+            kgTextbookChapterMapper.batchInsert(KgTextbookChapterPo.fromList(relations));
         }
     }
 
@@ -46,16 +49,16 @@ public class KgTextbookChapterRepositoryImpl implements KgTextbookChapterReposit
 
     @Override
     public List<KgTextbookChapter> findByTextbookUri(String textbookUri) {
-        return kgTextbookChapterMapper.selectByTextbookUri(textbookUri);
+        return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectByTextbookUri(textbookUri));
     }
 
     @Override
     public List<KgTextbookChapter> findByChapterUri(String chapterUri) {
-        return kgTextbookChapterMapper.selectByChapterUri(chapterUri);
+        return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectByChapterUri(chapterUri));
     }
 
     @Override
     public List<KgTextbookChapter> findAllActive() {
-        return kgTextbookChapterMapper.selectAllActiveRelations();
+        return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectAllActiveRelations());
     }
 }

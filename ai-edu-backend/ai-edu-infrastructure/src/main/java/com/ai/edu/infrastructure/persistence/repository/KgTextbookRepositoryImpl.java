@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.KgTextbook;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgTextbookMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -20,37 +21,41 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
 
     @Override
     public KgTextbook save(KgTextbook textbook) {
-        if (textbook.getId() == null) {
-            kgTextbookMapper.insert(textbook);
+        KgTextbookPo po = KgTextbookPo.from(textbook);
+        if (po.getId() == null) {
+            kgTextbookMapper.insert(po);
+            textbook.setId(po.getId());
         } else {
-            kgTextbookMapper.updateById(textbook);
+            kgTextbookMapper.updateById(po);
         }
         return textbook;
     }
 
     @Override
     public Optional<KgTextbook> findById(Long id) {
-        return Optional.ofNullable(kgTextbookMapper.selectById(id));
+        KgTextbookPo po = kgTextbookMapper.selectById(id);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public Optional<KgTextbook> findByUri(String uri) {
-        return Optional.ofNullable(kgTextbookMapper.selectByUri(uri));
+        KgTextbookPo po = kgTextbookMapper.selectByUri(uri);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public List<KgTextbook> findBySubject(String subject) {
-        return kgTextbookMapper.selectBySubject(subject);
+        return KgTextbookPo.toEntityList(kgTextbookMapper.selectBySubject(subject));
     }
 
     @Override
     public List<KgTextbook> findBySubjectAndStage(String subject, String stage) {
-        return kgTextbookMapper.selectBySubjectAndStage(subject, stage);
+        return KgTextbookPo.toEntityList(kgTextbookMapper.selectBySubjectAndStage(subject, stage));
     }
 
     @Override
     public List<KgTextbook> findAllActive() {
-        return kgTextbookMapper.selectAllActive();
+        return KgTextbookPo.toEntityList(kgTextbookMapper.selectAllActive());
     }
 
     @Override

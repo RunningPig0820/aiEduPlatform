@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgSectionKPMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgSectionKPPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import jakarta.annotation.Resource;
@@ -64,7 +65,7 @@ class KgSectionKPRepositoryImplTest {
         assertFalse(saved.getDeleted());
 
         // 验证数据库中真实存在
-        List<KgSectionKP> found = mapper.selectBySectionUri(SECTION_URI);
+        List<KgSectionKPPo> found = mapper.selectBySectionUri(SECTION_URI);
         assertEquals(1, found.size());
         assertEquals(KP_URI_1, found.get(0).getKpUri());
     }
@@ -81,12 +82,12 @@ class KgSectionKPRepositoryImplTest {
         Long id = relation.getId();
 
         // 通过 mapper 直接更新 orderIndex（实体无 setter）
-        UpdateWrapper<KgSectionKP> wrapper = new UpdateWrapper<>();
+        UpdateWrapper<KgSectionKPPo> wrapper = new UpdateWrapper<>();
         wrapper.eq("id", id).set("order_index", 5);
         mapper.update(null, wrapper);
 
         // 验证 orderIndex 已更新
-        List<KgSectionKP> found = mapper.selectBySectionUri(SECTION_URI);
+        List<KgSectionKPPo> found = mapper.selectBySectionUri(SECTION_URI);
         assertEquals(1, found.size());
         assertEquals(5, found.get(0).getOrderIndex());
         assertEquals(id, found.get(0).getId());
@@ -98,9 +99,9 @@ class KgSectionKPRepositoryImplTest {
     @Order(3)
     @DisplayName("findBySectionUri — 查找指定小节的所有知识点关联")
     void findBySectionUri_returnsAllKPsForSection() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_2, 2));
-        mapper.insert(KgSectionKP.create("other_section", KP_URI_3, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 2)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_3, 1)));
 
         List<KgSectionKP> results = repository.findBySectionUri(SECTION_URI);
 
@@ -116,9 +117,9 @@ class KgSectionKPRepositoryImplTest {
     @Order(4)
     @DisplayName("findByKpUri — 查找指定知识点的所有小节关联")
     void findByKpUri_returnsAllSectionsForKP() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
-        mapper.insert(KgSectionKP.create("other_section", KP_URI_1, 2));
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_2, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_1, 2)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 1)));
 
         List<KgSectionKP> results = repository.findByKpUri(KP_URI_1);
 
@@ -132,8 +133,8 @@ class KgSectionKPRepositoryImplTest {
     @Order(5)
     @DisplayName("findAllActive — 仅返回未删除的关联")
     void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_2, 2));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 2)));
 
         List<KgSectionKP> results = repository.findAllActive();
 
@@ -150,9 +151,9 @@ class KgSectionKPRepositoryImplTest {
     @Order(6)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_2, 2));
-        mapper.insert(KgSectionKP.create("other_section", KP_URI_3, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 2)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_3, 1)));
 
         int beforeCount = repository.findAllActive().size();
 
@@ -170,7 +171,7 @@ class KgSectionKPRepositoryImplTest {
     @Order(7)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findBySectionUri 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindBySectionUri() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
 
         repository.deleteBySectionUri(SECTION_URI);
 
@@ -184,9 +185,9 @@ class KgSectionKPRepositoryImplTest {
     @Order(8)
     @DisplayName("deleteByKpUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteByKpUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
-        mapper.insert(KgSectionKP.create("other_section", KP_URI_1, 2));
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_2, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_1, 2)));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 1)));
 
         repository.deleteByKpUri(KP_URI_1);
 
@@ -201,7 +202,7 @@ class KgSectionKPRepositoryImplTest {
     @Order(9)
     @DisplayName("deleteByKpUri 软删除 — 删除后 findByKpUri 不再返回")
     void deleteByKpUri_softDeleteRemovesFromFindByKpUri() {
-        mapper.insert(KgSectionKP.create(SECTION_URI, KP_URI_1, 1));
+        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
 
         repository.deleteByKpUri(KP_URI_1);
 
@@ -223,7 +224,7 @@ class KgSectionKPRepositoryImplTest {
 
         repository.saveBatch(relations);
 
-        List<KgSectionKP> results = mapper.selectBySectionUri(SECTION_URI);
+        List<KgSectionKPPo> results = mapper.selectBySectionUri(SECTION_URI);
         assertEquals(3, results.size());
         assertTrue(results.stream().anyMatch(r -> r.getKpUri().equals(KP_URI_1)));
         assertTrue(results.stream().anyMatch(r -> r.getKpUri().equals(KP_URI_2)));

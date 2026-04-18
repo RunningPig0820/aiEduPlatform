@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.*;
@@ -60,7 +61,7 @@ class KgKnowledgePointRepositoryImplTest {
         // 验证 id 被自动填充
         assertNotNull(saved.getId());
         // 验证真实写入 H2
-        KgKnowledgePoint found = kgKnowledgePointMapper.selectByUri(TEST_URI);
+        KgKnowledgePointPo found = kgKnowledgePointMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals(TEST_URI, found.getUri());
         assertEquals("测试知识点", found.getLabel());
@@ -76,7 +77,9 @@ class KgKnowledgePointRepositoryImplTest {
     void save_existingEntity_shouldUpdate() {
         // 先插入一条
         KgKnowledgePoint original = KgKnowledgePoint.create(TEST_URI, "旧标签");
-        kgKnowledgePointMapper.insert(original);
+        KgKnowledgePointPo insertedPo = KgKnowledgePointPo.from(original);
+        kgKnowledgePointMapper.insert(insertedPo);
+        original.setId(insertedPo.getId());
         assertNotNull(original.getId());
 
         // 修改属性
@@ -85,7 +88,7 @@ class KgKnowledgePointRepositoryImplTest {
 
         // 验证更新
         assertEquals(original.getId(), updated.getId());
-        KgKnowledgePoint found = kgKnowledgePointMapper.selectByUri(TEST_URI);
+        KgKnowledgePointPo found = kgKnowledgePointMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("hard", found.getDifficulty());
         assertEquals("high", found.getImportance());
@@ -99,7 +102,7 @@ class KgKnowledgePointRepositoryImplTest {
     @DisplayName("findByUri 查找已存在的知识点")
     void findByUri_shouldReturnPresent() {
         KgKnowledgePoint kp = KgKnowledgePoint.create(TEST_URI, "测试知识点");
-        kgKnowledgePointMapper.insert(kp);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp));
 
         var result = kgKnowledgePointRepository.findByUri(TEST_URI);
 
@@ -128,9 +131,9 @@ class KgKnowledgePointRepositoryImplTest {
         KgKnowledgePoint kp1 = KgKnowledgePoint.create(TEST_URI, "知识点1");
         KgKnowledgePoint kp2 = KgKnowledgePoint.create(TEST_URI_2, "知识点2");
         KgKnowledgePoint kp3 = KgKnowledgePoint.create(TEST_URI_3, "知识点3");
-        kgKnowledgePointMapper.insert(kp1);
-        kgKnowledgePointMapper.insert(kp2);
-        kgKnowledgePointMapper.insert(kp3);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp1));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp2));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp3));
 
         List<KgKnowledgePoint> result = kgKnowledgePointRepository.findByUris(
                 List.of(TEST_URI, TEST_URI_2));
@@ -155,7 +158,7 @@ class KgKnowledgePointRepositoryImplTest {
     @DisplayName("findByUris 部分匹配应只返回存在的")
     void findByUris_partialMatch_shouldReturnExisting() {
         KgKnowledgePoint kp1 = KgKnowledgePoint.create(TEST_URI, "知识点1");
-        kgKnowledgePointMapper.insert(kp1);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp1));
 
         List<KgKnowledgePoint> result = kgKnowledgePointRepository.findByUris(
                 List.of(TEST_URI, "http://nonexistent/uri"));
@@ -172,8 +175,8 @@ class KgKnowledgePointRepositoryImplTest {
     void findByStatus_shouldReturnMatching() {
         KgKnowledgePoint kp1 = KgKnowledgePoint.create(TEST_URI, "知识点1");
         KgKnowledgePoint kp2 = KgKnowledgePoint.create(TEST_URI_2, "知识点2");
-        kgKnowledgePointMapper.insert(kp1);
-        kgKnowledgePointMapper.insert(kp2);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp1));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp2));
 
         List<KgKnowledgePoint> active = kgKnowledgePointRepository.findByStatus("active");
 
@@ -197,11 +200,11 @@ class KgKnowledgePointRepositoryImplTest {
     @DisplayName("updateStatus 应更新 status 字段")
     void updateStatus_shouldChangeStatus() {
         KgKnowledgePoint kp = KgKnowledgePoint.create(TEST_URI, "知识点");
-        kgKnowledgePointMapper.insert(kp);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp));
 
         kgKnowledgePointRepository.updateStatus(TEST_URI, "deleted");
 
-        KgKnowledgePoint found = kgKnowledgePointMapper.selectByUri(TEST_URI);
+        KgKnowledgePointPo found = kgKnowledgePointMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("deleted", found.getStatus());
         // is_deleted 不会被 updateStatus 修改
@@ -215,7 +218,7 @@ class KgKnowledgePointRepositoryImplTest {
     @DisplayName("软删除后 findByUri 仍能查到（updateStatus 不改 is_deleted）")
     void softDelete_findByUri_shouldStillFind() {
         KgKnowledgePoint kp = KgKnowledgePoint.create(TEST_URI, "知识点");
-        kgKnowledgePointMapper.insert(kp);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp));
 
         kgKnowledgePointRepository.updateStatus(TEST_URI, "deleted");
 
@@ -230,8 +233,8 @@ class KgKnowledgePointRepositoryImplTest {
     void softDelete_findByUris_shouldStillFind() {
         KgKnowledgePoint kp1 = KgKnowledgePoint.create(TEST_URI, "知识点1");
         KgKnowledgePoint kp2 = KgKnowledgePoint.create(TEST_URI_2, "知识点2");
-        kgKnowledgePointMapper.insert(kp1);
-        kgKnowledgePointMapper.insert(kp2);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp1));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp2));
 
         kgKnowledgePointRepository.updateStatus(TEST_URI, "deleted");
 
@@ -247,8 +250,8 @@ class KgKnowledgePointRepositoryImplTest {
     void updateStatus_findByStatus_shouldReflectChange() {
         KgKnowledgePoint kp1 = KgKnowledgePoint.create(TEST_URI, "知识点1");
         KgKnowledgePoint kp2 = KgKnowledgePoint.create(TEST_URI_2, "知识点2");
-        kgKnowledgePointMapper.insert(kp1);
-        kgKnowledgePointMapper.insert(kp2);
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp1));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp2));
 
         kgKnowledgePointRepository.updateStatus(TEST_URI, "deleted");
 
@@ -270,8 +273,9 @@ class KgKnowledgePointRepositoryImplTest {
     @DisplayName("findById 应通过主键查找")
     void findById_shouldReturnPresent() {
         KgKnowledgePoint kp = KgKnowledgePoint.create(TEST_URI, "知识点");
-        kgKnowledgePointMapper.insert(kp);
-        Long id = kp.getId();
+        KgKnowledgePointPo insertedPo = KgKnowledgePointPo.from(kp);
+        kgKnowledgePointMapper.insert(insertedPo);
+        Long id = insertedPo.getId();
 
         var result = kgKnowledgePointRepository.findById(id);
 

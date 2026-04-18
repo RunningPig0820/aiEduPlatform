@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgChapterSectionMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgChapterSectionPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -19,10 +20,12 @@ public class KgChapterSectionRepositoryImpl implements KgChapterSectionRepositor
 
     @Override
     public KgChapterSection save(KgChapterSection relation) {
-        if (relation.getId() == null) {
-            kgChapterSectionMapper.insert(relation);
+        KgChapterSectionPo po = KgChapterSectionPo.from(relation);
+        if (po.getId() == null) {
+            kgChapterSectionMapper.insert(po);
+            relation.setId(po.getId());
         } else {
-            kgChapterSectionMapper.updateById(relation);
+            kgChapterSectionMapper.updateById(po);
         }
         return relation;
     }
@@ -30,7 +33,7 @@ public class KgChapterSectionRepositoryImpl implements KgChapterSectionRepositor
     @Override
     public void saveBatch(List<KgChapterSection> relations) {
         if (relations != null && !relations.isEmpty()) {
-            kgChapterSectionMapper.batchInsert(relations);
+            kgChapterSectionMapper.batchInsert(KgChapterSectionPo.fromList(relations));
         }
     }
 
@@ -46,16 +49,16 @@ public class KgChapterSectionRepositoryImpl implements KgChapterSectionRepositor
 
     @Override
     public List<KgChapterSection> findByChapterUri(String chapterUri) {
-        return kgChapterSectionMapper.selectByChapterUri(chapterUri);
+        return KgChapterSectionPo.toEntityList(kgChapterSectionMapper.selectByChapterUri(chapterUri));
     }
 
     @Override
     public List<KgChapterSection> findBySectionUri(String sectionUri) {
-        return kgChapterSectionMapper.selectBySectionUri(sectionUri);
+        return KgChapterSectionPo.toEntityList(kgChapterSectionMapper.selectBySectionUri(sectionUri));
     }
 
     @Override
     public List<KgChapterSection> findAllActive() {
-        return kgChapterSectionMapper.selectAllActiveRelations();
+        return KgChapterSectionPo.toEntityList(kgChapterSectionMapper.selectAllActiveRelations());
     }
 }

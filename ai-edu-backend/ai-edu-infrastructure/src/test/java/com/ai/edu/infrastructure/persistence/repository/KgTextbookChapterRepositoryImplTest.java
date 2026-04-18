@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgTextbookChapterMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookChapterPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import jakarta.annotation.Resource;
@@ -64,7 +65,7 @@ class KgTextbookChapterRepositoryImplTest {
         assertFalse(saved.getDeleted());
 
         // 验证数据库中真实存在
-        List<KgTextbookChapter> found = mapper.selectByTextbookUri(TEXTBOOK_URI);
+        List<KgTextbookChapterPo> found = mapper.selectByTextbookUri(TEXTBOOK_URI);
         assertEquals(1, found.size());
         assertEquals(CHAPTER_URI_1, found.get(0).getChapterUri());
     }
@@ -81,12 +82,12 @@ class KgTextbookChapterRepositoryImplTest {
         Long id = relation.getId();
 
         // 通过 mapper 直接更新 orderIndex（实体无 setter）
-        UpdateWrapper<KgTextbookChapter> wrapper = new UpdateWrapper<>();
+        UpdateWrapper<KgTextbookChapterPo> wrapper = new UpdateWrapper<>();
         wrapper.eq("id", id).set("order_index", 5);
         mapper.update(null, wrapper);
 
         // 验证 orderIndex 已更新
-        List<KgTextbookChapter> found = mapper.selectByTextbookUri(TEXTBOOK_URI);
+        List<KgTextbookChapterPo> found = mapper.selectByTextbookUri(TEXTBOOK_URI);
         assertEquals(1, found.size());
         assertEquals(5, found.get(0).getOrderIndex());
         assertEquals(id, found.get(0).getId());
@@ -98,9 +99,9 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(3)
     @DisplayName("findByTextbookUri — 查找指定教材的所有章节关联")
     void findByTextbookUri_returnsAllChaptersForTextbook() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2));
-        mapper.insert(KgTextbookChapter.create("other_textbook", CHAPTER_URI_3, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_3, 1)));
 
         List<KgTextbookChapter> results = repository.findByTextbookUri(TEXTBOOK_URI);
 
@@ -116,9 +117,9 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(4)
     @DisplayName("findByChapterUri — 查找指定章节的所有教材关联")
     void findByChapterUri_returnsAllTextbooksForChapter() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
-        mapper.insert(KgTextbookChapter.create("other_textbook", CHAPTER_URI_1, 2));
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_1, 2)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 1)));
 
         List<KgTextbookChapter> results = repository.findByChapterUri(CHAPTER_URI_1);
 
@@ -132,8 +133,8 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(5)
     @DisplayName("findAllActive — 仅返回未删除的关联")
     void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2)));
 
         List<KgTextbookChapter> results = repository.findAllActive();
 
@@ -151,9 +152,9 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(6)
     @DisplayName("deleteByTextbookUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteByTextbookUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2));
-        mapper.insert(KgTextbookChapter.create("other_textbook", CHAPTER_URI_3, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_3, 1)));
 
         int beforeCount = repository.findAllActive().size();
 
@@ -171,7 +172,7 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(7)
     @DisplayName("deleteByTextbookUri 软删除 — 删除后 findByTextbookUri 不再返回")
     void deleteByTextbookUri_softDeleteRemovesFromFindByTextbookUri() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
 
         repository.deleteByTextbookUri(TEXTBOOK_URI);
 
@@ -185,9 +186,9 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(8)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findAllActive 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
-        mapper.insert(KgTextbookChapter.create("other_textbook", CHAPTER_URI_1, 2));
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_1, 2)));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 1)));
 
         repository.deleteByChapterUri(CHAPTER_URI_1);
 
@@ -202,7 +203,7 @@ class KgTextbookChapterRepositoryImplTest {
     @Order(9)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findByChapterUri 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindByChapterUri() {
-        mapper.insert(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1));
+        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
 
         repository.deleteByChapterUri(CHAPTER_URI_1);
 
@@ -224,7 +225,7 @@ class KgTextbookChapterRepositoryImplTest {
 
         repository.saveBatch(relations);
 
-        List<KgTextbookChapter> results = mapper.selectByTextbookUri(TEXTBOOK_URI);
+        List<KgTextbookChapterPo> results = mapper.selectByTextbookUri(TEXTBOOK_URI);
         assertEquals(3, results.size());
         assertTrue(results.stream().anyMatch(r -> r.getChapterUri().equals(CHAPTER_URI_1)));
         assertTrue(results.stream().anyMatch(r -> r.getChapterUri().equals(CHAPTER_URI_2)));

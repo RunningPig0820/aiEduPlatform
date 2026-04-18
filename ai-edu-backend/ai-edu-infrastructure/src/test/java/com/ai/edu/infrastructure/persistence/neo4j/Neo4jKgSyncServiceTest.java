@@ -5,6 +5,7 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.*;
+import com.ai.edu.infrastructure.persistence.edukg.po.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,7 +91,7 @@ class Neo4jKgSyncServiceTest {
 
         assertEquals(1, count);
         // 验证真实写入 H2
-        KgTextbook saved = kgTextbookMapper.selectByUri(TEST_URI);
+        KgTextbookPo saved = kgTextbookMapper.selectByUri(TEST_URI);
         assertNotNull(saved);
         assertEquals(TEST_URI, saved.getUri());
         assertEquals("测试教材", saved.getLabel());
@@ -103,7 +104,7 @@ class Neo4jKgSyncServiceTest {
     void upsertTextbooks_updateExisting() {
         // 先插入一条旧数据
         KgTextbook old = KgTextbook.create(TEST_URI, "旧标签", "旧年级", "primary", "人教版", "旧学科");
-        kgTextbookMapper.insert(old);
+        kgTextbookMapper.insert(KgTextbookPo.from(old));
 
         // 模拟从 Neo4j 来的新数据
         KgTextbook neo = KgTextbook.create(TEST_URI, "新标签", "新年级", "primary", "人教版", "新学科");
@@ -111,7 +112,7 @@ class Neo4jKgSyncServiceTest {
 
         assertEquals(0, count); // 更新不计入 insert 计数
         // 验证 H2 数据被更新
-        KgTextbook saved = kgTextbookMapper.selectByUri(TEST_URI);
+        KgTextbookPo saved = kgTextbookMapper.selectByUri(TEST_URI);
         assertNotNull(saved);
         assertEquals("新标签", saved.getLabel());
         assertEquals("新年级", saved.getGrade());
@@ -142,7 +143,7 @@ class Neo4jKgSyncServiceTest {
         String uri2 = "http://edukg.org/knowledge/3.1/chapter/ch2";
 
         // 预插入已存在的章节
-        kgChapterMapper.insert(KgChapter.create(uri1, "已存在"));
+        kgChapterMapper.insert(KgChapterPo.from(KgChapter.create(uri1, "已存在")));
 
         KgChapter ch1 = KgChapter.create(uri1, "已存在");
         KgChapter ch2 = KgChapter.create(uri2, "新章节");
@@ -158,7 +159,7 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("upsertChapters 已存在的不更新")
     void upsertChapters_shouldNotUpdateExisting() {
         String uri = "http://edukg.org/knowledge/3.1/chapter/ch1";
-        kgChapterMapper.insert(KgChapter.create(uri, "旧标签"));
+        kgChapterMapper.insert(KgChapterPo.from(KgChapter.create(uri, "旧标签")));
 
         KgChapter ch = KgChapter.create(uri, "新标签");
         int count = syncService.upsertChapters(List.of(ch));
@@ -205,7 +206,7 @@ class Neo4jKgSyncServiceTest {
         int ops = syncService.rebuildTextbookChapterRelations(List.of(rel));
 
         assertEquals(1, ops);
-        List<KgTextbookChapter> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
+        List<KgTextbookChapterPo> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
         assertEquals(1, relations.size());
         assertEquals(chUri, relations.get(0).getChapterUri());
         assertEquals(1, relations.get(0).getOrderIndex());
@@ -219,14 +220,14 @@ class Neo4jKgSyncServiceTest {
         String chUri = "http://edukg.org/knowledge/3.1/chapter/ch1";
 
         // 预插入旧 orderIndex=1
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(tbUri, chUri, 1));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(tbUri, chUri, 1)));
 
         // Neo4j 返回 orderIndex=3
         KgTextbookChapter neo4jRel = KgTextbookChapter.create(tbUri, chUri, 3);
         int ops = syncService.rebuildTextbookChapterRelations(List.of(neo4jRel));
 
         assertEquals(1, ops);
-        List<KgTextbookChapter> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
+        List<KgTextbookChapterPo> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
         assertEquals(3, relations.get(0).getOrderIndex());
     }
 
@@ -239,8 +240,8 @@ class Neo4jKgSyncServiceTest {
         String chUri2 = "http://edukg.org/knowledge/3.1/chapter/ch2";
 
         // H2 有两条关联
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(tbUri, chUri1, 1));
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(tbUri, chUri2, 2));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(tbUri, chUri1, 1)));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(tbUri, chUri2, 2)));
 
         // Neo4j 只有 chUri1
         KgTextbookChapter neo4jRel = KgTextbookChapter.create(tbUri, chUri1, 1);
@@ -248,7 +249,7 @@ class Neo4jKgSyncServiceTest {
 
         assertEquals(1, ops);
         // chUri2 应被软删除
-        List<KgTextbookChapter> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
+        List<KgTextbookChapterPo> relations = kgTextbookChapterMapper.selectByTextbookUri(tbUri);
         assertEquals(1, relations.size());
         assertEquals(chUri1, relations.get(0).getChapterUri());
     }
@@ -258,9 +259,9 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("rebuildTextbookChapterRelations 空列表应全量软删除")
     void rebuildTextbookChapterRelations_emptyList() {
         // 预插入 3 条
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(TEST_URI, "ch1", 1));
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(TEST_URI, "ch2", 2));
-        kgTextbookChapterMapper.insert(KgTextbookChapter.create(TEST_URI, "ch3", 3));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEST_URI, "ch1", 1)));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEST_URI, "ch2", 2)));
+        kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEST_URI, "ch3", 3)));
 
         assertEquals(3, kgTextbookChapterMapper.selectAllActiveRelations().size());
 
@@ -304,8 +305,8 @@ class Neo4jKgSyncServiceTest {
     @Order(15)
     @DisplayName("rebuildChapterSectionRelations 空列表全量软删除")
     void rebuildChapterSectionRelations_emptyList() {
-        kgChapterSectionMapper.insert(KgChapterSection.create("ch1", "sec1", 1));
-        kgChapterSectionMapper.insert(KgChapterSection.create("ch1", "sec2", 2));
+        kgChapterSectionMapper.insert(KgChapterSectionPo.from(KgChapterSection.create("ch1", "sec1", 1)));
+        kgChapterSectionMapper.insert(KgChapterSectionPo.from(KgChapterSection.create("ch1", "sec2", 2)));
 
         int ops = syncService.rebuildChapterSectionRelations(Collections.emptyList());
         assertEquals(0, ops);
@@ -316,7 +317,7 @@ class Neo4jKgSyncServiceTest {
     @Order(16)
     @DisplayName("rebuildSectionKPRelations 空列表全量软删除")
     void rebuildSectionKPRelations_emptyList() {
-        kgSectionKPMapper.insert(KgSectionKP.create("sec1", "kp1", 1));
+        kgSectionKPMapper.insert(KgSectionKPPo.from(KgSectionKP.create("sec1", "kp1", 1)));
 
         int ops = syncService.rebuildSectionKPRelations(Collections.emptyList());
         assertEquals(0, ops);
@@ -329,15 +330,15 @@ class Neo4jKgSyncServiceTest {
     @Order(17)
     @DisplayName("markDeletedNodes Textbook — H2 有但 Neo4j 无应标记 deleted")
     void markDeletedNodes_textbook() {
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math"));
+        kgTextbookMapper.insert(KgTextbookPo.from(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math")));
 
         int count = syncService.markDeletedNodes("Textbook", Set.of());
 
         assertEquals(1, count);
         // updateStatus 只改 status 字段，不改 is_deleted
         // 验证 status 被更新为 "deleted"
-        List<KgTextbook> all = kgTextbookMapper.selectAllActive();
-        KgTextbook tb = all.stream().filter(t -> t.getUri().equals(TEST_URI)).findFirst().orElse(null);
+        List<KgTextbookPo> all = kgTextbookMapper.selectAllActive();
+        KgTextbookPo tb = all.stream().filter(t -> t.getUri().equals(TEST_URI)).findFirst().orElse(null);
         assertNotNull(tb);
         assertEquals("deleted", tb.getStatus());
     }
@@ -347,7 +348,7 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("markDeletedNodes Chapter")
     void markDeletedNodes_chapter() {
         String uri = "http://edukg.org/knowledge/3.1/chapter/ch1";
-        kgChapterMapper.insert(KgChapter.create(uri, "章节1"));
+        kgChapterMapper.insert(KgChapterPo.from(KgChapter.create(uri, "章节1")));
 
         int count = syncService.markDeletedNodes("Chapter", Set.of());
 
@@ -360,7 +361,7 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("markDeletedNodes Section")
     void markDeletedNodes_section() {
         String uri = "http://edukg.org/knowledge/3.1/section/sec1";
-        kgSectionMapper.insert(KgSection.create(uri, "小节1"));
+        kgSectionMapper.insert(KgSectionPo.from(KgSection.create(uri, "小节1")));
 
         int count = syncService.markDeletedNodes("Section", Set.of());
 
@@ -373,7 +374,7 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("markDeletedNodes KnowledgePoint")
     void markDeletedNodes_knowledgePoint() {
         String uri = "http://edukg.org/knowledge/3.1/kp/kp1";
-        kgKnowledgePointMapper.insert(KgKnowledgePoint.create(uri, "知识点1"));
+        kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(KgKnowledgePoint.create(uri, "知识点1")));
 
         int count = syncService.markDeletedNodes("KnowledgePoint", Set.of());
 
@@ -385,7 +386,7 @@ class Neo4jKgSyncServiceTest {
     @Order(21)
     @DisplayName("markDeletedNodes Neo4j 中有该 URI 不标记删除")
     void markDeletedNodes_shouldNotDeleteIfInNeo4j() {
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math"));
+        kgTextbookMapper.insert(KgTextbookPo.from(KgTextbook.create(TEST_URI, "教材", "一年级", "primary", "人教版", "math")));
 
         int count = syncService.markDeletedNodes("Textbook", Set.of(TEST_URI));
 
@@ -490,8 +491,8 @@ class Neo4jKgSyncServiceTest {
     @DisplayName("reconcile 数量不一致应 mismatched")
     void reconcile_countsMismatch() {
         // H2 插入 2 条教材，Neo4j 传 1 条
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "1", "教材1", "一年级", "primary", "人教版", "math"));
-        kgTextbookMapper.insert(KgTextbook.create(TEST_URI + "2", "教材2", "一年级", "primary", "人教版", "math"));
+        kgTextbookMapper.insert(KgTextbookPo.from(KgTextbook.create(TEST_URI + "1", "教材1", "一年级", "primary", "人教版", "math")));
+        kgTextbookMapper.insert(KgTextbookPo.from(KgTextbook.create(TEST_URI + "2", "教材2", "一年级", "primary", "人教版", "math")));
 
         var result = syncService.reconcile(
                 Set.of("uri1"), Set.of(), Set.of(), Set.of(),
@@ -540,7 +541,7 @@ class Neo4jKgSyncServiceTest {
 
         syncService.completeSyncRecord(id, 10, 5, 2, "matched", "All good");
 
-        KgSyncRecord saved = kgSyncRecordMapper.selectById(id);
+        KgSyncRecordPo saved = kgSyncRecordMapper.selectById(id);
         assertEquals("success", saved.getStatus());
         assertEquals(10, saved.getInsertedCount());
         assertEquals(5, saved.getUpdatedCount());
@@ -557,7 +558,7 @@ class Neo4jKgSyncServiceTest {
 
         syncService.failSyncRecord(id, "Neo4j timeout");
 
-        KgSyncRecord saved = kgSyncRecordMapper.selectById(id);
+        KgSyncRecordPo saved = kgSyncRecordMapper.selectById(id);
         assertEquals("failed", saved.getStatus());
         assertEquals("Neo4j timeout", saved.getErrorMessage());
     }

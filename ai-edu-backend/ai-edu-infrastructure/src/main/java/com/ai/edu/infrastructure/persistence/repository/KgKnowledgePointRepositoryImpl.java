@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgKnowledgePointMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -20,32 +21,36 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
 
     @Override
     public KgKnowledgePoint save(KgKnowledgePoint knowledgePoint) {
-        if (knowledgePoint.getId() == null) {
-            kgKnowledgePointMapper.insert(knowledgePoint);
+        KgKnowledgePointPo po = KgKnowledgePointPo.from(knowledgePoint);
+        if (po.getId() == null) {
+            kgKnowledgePointMapper.insert(po);
+            knowledgePoint.setId(po.getId());
         } else {
-            kgKnowledgePointMapper.updateById(knowledgePoint);
+            kgKnowledgePointMapper.updateById(po);
         }
         return knowledgePoint;
     }
 
     @Override
     public Optional<KgKnowledgePoint> findById(Long id) {
-        return Optional.ofNullable(kgKnowledgePointMapper.selectById(id));
+        KgKnowledgePointPo po = kgKnowledgePointMapper.selectById(id);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public Optional<KgKnowledgePoint> findByUri(String uri) {
-        return Optional.ofNullable(kgKnowledgePointMapper.selectByUri(uri));
+        KgKnowledgePointPo po = kgKnowledgePointMapper.selectByUri(uri);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public List<KgKnowledgePoint> findByUris(List<String> uris) {
-        return kgKnowledgePointMapper.selectByUris(uris);
+        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByUris(uris));
     }
 
     @Override
     public List<KgKnowledgePoint> findByStatus(String status) {
-        return kgKnowledgePointMapper.selectByStatus(status);
+        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByStatus(status));
     }
 
     @Override

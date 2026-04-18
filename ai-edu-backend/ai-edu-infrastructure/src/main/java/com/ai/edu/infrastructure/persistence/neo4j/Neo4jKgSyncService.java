@@ -6,6 +6,7 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.service.KgSyncDomainService;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.*;
+import com.ai.edu.infrastructure.persistence.edukg.po.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.*;
@@ -223,15 +224,20 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         }
         int count = 0;
         for (KgTextbook tb : textbooks) {
-            KgTextbook existing = kgTextbookMapper.selectByUri(tb.getUri());
-            if (existing == null) {
-                kgTextbookMapper.insert(tb);
+            KgTextbookPo existingPo = kgTextbookMapper.selectByUri(tb.getUri());
+            if (existingPo == null) {
+                KgTextbookPo po = KgTextbookPo.from(tb);
+                kgTextbookMapper.insert(po);
+                tb.setId(po.getId());
                 count++;
                 log.debug("Inserted textbook: {}", tb.getUri());
             } else {
                 // 用 Neo4j 新数据更新 MySQL 旧数据
-                existing.updateFrom(tb);
-                kgTextbookMapper.updateById(existing);
+                KgTextbook existingEntity = existingPo.toEntity();
+                existingEntity.updateFrom(tb);
+                // 同步回 PO
+                existingPo = KgTextbookPo.from(existingEntity);
+                kgTextbookMapper.updateById(existingPo);
                 log.debug("Updated textbook: {}", tb.getUri());
             }
         }
@@ -248,13 +254,13 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         }
         // 查询已存在的 URI 集合
         List<String> uris = chapters.stream().map(KgChapter::getUri).toList();
-        List<KgChapter> existing = kgChapterMapper.selectByUris(uris);
-        Set<String> existingUris = existing.stream().map(KgChapter::getUri).collect(Collectors.toSet());
+        List<KgChapterPo> existingPos = kgChapterMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgChapterPo::getUri).collect(Collectors.toSet());
 
         int count = 0;
         for (KgChapter ch : chapters) {
             if (!existingUris.contains(ch.getUri())) {
-                kgChapterMapper.insert(ch);
+                kgChapterMapper.insert(KgChapterPo.from(ch));
                 count++;
             }
             // 已存在的节点不需要重复更新（Neo4j 数据为准）
@@ -271,13 +277,13 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
             return 0;
         }
         List<String> uris = sections.stream().map(KgSection::getUri).toList();
-        List<KgSection> existing = kgSectionMapper.selectByUris(uris);
-        Set<String> existingUris = existing.stream().map(KgSection::getUri).collect(Collectors.toSet());
+        List<KgSectionPo> existingPos = kgSectionMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgSectionPo::getUri).collect(Collectors.toSet());
 
         int count = 0;
         for (KgSection sec : sections) {
             if (!existingUris.contains(sec.getUri())) {
-                kgSectionMapper.insert(sec);
+                kgSectionMapper.insert(KgSectionPo.from(sec));
                 count++;
             }
         }
@@ -293,13 +299,13 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
             return 0;
         }
         List<String> uris = knowledgePoints.stream().map(KgKnowledgePoint::getUri).toList();
-        List<KgKnowledgePoint> existing = kgKnowledgePointMapper.selectByUris(uris);
-        Set<String> existingUris = existing.stream().map(KgKnowledgePoint::getUri).collect(Collectors.toSet());
+        List<KgKnowledgePointPo> existingPos = kgKnowledgePointMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgKnowledgePointPo::getUri).collect(Collectors.toSet());
 
         int count = 0;
         for (KgKnowledgePoint kp : knowledgePoints) {
             if (!existingUris.contains(kp.getUri())) {
-                kgKnowledgePointMapper.insert(kp);
+                kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp));
                 count++;
             }
         }
@@ -335,29 +341,29 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         for (Map.Entry<String, List<KgTextbookChapter>> entry : neo4jGrouped.entrySet()) {
             String textbookUri = entry.getKey();
             List<KgTextbookChapter> neo4jGroup = entry.getValue();
-            List<KgTextbookChapter> mysqlGroup = kgTextbookChapterMapper.selectByTextbookUri(textbookUri);
+            List<KgTextbookChapterPo> mysqlGroupPos = kgTextbookChapterMapper.selectByTextbookUri(textbookUri);
 
             // 构建 MySQL 记录的复合键 Set
-            Set<String> mysqlKeys = mysqlGroup.stream()
-                    .map(KgTextbookChapter::getChapterUri)
+            Set<String> mysqlKeys = mysqlGroupPos.stream()
+                    .map(KgTextbookChapterPo::getChapterUri)
                     .collect(Collectors.toSet());
             Set<String> neo4jKeys = neo4jGroup.stream()
                     .map(KgTextbookChapter::getChapterUri)
                     .collect(Collectors.toSet());
 
-            Map<String, KgTextbookChapter> mysqlByKey = mysqlGroup.stream()
-                    .collect(Collectors.toMap(KgTextbookChapter::getChapterUri, r -> r));
+            Map<String, KgTextbookChapterPo> mysqlPoByKey = mysqlGroupPos.stream()
+                    .collect(Collectors.toMap(KgTextbookChapterPo::getChapterUri, r -> r));
 
             // 新增：Neo4j 有但 MySQL 无
             for (KgTextbookChapter neo4jRel : neo4jGroup) {
                 if (!mysqlKeys.contains(neo4jRel.getChapterUri())) {
-                    kgTextbookChapterMapper.insert(neo4jRel);
+                    kgTextbookChapterMapper.insert(KgTextbookChapterPo.from(neo4jRel));
                     totalOps++;
                     log.debug("Inserted textbook-chapter: {} -> {}", textbookUri, neo4jRel.getChapterUri());
                 } else {
                     // 更新 orderIndex（如有变化）
-                    KgTextbookChapter mysqlRel = mysqlByKey.get(neo4jRel.getChapterUri());
-                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                    KgTextbookChapterPo mysqlPo = mysqlPoByKey.get(neo4jRel.getChapterUri());
+                    if (!mysqlPo.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
                         kgTextbookChapterMapper.updateOrderIndex(textbookUri, neo4jRel.getChapterUri(), neo4jRel.getOrderIndex(), 0L);
                         totalOps++;
                     }
@@ -365,20 +371,20 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
             }
 
             // 软删除：MySQL 有但 Neo4j 无
-            for (KgTextbookChapter mysqlRel : mysqlGroup) {
-                if (!neo4jKeys.contains(mysqlRel.getChapterUri())) {
-                    kgTextbookChapterMapper.softDeleteRelation(textbookUri, mysqlRel.getChapterUri(), 0L);
+            for (KgTextbookChapterPo mysqlPo : mysqlGroupPos) {
+                if (!neo4jKeys.contains(mysqlPo.getChapterUri())) {
+                    kgTextbookChapterMapper.softDeleteRelation(textbookUri, mysqlPo.getChapterUri(), 0L);
                     totalOps++;
-                    log.debug("Soft-deleted textbook-chapter: {} -> {}", textbookUri, mysqlRel.getChapterUri());
+                    log.debug("Soft-deleted textbook-chapter: {} -> {}", textbookUri, mysqlPo.getChapterUri());
                 }
             }
         }
 
         // MySQL 有但 Neo4j 完全没有的 textbookUri → 整个父端删除
-        List<KgTextbookChapter> allExisting = kgTextbookChapterMapper.selectAllActiveRelations();
-        for (KgTextbookChapter rel : allExisting) {
-            if (!neo4jTextbookUris.contains(rel.getTextbookUri())) {
-                kgTextbookChapterMapper.softDeleteByTextbookUri(rel.getTextbookUri(), 0L);
+        List<KgTextbookChapterPo> allExistingPos = kgTextbookChapterMapper.selectAllActiveRelations();
+        for (KgTextbookChapterPo po : allExistingPos) {
+            if (!neo4jTextbookUris.contains(po.getTextbookUri())) {
+                kgTextbookChapterMapper.softDeleteByTextbookUri(po.getTextbookUri(), 0L);
                 totalOps++;
             }
         }
@@ -406,39 +412,39 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         for (Map.Entry<String, List<KgChapterSection>> entry : neo4jGrouped.entrySet()) {
             String chapterUri = entry.getKey();
             List<KgChapterSection> neo4jGroup = entry.getValue();
-            List<KgChapterSection> mysqlGroup = kgChapterSectionMapper.selectByChapterUri(chapterUri);
+            List<KgChapterSectionPo> mysqlGroupPos = kgChapterSectionMapper.selectByChapterUri(chapterUri);
 
-            Set<String> mysqlKeys = mysqlGroup.stream().map(KgChapterSection::getSectionUri).collect(Collectors.toSet());
+            Set<String> mysqlKeys = mysqlGroupPos.stream().map(KgChapterSectionPo::getSectionUri).collect(Collectors.toSet());
             Set<String> neo4jKeys = neo4jGroup.stream().map(KgChapterSection::getSectionUri).collect(Collectors.toSet());
-            Map<String, KgChapterSection> mysqlByKey = mysqlGroup.stream()
-                    .collect(Collectors.toMap(KgChapterSection::getSectionUri, r -> r));
+            Map<String, KgChapterSectionPo> mysqlPoByKey = mysqlGroupPos.stream()
+                    .collect(Collectors.toMap(KgChapterSectionPo::getSectionUri, r -> r));
 
             for (KgChapterSection neo4jRel : neo4jGroup) {
                 if (!mysqlKeys.contains(neo4jRel.getSectionUri())) {
-                    kgChapterSectionMapper.insert(neo4jRel);
+                    kgChapterSectionMapper.insert(KgChapterSectionPo.from(neo4jRel));
                     totalOps++;
                 } else {
-                    KgChapterSection mysqlRel = mysqlByKey.get(neo4jRel.getSectionUri());
-                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                    KgChapterSectionPo mysqlPo = mysqlPoByKey.get(neo4jRel.getSectionUri());
+                    if (!mysqlPo.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
                         kgChapterSectionMapper.updateOrderIndex(chapterUri, neo4jRel.getSectionUri(), neo4jRel.getOrderIndex(), 0L);
                         totalOps++;
                     }
                 }
             }
 
-            for (KgChapterSection mysqlRel : mysqlGroup) {
-                if (!neo4jKeys.contains(mysqlRel.getSectionUri())) {
-                    kgChapterSectionMapper.softDeleteRelation(chapterUri, mysqlRel.getSectionUri(), 0L);
+            for (KgChapterSectionPo mysqlPo : mysqlGroupPos) {
+                if (!neo4jKeys.contains(mysqlPo.getSectionUri())) {
+                    kgChapterSectionMapper.softDeleteRelation(chapterUri, mysqlPo.getSectionUri(), 0L);
                     totalOps++;
                 }
             }
         }
 
         // 删除 Neo4j 中不存在的 chapterUri
-        List<KgChapterSection> allExisting = kgChapterSectionMapper.selectAllActiveRelations();
-        for (KgChapterSection rel : allExisting) {
-            if (!neo4jChapterUris.contains(rel.getChapterUri())) {
-                kgChapterSectionMapper.softDeleteByChapterUri(rel.getChapterUri(), 0L);
+        List<KgChapterSectionPo> allExistingPos = kgChapterSectionMapper.selectAllActiveRelations();
+        for (KgChapterSectionPo po : allExistingPos) {
+            if (!neo4jChapterUris.contains(po.getChapterUri())) {
+                kgChapterSectionMapper.softDeleteByChapterUri(po.getChapterUri(), 0L);
                 totalOps++;
             }
         }
@@ -466,39 +472,39 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         for (Map.Entry<String, List<KgSectionKP>> entry : neo4jGrouped.entrySet()) {
             String sectionUri = entry.getKey();
             List<KgSectionKP> neo4jGroup = entry.getValue();
-            List<KgSectionKP> mysqlGroup = kgSectionKPMapper.selectBySectionUri(sectionUri);
+            List<KgSectionKPPo> mysqlGroupPos = kgSectionKPMapper.selectBySectionUri(sectionUri);
 
-            Set<String> mysqlKeys = mysqlGroup.stream().map(KgSectionKP::getKpUri).collect(Collectors.toSet());
+            Set<String> mysqlKeys = mysqlGroupPos.stream().map(KgSectionKPPo::getKpUri).collect(Collectors.toSet());
             Set<String> neo4jKeys = neo4jGroup.stream().map(KgSectionKP::getKpUri).collect(Collectors.toSet());
-            Map<String, KgSectionKP> mysqlByKey = mysqlGroup.stream()
-                    .collect(Collectors.toMap(KgSectionKP::getKpUri, r -> r));
+            Map<String, KgSectionKPPo> mysqlPoByKey = mysqlGroupPos.stream()
+                    .collect(Collectors.toMap(KgSectionKPPo::getKpUri, r -> r));
 
             for (KgSectionKP neo4jRel : neo4jGroup) {
                 if (!mysqlKeys.contains(neo4jRel.getKpUri())) {
-                    kgSectionKPMapper.insert(neo4jRel);
+                    kgSectionKPMapper.insert(KgSectionKPPo.from(neo4jRel));
                     totalOps++;
                 } else {
-                    KgSectionKP mysqlRel = mysqlByKey.get(neo4jRel.getKpUri());
-                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                    KgSectionKPPo mysqlPo = mysqlPoByKey.get(neo4jRel.getKpUri());
+                    if (!mysqlPo.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
                         kgSectionKPMapper.updateOrderIndex(sectionUri, neo4jRel.getKpUri(), neo4jRel.getOrderIndex(), 0L);
                         totalOps++;
                     }
                 }
             }
 
-            for (KgSectionKP mysqlRel : mysqlGroup) {
-                if (!neo4jKeys.contains(mysqlRel.getKpUri())) {
-                    kgSectionKPMapper.softDeleteRelation(sectionUri, mysqlRel.getKpUri(), 0L);
+            for (KgSectionKPPo mysqlPo : mysqlGroupPos) {
+                if (!neo4jKeys.contains(mysqlPo.getKpUri())) {
+                    kgSectionKPMapper.softDeleteRelation(sectionUri, mysqlPo.getKpUri(), 0L);
                     totalOps++;
                 }
             }
         }
 
         // 删除 Neo4j 中不存在的 sectionUri
-        List<KgSectionKP> allExisting = kgSectionKPMapper.selectAllActiveRelations();
-        for (KgSectionKP rel : allExisting) {
-            if (!neo4jSectionUris.contains(rel.getSectionUri())) {
-                kgSectionKPMapper.softDeleteBySectionUri(rel.getSectionUri(), 0L);
+        List<KgSectionKPPo> allExistingPos = kgSectionKPMapper.selectAllActiveRelations();
+        for (KgSectionKPPo po : allExistingPos) {
+            if (!neo4jSectionUris.contains(po.getSectionUri())) {
+                kgSectionKPMapper.softDeleteBySectionUri(po.getSectionUri(), 0L);
                 totalOps++;
             }
         }
@@ -518,37 +524,37 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
         int count = 0;
         switch (neo4jNodeType) {
             case "Textbook":
-                List<KgTextbook> allTextbooks = kgTextbookMapper.selectAllActive();
-                for (KgTextbook tb : allTextbooks) {
-                    if (!neo4jUris.contains(tb.getUri())) {
-                        kgTextbookMapper.updateStatus(tb.getUri(), "deleted", 0L);
+                List<KgTextbookPo> allTextbookPos = kgTextbookMapper.selectAllActive();
+                for (KgTextbookPo po : allTextbookPos) {
+                    if (!neo4jUris.contains(po.getUri())) {
+                        kgTextbookMapper.updateStatus(po.getUri(), "deleted", 0L);
                         count++;
                     }
                 }
                 break;
             case "Chapter":
-                List<KgChapter> allChapters = kgChapterMapper.selectByStatus("active");
-                for (KgChapter ch : allChapters) {
-                    if (!neo4jUris.contains(ch.getUri())) {
-                        kgChapterMapper.updateStatus(ch.getUri(), "deleted", 0L);
+                List<KgChapterPo> allChapterPos = kgChapterMapper.selectByStatus("active");
+                for (KgChapterPo po : allChapterPos) {
+                    if (!neo4jUris.contains(po.getUri())) {
+                        kgChapterMapper.updateStatus(po.getUri(), "deleted", 0L);
                         count++;
                     }
                 }
                 break;
             case "Section":
-                List<KgSection> allSections = kgSectionMapper.selectByStatus("active");
-                for (KgSection sec : allSections) {
-                    if (!neo4jUris.contains(sec.getUri())) {
-                        kgSectionMapper.updateStatus(sec.getUri(), "deleted", 0L);
+                List<KgSectionPo> allSectionPos = kgSectionMapper.selectByStatus("active");
+                for (KgSectionPo po : allSectionPos) {
+                    if (!neo4jUris.contains(po.getUri())) {
+                        kgSectionMapper.updateStatus(po.getUri(), "deleted", 0L);
                         count++;
                     }
                 }
                 break;
             case "KnowledgePoint":
-                List<KgKnowledgePoint> allKps = kgKnowledgePointMapper.selectByStatus("active");
-                for (KgKnowledgePoint kp : allKps) {
-                    if (!neo4jUris.contains(kp.getUri())) {
-                        kgKnowledgePointMapper.updateStatus(kp.getUri(), "deleted", 0L);
+                List<KgKnowledgePointPo> allKpPos = kgKnowledgePointMapper.selectByStatus("active");
+                for (KgKnowledgePointPo po : allKpPos) {
+                    if (!neo4jUris.contains(po.getUri())) {
+                        kgKnowledgePointMapper.updateStatus(po.getUri(), "deleted", 0L);
                         count++;
                     }
                 }
@@ -568,7 +574,9 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
     @Override
     public KgSyncRecord createSyncRecord(String syncType, String scope, Long createdBy) {
         KgSyncRecord record = KgSyncRecord.create(syncType, scope, createdBy);
-        kgSyncRecordMapper.insert(record);
+        KgSyncRecordPo po = KgSyncRecordPo.from(record);
+        kgSyncRecordMapper.insert(po);
+        record.setId(po.getId());
         return record;
     }
 
@@ -579,11 +587,12 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
     public void completeSyncRecord(Long recordId, int insertedCount, int updatedCount,
                                    int statusChangedCount, String reconciliationStatus,
                                    String reconciliationDetails) {
-        KgSyncRecord record = kgSyncRecordMapper.selectById(recordId);
-        if (record != null) {
-            record.completeSuccess(insertedCount, updatedCount, statusChangedCount,
+        KgSyncRecordPo po = kgSyncRecordMapper.selectById(recordId);
+        if (po != null) {
+            KgSyncRecord entity = po.toEntity();
+            entity.completeSuccess(insertedCount, updatedCount, statusChangedCount,
                     reconciliationStatus, reconciliationDetails);
-            kgSyncRecordMapper.updateById(record);
+            kgSyncRecordMapper.updateById(KgSyncRecordPo.from(entity));
         }
     }
 
@@ -592,10 +601,11 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
      */
     @Override
     public void failSyncRecord(Long recordId, String errorMessage) {
-        KgSyncRecord record = kgSyncRecordMapper.selectById(recordId);
-        if (record != null) {
-            record.completeFailure(errorMessage);
-            kgSyncRecordMapper.updateById(record);
+        KgSyncRecordPo po = kgSyncRecordMapper.selectById(recordId);
+        if (po != null) {
+            KgSyncRecord entity = po.toEntity();
+            entity.completeFailure(errorMessage);
+            kgSyncRecordMapper.updateById(KgSyncRecordPo.from(entity));
         }
     }
 
@@ -604,7 +614,7 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
      */
     @Override
     public List<KgSyncRecord> getSyncRecords(int limit) {
-        return kgSyncRecordMapper.selectRecent(limit);
+        return KgSyncRecordPo.toEntityList(kgSyncRecordMapper.selectRecent(limit));
     }
 
     /**
@@ -612,8 +622,8 @@ public class Neo4jKgSyncService implements KgSyncDomainService {
      */
     @Override
     public KgSyncRecord getLatestSyncRecord() {
-        List<KgSyncRecord> records = kgSyncRecordMapper.selectRecent(1);
-        return records.isEmpty() ? null : records.get(0);
+        List<KgSyncRecordPo> records = kgSyncRecordMapper.selectRecent(1);
+        return records.isEmpty() ? null : records.get(0).toEntity();
     }
 
     // ==================== 任务 3.9: URI 校验逻辑 ====================

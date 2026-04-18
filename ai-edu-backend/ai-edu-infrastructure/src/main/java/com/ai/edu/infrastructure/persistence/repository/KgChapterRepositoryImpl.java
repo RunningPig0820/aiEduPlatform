@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.KgChapter;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgChapterMapper;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgChapterPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -20,27 +21,31 @@ public class KgChapterRepositoryImpl implements KgChapterRepository {
 
     @Override
     public KgChapter save(KgChapter chapter) {
-        if (chapter.getId() == null) {
-            kgChapterMapper.insert(chapter);
+        KgChapterPo po = KgChapterPo.from(chapter);
+        if (po.getId() == null) {
+            kgChapterMapper.insert(po);
+            chapter.setId(po.getId());
         } else {
-            kgChapterMapper.updateById(chapter);
+            kgChapterMapper.updateById(po);
         }
         return chapter;
     }
 
     @Override
     public Optional<KgChapter> findById(Long id) {
-        return Optional.ofNullable(kgChapterMapper.selectById(id));
+        KgChapterPo po = kgChapterMapper.selectById(id);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public Optional<KgChapter> findByUri(String uri) {
-        return Optional.ofNullable(kgChapterMapper.selectByUri(uri));
+        KgChapterPo po = kgChapterMapper.selectByUri(uri);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
 
     @Override
     public List<KgChapter> findByUris(List<String> uris) {
-        return kgChapterMapper.selectByUris(uris);
+        return KgChapterPo.toEntityList(kgChapterMapper.selectByUris(uris));
     }
 
     @Override

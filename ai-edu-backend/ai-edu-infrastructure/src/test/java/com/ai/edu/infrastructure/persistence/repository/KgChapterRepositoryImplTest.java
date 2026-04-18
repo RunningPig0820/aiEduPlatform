@@ -2,6 +2,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 
 import com.ai.edu.domain.edukg.model.entity.KgChapter;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgChapterPo;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.*;
@@ -61,7 +62,7 @@ class KgChapterRepositoryImplTest {
         // 验证 id 被自动填充
         assertNotNull(saved.getId());
         // 验证真实写入 H2
-        KgChapter found = kgChapterMapper.selectByUri(TEST_URI);
+        KgChapterPo found = kgChapterMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals(TEST_URI, found.getUri());
         assertEquals("测试章节", found.getLabel());
@@ -77,7 +78,9 @@ class KgChapterRepositoryImplTest {
     void save_existingEntity_shouldUpdate() {
         // 先插入一条
         KgChapter original = KgChapter.create(TEST_URI, "旧标签");
-        kgChapterMapper.insert(original);
+        KgChapterPo insertedPo = KgChapterPo.from(original);
+        kgChapterMapper.insert(insertedPo);
+        original.setId(insertedPo.getId());
         assertNotNull(original.getId());
 
         // 修改 label
@@ -86,7 +89,7 @@ class KgChapterRepositoryImplTest {
 
         // 验证更新
         assertEquals(original.getId(), updated.getId());
-        KgChapter found = kgChapterMapper.selectByUri(TEST_URI);
+        KgChapterPo found = kgChapterMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("新主题", found.getTopic());
     }
@@ -98,7 +101,7 @@ class KgChapterRepositoryImplTest {
     @DisplayName("findByUri 查找已存在的章节")
     void findByUri_shouldReturnPresent() {
         KgChapter chapter = KgChapter.create(TEST_URI, "测试章节");
-        kgChapterMapper.insert(chapter);
+        kgChapterMapper.insert(KgChapterPo.from(chapter));
 
         var result = kgChapterRepository.findByUri(TEST_URI);
 
@@ -127,9 +130,9 @@ class KgChapterRepositoryImplTest {
         KgChapter ch1 = KgChapter.create(TEST_URI, "章节1");
         KgChapter ch2 = KgChapter.create(TEST_URI_2, "章节2");
         KgChapter ch3 = KgChapter.create(TEST_URI_3, "章节3");
-        kgChapterMapper.insert(ch1);
-        kgChapterMapper.insert(ch2);
-        kgChapterMapper.insert(ch3);
+        kgChapterMapper.insert(KgChapterPo.from(ch1));
+        kgChapterMapper.insert(KgChapterPo.from(ch2));
+        kgChapterMapper.insert(KgChapterPo.from(ch3));
 
         List<KgChapter> result = kgChapterRepository.findByUris(
                 List.of(TEST_URI, TEST_URI_2));
@@ -154,7 +157,7 @@ class KgChapterRepositoryImplTest {
     @DisplayName("findByUris 部分匹配应只返回存在的")
     void findByUris_partialMatch_shouldReturnExisting() {
         KgChapter ch1 = KgChapter.create(TEST_URI, "章节1");
-        kgChapterMapper.insert(ch1);
+        kgChapterMapper.insert(KgChapterPo.from(ch1));
 
         List<KgChapter> result = kgChapterRepository.findByUris(
                 List.of(TEST_URI, "http://nonexistent/uri"));
@@ -170,11 +173,11 @@ class KgChapterRepositoryImplTest {
     @DisplayName("updateStatus 应更新 status 字段")
     void updateStatus_shouldChangeStatus() {
         KgChapter chapter = KgChapter.create(TEST_URI, "章节");
-        kgChapterMapper.insert(chapter);
+        kgChapterMapper.insert(KgChapterPo.from(chapter));
 
         kgChapterRepository.updateStatus(TEST_URI, "deleted");
 
-        KgChapter found = kgChapterMapper.selectByUri(TEST_URI);
+        KgChapterPo found = kgChapterMapper.selectByUri(TEST_URI);
         assertNotNull(found);
         assertEquals("deleted", found.getStatus());
         // is_deleted 不会被 updateStatus 修改
@@ -188,7 +191,7 @@ class KgChapterRepositoryImplTest {
     @DisplayName("软删除后 findByUri 仍能查到（updateStatus 不改 is_deleted）")
     void softDelete_findByUri_shouldStillFind() {
         KgChapter chapter = KgChapter.create(TEST_URI, "章节");
-        kgChapterMapper.insert(chapter);
+        kgChapterMapper.insert(KgChapterPo.from(chapter));
 
         kgChapterRepository.updateStatus(TEST_URI, "deleted");
 
@@ -203,8 +206,8 @@ class KgChapterRepositoryImplTest {
     void softDelete_findByUris_shouldStillFind() {
         KgChapter ch1 = KgChapter.create(TEST_URI, "章节1");
         KgChapter ch2 = KgChapter.create(TEST_URI_2, "章节2");
-        kgChapterMapper.insert(ch1);
-        kgChapterMapper.insert(ch2);
+        kgChapterMapper.insert(KgChapterPo.from(ch1));
+        kgChapterMapper.insert(KgChapterPo.from(ch2));
 
         kgChapterRepository.updateStatus(TEST_URI, "deleted");
 
@@ -221,8 +224,9 @@ class KgChapterRepositoryImplTest {
     @DisplayName("findById 应通过主键查找")
     void findById_shouldReturnPresent() {
         KgChapter chapter = KgChapter.create(TEST_URI, "章节");
-        kgChapterMapper.insert(chapter);
-        Long id = chapter.getId();
+        KgChapterPo insertedPo = KgChapterPo.from(chapter);
+        kgChapterMapper.insert(insertedPo);
+        Long id = insertedPo.getId();
 
         var result = kgChapterRepository.findById(id);
 

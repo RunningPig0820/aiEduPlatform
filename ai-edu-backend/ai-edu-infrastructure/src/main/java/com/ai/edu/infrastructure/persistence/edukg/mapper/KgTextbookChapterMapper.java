@@ -1,6 +1,6 @@
 package com.ai.edu.infrastructure.persistence.edukg.mapper;
 
-import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookChapterPo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.dynamic.datasource.annotation.DS;
 import org.apache.ibatis.annotations.*;
@@ -12,13 +12,13 @@ import java.util.List;
  */
 @Mapper
 @DS("kg")
-public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapter> {
+public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapterPo> {
 
     @Select("SELECT * FROM t_kg_textbook_chapter WHERE textbook_uri = #{textbookUri} AND is_deleted = false ORDER BY order_index")
-    List<KgTextbookChapter> selectByTextbookUri(@Param("textbookUri") String textbookUri);
+    List<KgTextbookChapterPo> selectByTextbookUri(@Param("textbookUri") String textbookUri);
 
     @Select("SELECT * FROM t_kg_textbook_chapter WHERE chapter_uri = #{chapterUri} AND is_deleted = false")
-    List<KgTextbookChapter> selectByChapterUri(@Param("chapterUri") String chapterUri);
+    List<KgTextbookChapterPo> selectByChapterUri(@Param("chapterUri") String chapterUri);
 
     @Update("UPDATE t_kg_textbook_chapter SET is_deleted = 1, modified_by = #{modifiedBy} WHERE is_deleted = false")
     int batchDeleteAll(@Param("modifiedBy") Long modifiedBy);
@@ -39,7 +39,7 @@ public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapter> {
     int softDeleteByTextbookUri(@Param("textbookUri") String textbookUri, @Param("modifiedBy") Long modifiedBy);
 
     @Select("SELECT * FROM t_kg_textbook_chapter WHERE is_deleted = false")
-    List<KgTextbookChapter> selectAllActiveRelations();
+    List<KgTextbookChapterPo> selectAllActiveRelations();
 
     @Insert("<script>" +
             "INSERT INTO t_kg_textbook_chapter (textbook_uri, chapter_uri, order_index, created_by, modified_by, is_deleted) VALUES " +
@@ -47,5 +47,5 @@ public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapter> {
             "(#{item.textbookUri}, #{item.chapterUri}, #{item.orderIndex}, #{item.createdBy}, #{item.modifiedBy}, 0)" +
             "</foreach>" +
             "</script>")
-    int batchInsert(@Param("list") List<KgTextbookChapter> relations);
+    int batchInsert(@Param("list") List<KgTextbookChapterPo> relations);
 }

@@ -1,6 +1,6 @@
 package com.ai.edu.infrastructure.persistence.edukg.mapper;
 
-import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
+import com.ai.edu.infrastructure.persistence.edukg.po.KgChapterSectionPo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.dynamic.datasource.annotation.DS;
 import org.apache.ibatis.annotations.*;
@@ -12,13 +12,13 @@ import java.util.List;
  */
 @Mapper
 @DS("kg")
-public interface KgChapterSectionMapper extends BaseMapper<KgChapterSection> {
+public interface KgChapterSectionMapper extends BaseMapper<KgChapterSectionPo> {
 
     @Select("SELECT * FROM t_kg_chapter_section WHERE chapter_uri = #{chapterUri} AND is_deleted = false ORDER BY order_index")
-    List<KgChapterSection> selectByChapterUri(@Param("chapterUri") String chapterUri);
+    List<KgChapterSectionPo> selectByChapterUri(@Param("chapterUri") String chapterUri);
 
     @Select("SELECT * FROM t_kg_chapter_section WHERE section_uri = #{sectionUri} AND is_deleted = false")
-    List<KgChapterSection> selectBySectionUri(@Param("sectionUri") String sectionUri);
+    List<KgChapterSectionPo> selectBySectionUri(@Param("sectionUri") String sectionUri);
 
     @Update("UPDATE t_kg_chapter_section SET is_deleted = 1, modified_by = #{modifiedBy} WHERE is_deleted = false")
     int batchDeleteAll(@Param("modifiedBy") Long modifiedBy);
@@ -39,7 +39,7 @@ public interface KgChapterSectionMapper extends BaseMapper<KgChapterSection> {
     int softDeleteByChapterUri(@Param("chapterUri") String chapterUri, @Param("modifiedBy") Long modifiedBy);
 
     @Select("SELECT * FROM t_kg_chapter_section WHERE is_deleted = false")
-    List<KgChapterSection> selectAllActiveRelations();
+    List<KgChapterSectionPo> selectAllActiveRelations();
 
     @Insert("<script>" +
             "INSERT INTO t_kg_chapter_section (chapter_uri, section_uri, order_index, created_by, modified_by, is_deleted) VALUES " +
@@ -47,5 +47,5 @@ public interface KgChapterSectionMapper extends BaseMapper<KgChapterSection> {
             "(#{item.chapterUri}, #{item.sectionUri}, #{item.orderIndex}, #{item.createdBy}, #{item.modifiedBy}, 0)" +
             "</foreach>" +
             "</script>")
-    int batchInsert(@Param("list") List<KgChapterSection> relations);
+    int batchInsert(@Param("list") List<KgChapterSectionPo> relations);
 }
