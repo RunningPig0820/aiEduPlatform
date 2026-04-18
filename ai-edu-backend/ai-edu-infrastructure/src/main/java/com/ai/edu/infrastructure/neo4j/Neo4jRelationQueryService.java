@@ -6,7 +6,7 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
 import com.ai.edu.domain.edukg.model.result.RelatedConcept;
 import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
-import com.ai.edu.domain.edukg.service.KgRelationQueryDomainService;
+import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
 import com.ai.edu.infrastructure.cache.Neo4jRelationCacheService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +30,7 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-public class Neo4jRelationQueryService implements KgRelationQueryDomainService {
+public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepository {
 
     @Resource
     private Driver neo4jDriver;

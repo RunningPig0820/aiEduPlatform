@@ -4,6 +4,7 @@ import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.BatchRelationsDTO;
 import com.ai.edu.application.dto.kg.HealthDTO;
 import com.ai.edu.application.dto.kg.KgGraphDTO;
+import com.ai.edu.common.dto.kg.HealthCheckResult;
 import com.ai.edu.domain.edukg.model.entity.KgChapter;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.model.entity.KgSection;
@@ -13,10 +14,11 @@ import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
-import com.ai.edu.domain.edukg.service.KgRelationQueryDomainService;
-import com.ai.edu.domain.edukg.service.KgSyncDomainService;
+import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
+import com.ai.edu.domain.edukg.service.KgSyncRecordService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -35,25 +37,21 @@ import java.util.Optional;
 public class KgNeo4jService {
 
     @Resource
-    private KgSyncDomainService kgSyncDomainService;
+    @Qualifier("neo4jSyncRecordService")
+    private KgSyncRecordService recordService;
 
     @Resource
-    private KgRelationQueryDomainService kgRelationQueryDomainService;
+    private KgKnowledgeGraphQueryRepository kgKnowledgeGraphQueryRepository;
 
     @Resource
     private KgKnowledgePointRepository kgKnowledgePointRepository;
 
-    @Resource
-    private KgSectionRepository kgSectionRepository;
-
-    @Resource
-    private KgChapterRepository kgChapterRepository;
 
     /**
      * Neo4j 健康检查
      */
     public HealthDTO getNeo4jHealth() {
-        KgSyncDomainService.HealthCheckResult health = kgSyncDomainService.checkNeo4jHealth();
+        HealthCheckResult health = recordService.checkNeo4jHealth();
         return KgConvert.toHealthDTO(health.healthy, health.responseTimeMs, health.message);
     }
 
@@ -68,15 +66,15 @@ public class KgNeo4jService {
                 List<String> related = new ArrayList<>();
 
                 // 查询教材-章节关联
-                kgRelationQueryDomainService.getTextbookChapterRelations(uri).forEach(rel ->
+                kgKnowledgeGraphQueryRepository.getTextbookChapterRelations(uri).forEach(rel ->
                         related.add(rel.getChapterUri()));
 
                 // 查询章节-小节关联
-                kgRelationQueryDomainService.getChapterSectionRelations(uri).forEach(rel ->
+                kgKnowledgeGraphQueryRepository.getChapterSectionRelations(uri).forEach(rel ->
                         related.add(rel.getSectionUri()));
 
                 // 查询小节-知识点关联
-                kgRelationQueryDomainService.getSectionKPRelations(uri).forEach(rel ->
+                kgKnowledgeGraphQueryRepository.getSectionKPRelations(uri).forEach(rel ->
                         related.add(rel.getKpUri()));
 
                 uriToRelated.put(uri, related);
@@ -101,7 +99,7 @@ public class KgNeo4jService {
         KgKnowledgePoint kp = kpOpt.get();
 
         // 从领域服务获取图谱数据
-        GraphQueryResult graphData = kgRelationQueryDomainService.queryGraphForKnowledgePoint(kpUri);
+        GraphQueryResult graphData = kgKnowledgeGraphQueryRepository.queryGraphForKnowledgePoint(kpUri);
 
         List<KgGraphDTO.GraphNode> nodes = new ArrayList<>();
         List<KgGraphDTO.GraphEdge> edges = new ArrayList<>();

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 知识点仓储实现
@@ -46,6 +48,25 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
     @Override
     public List<KgKnowledgePoint> findByUris(List<String> uris) {
         return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByUris(uris));
+    }
+
+    @Override
+    public int upsert(List<KgKnowledgePoint> knowledgePoints) {
+        if (knowledgePoints == null || knowledgePoints.isEmpty()) {
+            return 0;
+        }
+        List<String> uris = knowledgePoints.stream().map(KgKnowledgePoint::getUri).toList();
+        List<KgKnowledgePointPo> existingPos = kgKnowledgePointMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgKnowledgePointPo::getUri).collect(Collectors.toSet());
+
+        int count = 0;
+        for (KgKnowledgePoint kp : knowledgePoints) {
+            if (!existingUris.contains(kp.getUri())) {
+                kgKnowledgePointMapper.insert(KgKnowledgePointPo.from(kp));
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override

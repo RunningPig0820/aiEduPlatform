@@ -2,11 +2,12 @@ package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.BatchRelationsDTO;
 import com.ai.edu.application.dto.kg.HealthDTO;
+import com.ai.edu.common.dto.kg.HealthCheckResult;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
-import com.ai.edu.domain.edukg.service.KgRelationQueryDomainService;
-import com.ai.edu.domain.edukg.service.KgSyncDomainService;
+import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
+import com.ai.edu.domain.edukg.service.KgSyncRecordService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,16 +23,16 @@ import static org.mockito.Mockito.*;
 /**
  * KgNeo4jService 单元测试
  *
- * 测试目标：Mock 领域服务和缓存，验证 Neo4j 查询编排
+ * 测试目标：Mock 领域服务和基础设施服务，验证 Neo4j 查询编排
  */
 @ExtendWith(MockitoExtension.class)
 @TestMethodOrder(OrderAnnotation.class)
 class KgNeo4jServiceTest {
 
     @Mock
-    private KgSyncDomainService kgSyncDomainService;
+    private KgSyncRecordService recordService;
     @Mock
-    private KgRelationQueryDomainService kgRelationQueryDomainService;
+    private KgKnowledgeGraphQueryRepository kgKnowledgeGraphQueryRepository;
 
     @InjectMocks
     private KgNeo4jService kgNeo4jService;
@@ -42,8 +43,8 @@ class KgNeo4jServiceTest {
     @Order(1)
     @DisplayName("getNeo4jHealth 健康 — 应返回 available=true")
     void getNeo4jHealth_healthy_shouldReturnAvailable() {
-        when(kgSyncDomainService.checkNeo4jHealth())
-                .thenReturn(new KgSyncDomainService.HealthCheckResult(true, 15, "Connected"));
+        when(recordService.checkNeo4jHealth())
+                .thenReturn(new HealthCheckResult(true, 15, "Connected"));
 
         HealthDTO result = kgNeo4jService.getNeo4jHealth();
 
@@ -57,8 +58,8 @@ class KgNeo4jServiceTest {
     @Order(2)
     @DisplayName("getNeo4jHealth 异常 — 应返回 available=false")
     void getNeo4jHealth_unhealthy_shouldReturnUnavailable() {
-        when(kgSyncDomainService.checkNeo4jHealth())
-                .thenReturn(new KgSyncDomainService.HealthCheckResult(false, 0, "Connection refused"));
+        when(recordService.checkNeo4jHealth())
+                .thenReturn(new HealthCheckResult(false, 0, "Connection refused"));
 
         HealthDTO result = kgNeo4jService.getNeo4jHealth();
 
@@ -76,16 +77,16 @@ class KgNeo4jServiceTest {
     void batchGetConceptRelations_normal_shouldMergeAllRelations() {
         List<String> uris = List.of("uri:tb1");
 
-        when(kgRelationQueryDomainService.getTextbookChapterRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getTextbookChapterRelations("uri:tb1"))
                 .thenReturn(List.of(
                         KgTextbookChapter.create("uri:tb1", "uri:ch1", 1),
                         KgTextbookChapter.create("uri:tb1", "uri:ch2", 2)
                 ));
-        when(kgRelationQueryDomainService.getChapterSectionRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getChapterSectionRelations("uri:tb1"))
                 .thenReturn(List.of(
                         KgChapterSection.create("uri:tb1", "uri:sec1", 1)
                 ));
-        when(kgRelationQueryDomainService.getSectionKPRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getSectionKPRelations("uri:tb1"))
                 .thenReturn(List.of(
                         KgSectionKP.create("uri:tb1", "uri:kp1", 1),
                         KgSectionKP.create("uri:tb1", "uri:kp2", 2)
@@ -111,7 +112,7 @@ class KgNeo4jServiceTest {
     void batchGetConceptRelations_neo4jUnavailable_shouldFallbackToEmpty() {
         List<String> uris = List.of("uri:tb1");
 
-        when(kgRelationQueryDomainService.getTextbookChapterRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getTextbookChapterRelations("uri:tb1"))
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BatchRelationsDTO result = kgNeo4jService.batchGetConceptRelations(uris);
@@ -128,18 +129,18 @@ class KgNeo4jServiceTest {
     void batchGetConceptRelations_partialUriNoRelations_shouldReturnEmptyForThose() {
         List<String> uris = List.of("uri:tb1", "uri:tb2");
 
-        when(kgRelationQueryDomainService.getTextbookChapterRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getTextbookChapterRelations("uri:tb1"))
                 .thenReturn(List.of(KgTextbookChapter.create("uri:tb1", "uri:ch1", 1)));
-        when(kgRelationQueryDomainService.getChapterSectionRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getChapterSectionRelations("uri:tb1"))
                 .thenReturn(List.of());
-        when(kgRelationQueryDomainService.getSectionKPRelations("uri:tb1"))
+        when(kgKnowledgeGraphQueryRepository.getSectionKPRelations("uri:tb1"))
                 .thenReturn(List.of());
 
-        when(kgRelationQueryDomainService.getTextbookChapterRelations("uri:tb2"))
+        when(kgKnowledgeGraphQueryRepository.getTextbookChapterRelations("uri:tb2"))
                 .thenReturn(List.of());
-        when(kgRelationQueryDomainService.getChapterSectionRelations("uri:tb2"))
+        when(kgKnowledgeGraphQueryRepository.getChapterSectionRelations("uri:tb2"))
                 .thenReturn(List.of());
-        when(kgRelationQueryDomainService.getSectionKPRelations("uri:tb2"))
+        when(kgKnowledgeGraphQueryRepository.getSectionKPRelations("uri:tb2"))
                 .thenReturn(List.of());
 
         BatchRelationsDTO result = kgNeo4jService.batchGetConceptRelations(uris);

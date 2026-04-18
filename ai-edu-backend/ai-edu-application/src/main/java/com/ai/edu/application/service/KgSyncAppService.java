@@ -6,16 +6,26 @@ import com.ai.edu.application.dto.kg.SyncRequest;
 import com.ai.edu.application.dto.kg.SyncResult;
 import com.ai.edu.application.dto.kg.SyncStatusDTO;
 import com.ai.edu.common.constant.ErrorCode;
+import com.ai.edu.common.dto.kg.ReconciliationResult;
+import com.ai.edu.common.dto.kg.UriValidationResult;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
-import com.ai.edu.domain.edukg.service.KgSyncDomainService;
+import com.ai.edu.domain.edukg.repository.KgChapterRepository;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.edukg.repository.KgSectionRepository;
+import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
+import com.ai.edu.domain.edukg.service.KgNodeSyncService;
+import com.ai.edu.domain.edukg.service.KgRelationSyncService;
+import com.ai.edu.domain.edukg.service.KgSyncRecordService;
 import com.ai.edu.domain.shared.service.RedisService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
@@ -32,7 +42,28 @@ import java.util.stream.Collectors;
 public class KgSyncAppService {
 
     @Resource
-    private KgSyncDomainService kgSyncDomainService;
+    @Qualifier("neo4jNodeSyncService")
+    private KgNodeSyncService nodeSync;
+
+    @Resource
+    @Qualifier("neo4jRelationSyncService")
+    private KgRelationSyncService relationSync;
+
+    @Resource
+    @Qualifier("neo4jSyncRecordService")
+    private KgSyncRecordService recordService;
+
+    @Resource
+    private KgTextbookRepository kgTextbookRepository;
+
+    @Resource
+    private KgChapterRepository kgChapterRepository;
+
+    @Resource
+    private KgSectionRepository kgSectionRepository;
+
+    @Resource
+    private KgKnowledgePointRepository kgKnowledgePointRepository;
 
     @Resource
     private RedisService redisService;
@@ -46,6 +77,7 @@ public class KgSyncAppService {
      * @param request 同步请求（必传参数：subject + edition）
      * @return 同步结果
      */
+    @Transactional("kg")
     public SyncResult syncFull(SyncRequest request) {
         // 同步锁检查（Redis 分布式锁）
         String lockValue = UUID.randomUUID().toString();
@@ -66,7 +98,7 @@ public class KgSyncAppService {
             String scope = buildScope(request);
 
             // 创建同步记录
-            syncRecord = kgSyncDomainService.createSyncRecord("full", scope, 0L);
+            syncRecord = recordService.createSyncRecord("full", scope, 0L);
 
             // 执行同步
             SyncExecutionResult syncResult = executeSync(request);
@@ -75,10 +107,10 @@ public class KgSyncAppService {
             int statusChangedCount = markDeletedNodes();
 
             // 对账校验
-            KgSyncDomainService.ReconciliationResult reconciliation = reconcile();
+            ReconciliationResult reconciliation = reconcile();
 
             // 完成同步记录
-            kgSyncDomainService.completeSyncRecord(
+            recordService.completeSyncRecord(
                     syncRecord.getId(),
                     syncResult.insertedCount,
                     syncResult.updatedCount,
@@ -106,14 +138,14 @@ public class KgSyncAppService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
             }
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "同步失败: " + e.getMessage());
         } finally {
@@ -145,10 +177,10 @@ public class KgSyncAppService {
         try {
             // 创建同步记录
             String scope = buildScope(request);
-            syncRecord = kgSyncDomainService.createSyncRecord("textbook", scope, 0L);
+            syncRecord = recordService.createSyncRecord("textbook", scope, 0L);
 
             // 从 Neo4j 读取教材节点
-            List<KgTextbook> textbooks = kgSyncDomainService.syncTextbookNodes();
+            List<KgTextbook> textbooks = nodeSync.syncTextbookNodes();
 
             // 按 edition 过滤
             textbooks = textbooks.stream()
@@ -156,10 +188,10 @@ public class KgSyncAppService {
                     .toList();
 
             // 写入 MySQL（按 uri 去重：insert or update）
-            int insertedCount = kgSyncDomainService.upsertTextbooks(textbooks);
+            int insertedCount = kgTextbookRepository.upsert(textbooks);
 
             // 完成同步记录
-            kgSyncDomainService.completeSyncRecord(
+            recordService.completeSyncRecord(
                     syncRecord.getId(),
                     insertedCount,
                     0,
@@ -184,14 +216,14 @@ public class KgSyncAppService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
             }
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "教材同步失败: " + e.getMessage());
         } finally {
@@ -203,7 +235,7 @@ public class KgSyncAppService {
      * 查询同步状态
      */
     public SyncStatusDTO getSyncStatus() {
-        KgSyncRecord latest = kgSyncDomainService.getLatestSyncRecord();
+        KgSyncRecord latest = recordService.getLatestSyncRecord();
         return KgConvert.toSyncStatusDTO(latest);
     }
 
@@ -211,7 +243,7 @@ public class KgSyncAppService {
      * 查询同步历史记录
      */
     public List<SyncRecordDTO> getSyncRecords(int page, int size) {
-        List<KgSyncRecord> records = kgSyncDomainService.getSyncRecords(size);
+        List<KgSyncRecord> records = recordService.getSyncRecords(size);
         return KgConvert.toSyncRecordDTOs(records);
     }
 
@@ -244,7 +276,7 @@ public class KgSyncAppService {
         int totalUpdated = 0;
 
         // 1. 同步教材节点
-        List<KgTextbook> textbooks = kgSyncDomainService.syncTextbookNodes();
+        List<KgTextbook> textbooks = nodeSync.syncTextbookNodes();
         // 按 edition / subject / grade 过滤
         if (request.getEdition() != null && !request.getEdition().isBlank()) {
             textbooks = textbooks.stream()
@@ -265,11 +297,11 @@ public class KgSyncAppService {
         Set<String> textbookUris = textbooks.stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
-        totalInserted += kgSyncDomainService.upsertTextbooks(textbooks);
+        totalInserted += kgTextbookRepository.upsert(textbooks);
 
         // 2. 同步章节节点
-        List<KgChapter> chapters = kgSyncDomainService.syncChapterNodes();
-        int chapterInserts = kgSyncDomainService.upsertChapters(chapters);
+        List<KgChapter> chapters = nodeSync.syncChapterNodes();
+        int chapterInserts = kgChapterRepository.upsert(chapters);
         // TODO: domain service upsert methods currently return total count (insert+update)
         // For now, treat all as inserted. Future: return separate insert/update counts.
         totalInserted += chapterInserts;
@@ -278,36 +310,36 @@ public class KgSyncAppService {
                 .collect(Collectors.toSet());
 
         // 3. 同步小节节点
-        List<KgSection> sections = kgSyncDomainService.syncSectionNodes();
-        int sectionInserts = kgSyncDomainService.upsertSections(sections);
+        List<KgSection> sections = nodeSync.syncSectionNodes();
+        int sectionInserts = kgSectionRepository.upsert(sections);
         totalInserted += sectionInserts;
         Set<String> sectionUris = sections.stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
 
         // 4. 同步知识点节点
-        List<KgKnowledgePoint> kps = kgSyncDomainService.syncKnowledgePointNodes();
-        int kpInserts = kgSyncDomainService.upsertKnowledgePoints(kps);
+        List<KgKnowledgePoint> kps = nodeSync.syncKnowledgePointNodes();
+        int kpInserts = kgKnowledgePointRepository.upsert(kps);
         totalInserted += kpInserts;
         Set<String> kpUris = kps.stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
 
         // 5. URI 校验
-        KgSyncDomainService.UriValidationResult uriValidation = kgSyncDomainService.validateAllUris(textbooks, chapters, sections, kps);
+        UriValidationResult uriValidation = recordService.validateAllUris(textbooks, chapters, sections, kps);
         if (!uriValidation.valid) {
             log.warn("URI validation warnings: {}", uriValidation.errors);
         }
 
         // 6. 同步层级关联
-        List<KgTextbookChapter> tbChRelations = kgSyncDomainService.syncTextbookChapterRelations();
-        totalInserted += kgSyncDomainService.rebuildTextbookChapterRelations(tbChRelations);
+        List<KgTextbookChapter> tbChRelations = relationSync.syncTextbookChapterRelations();
+        totalInserted += relationSync.rebuildTextbookChapterRelations(tbChRelations);
 
-        List<KgChapterSection> chSecRelations = kgSyncDomainService.syncChapterSectionRelations();
-        totalInserted += kgSyncDomainService.rebuildChapterSectionRelations(chSecRelations);
+        List<KgChapterSection> chSecRelations = relationSync.syncChapterSectionRelations();
+        totalInserted += relationSync.rebuildChapterSectionRelations(chSecRelations);
 
-        List<KgSectionKP> secKpRelations = kgSyncDomainService.syncSectionKPRelations();
-        totalInserted += kgSyncDomainService.rebuildSectionKPRelations(secKpRelations);
+        List<KgSectionKP> secKpRelations = relationSync.syncSectionKPRelations();
+        totalInserted += relationSync.rebuildSectionKPRelations(secKpRelations);
 
         return new SyncExecutionResult(totalInserted, totalUpdated);
     }
@@ -315,48 +347,48 @@ public class KgSyncAppService {
     private int markDeletedNodes() {
         int totalChanged = 0;
 
-        Set<String> neo4jTextbookUris = kgSyncDomainService.syncTextbookNodes().stream()
+        Set<String> neo4jTextbookUris = nodeSync.syncTextbookNodes().stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += kgSyncDomainService.markDeletedNodes("Textbook", neo4jTextbookUris);
+        totalChanged += nodeSync.markDeletedNodes("Textbook", neo4jTextbookUris);
 
-        Set<String> neo4jChapterUris = kgSyncDomainService.syncChapterNodes().stream()
+        Set<String> neo4jChapterUris = nodeSync.syncChapterNodes().stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += kgSyncDomainService.markDeletedNodes("Chapter", neo4jChapterUris);
+        totalChanged += nodeSync.markDeletedNodes("Chapter", neo4jChapterUris);
 
-        Set<String> neo4jSectionUris = kgSyncDomainService.syncSectionNodes().stream()
+        Set<String> neo4jSectionUris = nodeSync.syncSectionNodes().stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += kgSyncDomainService.markDeletedNodes("Section", neo4jSectionUris);
+        totalChanged += nodeSync.markDeletedNodes("Section", neo4jSectionUris);
 
-        Set<String> neo4jKpUris = kgSyncDomainService.syncKnowledgePointNodes().stream()
+        Set<String> neo4jKpUris = nodeSync.syncKnowledgePointNodes().stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += kgSyncDomainService.markDeletedNodes("KnowledgePoint", neo4jKpUris);
+        totalChanged += nodeSync.markDeletedNodes("KnowledgePoint", neo4jKpUris);
 
         return totalChanged;
     }
 
-    private KgSyncDomainService.ReconciliationResult reconcile() {
-        Set<String> neo4jTextbookUris = kgSyncDomainService.syncTextbookNodes().stream()
+    private ReconciliationResult reconcile() {
+        Set<String> neo4jTextbookUris = nodeSync.syncTextbookNodes().stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jChapterUris = kgSyncDomainService.syncChapterNodes().stream()
+        Set<String> neo4jChapterUris = nodeSync.syncChapterNodes().stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jSectionUris = kgSyncDomainService.syncSectionNodes().stream()
+        Set<String> neo4jSectionUris = nodeSync.syncSectionNodes().stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jKpUris = kgSyncDomainService.syncKnowledgePointNodes().stream()
+        Set<String> neo4jKpUris = nodeSync.syncKnowledgePointNodes().stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
 
-        List<KgTextbookChapter> tbChRelations = kgSyncDomainService.syncTextbookChapterRelations();
-        List<KgChapterSection> chSecRelations = kgSyncDomainService.syncChapterSectionRelations();
-        List<KgSectionKP> secKpRelations = kgSyncDomainService.syncSectionKPRelations();
+        List<KgTextbookChapter> tbChRelations = relationSync.syncTextbookChapterRelations();
+        List<KgChapterSection> chSecRelations = relationSync.syncChapterSectionRelations();
+        List<KgSectionKP> secKpRelations = relationSync.syncSectionKPRelations();
 
-        return kgSyncDomainService.reconcile(
+        return recordService.reconcile(
                 neo4jTextbookUris, neo4jChapterUris, neo4jSectionUris, neo4jKpUris,
                 tbChRelations, chSecRelations, secKpRelations
         );

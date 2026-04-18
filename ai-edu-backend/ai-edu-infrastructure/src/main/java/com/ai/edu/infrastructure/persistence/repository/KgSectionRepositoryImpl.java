@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 小节仓储实现
@@ -46,6 +48,25 @@ public class KgSectionRepositoryImpl implements KgSectionRepository {
     @Override
     public List<KgSection> findByUris(List<String> uris) {
         return KgSectionPo.toEntityList(kgSectionMapper.selectByUris(uris));
+    }
+
+    @Override
+    public int upsert(List<KgSection> sections) {
+        if (sections == null || sections.isEmpty()) {
+            return 0;
+        }
+        List<String> uris = sections.stream().map(KgSection::getUri).toList();
+        List<KgSectionPo> existingPos = kgSectionMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgSectionPo::getUri).collect(Collectors.toSet());
+
+        int count = 0;
+        for (KgSection sec : sections) {
+            if (!existingUris.contains(sec.getUri())) {
+                kgSectionMapper.insert(KgSectionPo.from(sec));
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override

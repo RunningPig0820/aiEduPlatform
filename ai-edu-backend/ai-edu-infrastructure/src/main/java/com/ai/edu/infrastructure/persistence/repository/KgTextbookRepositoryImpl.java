@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 教材仓储实现
@@ -66,6 +68,29 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     @Override
     public List<String> findDistinctGradesBySubject(String subject) {
         return kgTextbookMapper.selectDistinctGradesBySubject(subject);
+    }
+
+    @Override
+    public int upsert(List<KgTextbook> textbooks) {
+        if (textbooks == null || textbooks.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (KgTextbook tb : textbooks) {
+            KgTextbookPo existingPo = kgTextbookMapper.selectByUri(tb.getUri());
+            if (existingPo == null) {
+                KgTextbookPo po = KgTextbookPo.from(tb);
+                kgTextbookMapper.insert(po);
+                tb.setId(po.getId());
+                count++;
+            } else {
+                KgTextbook existingEntity = existingPo.toEntity();
+                existingEntity.updateFrom(tb);
+                existingPo = KgTextbookPo.from(existingEntity);
+                kgTextbookMapper.updateById(existingPo);
+            }
+        }
+        return count;
     }
 
     @Override

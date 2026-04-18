@@ -18,5 +18,11 @@ public interface KgChapterRepository {
 
     List<KgChapter> findByUris(List<String> uris);
 
+    /**
+     * 批量 UPSERT：按 URI 判断 insert（章节只插入新增，不更新已有）
+     * @return 插入的数量
+     */
+    int upsert(List<KgChapter> chapters);
+
     void updateStatus(String uri, String status);
 }

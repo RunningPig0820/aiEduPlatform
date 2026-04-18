@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 章节仓储实现
@@ -46,6 +48,25 @@ public class KgChapterRepositoryImpl implements KgChapterRepository {
     @Override
     public List<KgChapter> findByUris(List<String> uris) {
         return KgChapterPo.toEntityList(kgChapterMapper.selectByUris(uris));
+    }
+
+    @Override
+    public int upsert(List<KgChapter> chapters) {
+        if (chapters == null || chapters.isEmpty()) {
+            return 0;
+        }
+        List<String> uris = chapters.stream().map(KgChapter::getUri).toList();
+        List<KgChapterPo> existingPos = kgChapterMapper.selectByUris(uris);
+        Set<String> existingUris = existingPos.stream().map(KgChapterPo::getUri).collect(Collectors.toSet());
+
+        int count = 0;
+        for (KgChapter ch : chapters) {
+            if (!existingUris.contains(ch.getUri())) {
+                kgChapterMapper.insert(KgChapterPo.from(ch));
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override

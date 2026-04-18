@@ -32,5 +32,11 @@ public interface KgTextbookRepository {
      */
     List<String> findDistinctGradesBySubject(String subject);
 
+    /**
+     * 批量 UPSERT：按 URI 判断 insert 或 update
+     * @return 插入的数量（不包括更新）
+     */
+    int upsert(List<KgTextbook> textbooks);
+
     void updateStatus(String uri, String status);
 }

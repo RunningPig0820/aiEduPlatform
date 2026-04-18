@@ -18,6 +18,12 @@ public interface KgKnowledgePointRepository {
 
     List<KgKnowledgePoint> findByUris(List<String> uris);
 
+    /**
+     * 批量 UPSERT：按 URI 判断 insert（知识点只插入新增，不更新已有）
+     * @return 插入的数量
+     */
+    int upsert(List<KgKnowledgePoint> knowledgePoints);
+
     List<KgKnowledgePoint> findByStatus(String status);
 
     void updateStatus(String uri, String status);
