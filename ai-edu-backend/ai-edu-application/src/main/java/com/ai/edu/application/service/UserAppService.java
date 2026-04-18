@@ -8,6 +8,7 @@ import com.ai.edu.common.constant.LoginType;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
+import com.ai.edu.domain.user.model.entity.User.PasswordChangeResult;
 import com.ai.edu.domain.user.model.valueobject.VerificationCode;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.domain.user.repository.VerificationCodeRepository;
@@ -133,7 +134,7 @@ public class UserAppService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误"));
 
-        if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
+        if (!user.verifyPassword(request.getPassword(), PasswordUtil::matches)) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误");
         }
 
@@ -151,7 +152,7 @@ public class UserAppService {
         User user = userRepository.findByPhone(request.getPhone())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS, "手机号或密码错误"));
 
-        if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
+        if (!user.verifyPassword(request.getPassword(), PasswordUtil::matches)) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "手机号或密码错误");
         }
 
@@ -283,9 +284,9 @@ public class UserAppService {
         User user = userRepository.findByPhone(request.getPhone())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PHONE_NOT_REGISTERED, "手机号未注册"));
 
-        // 修改密码
+        // 重置密码（验证码已验证身份）
         String encodedPassword = PasswordUtil.encode(request.getNewPassword());
-        user.changePassword(encodedPassword);
+        user.setNewPassword(encodedPassword);
 
         userRepository.save(user);
 
@@ -308,19 +309,15 @@ public class UserAppService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在"));
 
-        // 验证原密码
-        if (!PasswordUtil.matches(request.getOldPassword(), user.getPassword())) {
+        // 修改密码（领域规则：校验旧密码、新旧不能相同）
+        String encodedPassword = PasswordUtil.encode(request.getNewPassword());
+        PasswordChangeResult result = user.changePassword(request.getOldPassword(), encodedPassword, PasswordUtil::matches);
+        if (result == PasswordChangeResult.OLD_PASSWORD_WRONG) {
             throw new BusinessException(ErrorCode.OLD_PASSWORD_WRONG, "原密码错误");
         }
-
-        // 检查新密码是否与原密码相同
-        if (PasswordUtil.matches(request.getNewPassword(), user.getPassword())) {
+        if (result == PasswordChangeResult.SAME_AS_OLD) {
             throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD, "新密码不能与原密码相同");
         }
-
-        // 修改密码
-        String encodedPassword = PasswordUtil.encode(request.getNewPassword());
-        user.changePassword(encodedPassword);
 
         userRepository.save(user);
 

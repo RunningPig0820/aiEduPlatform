@@ -1,5 +1,6 @@
 package com.ai.edu.domain.user.model.entity;
 
+import com.ai.edu.domain.user.service.PasswordVerifier;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -59,10 +60,33 @@ public class User {
     }
 
     /**
-     * 修改密码
+     * 验证密码
      */
-    public void changePassword(String newPassword) {
-        this.password = newPassword;
+    public boolean verifyPassword(String rawPassword, PasswordVerifier verifier) {
+        return verifier.matches(rawPassword, this.password);
+    }
+
+    /**
+     * 设置新密码（用于密码重置等已验证身份的场景）
+     */
+    public void setNewPassword(String encodedNewPassword) {
+        this.password = encodedNewPassword;
+    }
+
+    /**
+     * 修改密码（校验旧密码、新旧不能相同）
+     *
+     * @return 修改结果
+     */
+    public PasswordChangeResult changePassword(String oldRawPassword, String newRawPassword, PasswordVerifier verifier) {
+        if (!verifyPassword(oldRawPassword, verifier)) {
+            return PasswordChangeResult.OLD_PASSWORD_WRONG;
+        }
+        if (verifier.matches(newRawPassword, this.password)) {
+            return PasswordChangeResult.SAME_AS_OLD;
+        }
+        this.password = newRawPassword;
+        return PasswordChangeResult.SUCCESS;
     }
 
     public void updateProfile(String realName, String phone, String email) {
@@ -77,5 +101,14 @@ public class User {
 
     public void enable() {
         this.enabled = true;
+    }
+
+    /**
+     * 密码修改结果
+     */
+    public enum PasswordChangeResult {
+        SUCCESS,
+        OLD_PASSWORD_WRONG,
+        SAME_AS_OLD
     }
 }
