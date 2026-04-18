@@ -2,6 +2,7 @@ package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.KgGradeSystemDTO;
 import com.ai.edu.application.dto.kg.StatsDTO;
+import com.ai.edu.application.service.kg.KgKnowledgeSystemAppService;
 import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;

@@ -1,4 +1,4 @@
-package com.ai.edu.application.service;
+package com.ai.edu.application.service.user;
 
 import com.ai.edu.application.assembler.UserAssembler;
 import com.ai.edu.application.dto.*;

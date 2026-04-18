@@ -1,4 +1,4 @@
-package com.ai.edu.application.service.convert;
+package com.ai.edu.application.assembler;
 
 import com.ai.edu.application.dto.llm.*;
 import com.ai.edu.domain.llm.model.AiEduChatRequest;

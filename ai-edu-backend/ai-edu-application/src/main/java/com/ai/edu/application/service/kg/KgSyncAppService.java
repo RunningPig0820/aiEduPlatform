@@ -1,4 +1,4 @@
-package com.ai.edu.application.service;
+package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.SyncRecordDTO;
@@ -14,12 +14,16 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
+import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.edukg.repository.KgSectionKPRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
+import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
+import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.domain.edukg.service.KgNodeSyncService;
 import com.ai.edu.domain.edukg.service.KgRelationSyncService;
-import com.ai.edu.domain.edukg.service.KgSyncRecordService;
+import com.ai.edu.common.util.UriValidator;
 import com.ai.edu.domain.shared.service.RedisService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +31,10 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -50,8 +57,7 @@ public class KgSyncAppService {
     private KgRelationSyncService relationSync;
 
     @Resource
-    @Qualifier("neo4jSyncRecordService")
-    private KgSyncRecordService recordService;
+    private KgSyncRecordRepository kgSyncRecordRepository;
 
     @Resource
     private KgTextbookRepository kgTextbookRepository;
@@ -66,6 +72,15 @@ public class KgSyncAppService {
     private KgKnowledgePointRepository kgKnowledgePointRepository;
 
     @Resource
+    private KgTextbookChapterRepository kgTextbookChapterRepository;
+
+    @Resource
+    private KgChapterSectionRepository kgChapterSectionRepository;
+
+    @Resource
+    private KgSectionKPRepository kgSectionKPRepository;
+
+    @Resource
     private RedisService redisService;
 
     private static final String KG_SYNC_LOCK_KEY = "ai-edu:kg:sync:lock";
@@ -77,7 +92,6 @@ public class KgSyncAppService {
      * @param request 同步请求（必传参数：subject + edition）
      * @return 同步结果
      */
-    @Transactional("kg")
     public SyncResult syncFull(SyncRequest request) {
         // 同步锁检查（Redis 分布式锁）
         String lockValue = UUID.randomUUID().toString();
@@ -98,7 +112,8 @@ public class KgSyncAppService {
             String scope = buildScope(request);
 
             // 创建同步记录
-            syncRecord = recordService.createSyncRecord("full", scope, 0L);
+            KgSyncRecord newRecord = KgSyncRecord.create("full", scope, 0L);
+            syncRecord = kgSyncRecordRepository.save(newRecord);
 
             // 执行同步
             SyncExecutionResult syncResult = executeSync(request);
@@ -110,15 +125,19 @@ public class KgSyncAppService {
             ReconciliationResult reconciliation = reconcile();
 
             // 完成同步记录
-            recordService.completeSyncRecord(
-                    syncRecord.getId(),
-                    syncResult.insertedCount,
-                    syncResult.updatedCount,
-                    statusChangedCount,
-                    reconciliation.matched ? "matched" : "mismatched",
-                    reconciliation.differences.isEmpty() ? "All counts matched"
-                            : String.join("; ", reconciliation.differences)
-            );
+            Optional<KgSyncRecord> recordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+            if (recordOpt.isPresent()) {
+                KgSyncRecord completed = recordOpt.get();
+                completed.completeSuccess(
+                        syncResult.insertedCount,
+                        syncResult.updatedCount,
+                        statusChangedCount,
+                        reconciliation.matched ? "matched" : "mismatched",
+                        reconciliation.differences.isEmpty() ? "All counts matched"
+                                : String.join("; ", reconciliation.differences)
+                );
+                kgSyncRecordRepository.save(completed);
+            }
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("Sync completed in {}ms: inserted={}, updated={}, deleted={}, reconciled={}",
@@ -138,14 +157,22 @@ public class KgSyncAppService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                Optional<KgSyncRecord> failRecordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+                failRecordOpt.ifPresent(record -> {
+                    record.completeFailure(e.getMessage());
+                    kgSyncRecordRepository.save(record);
+                });
             }
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                Optional<KgSyncRecord> failRecordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+                failRecordOpt.ifPresent(record -> {
+                    record.completeFailure(e.getMessage());
+                    kgSyncRecordRepository.save(record);
+                });
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "同步失败: " + e.getMessage());
         } finally {
@@ -177,7 +204,8 @@ public class KgSyncAppService {
         try {
             // 创建同步记录
             String scope = buildScope(request);
-            syncRecord = recordService.createSyncRecord("textbook", scope, 0L);
+            KgSyncRecord newRecord = KgSyncRecord.create("textbook", scope, 0L);
+            syncRecord = kgSyncRecordRepository.save(newRecord);
 
             // 从 Neo4j 读取教材节点
             List<KgTextbook> textbooks = nodeSync.syncTextbookNodes();
@@ -191,14 +219,13 @@ public class KgSyncAppService {
             int insertedCount = kgTextbookRepository.upsert(textbooks);
 
             // 完成同步记录
-            recordService.completeSyncRecord(
-                    syncRecord.getId(),
-                    insertedCount,
-                    0,
-                    0,
-                    "skipped",
-                    "Textbook-only sync, reconciliation skipped"
-            );
+            Optional<KgSyncRecord> recordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+            if (recordOpt.isPresent()) {
+                KgSyncRecord completed = recordOpt.get();
+                completed.completeSuccess(insertedCount, 0, 0, "skipped",
+                        "Textbook-only sync, reconciliation skipped");
+                kgSyncRecordRepository.save(completed);
+            }
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("Textbook sync completed in {}ms: inserted/updated={}", duration, insertedCount);
@@ -216,14 +243,22 @@ public class KgSyncAppService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                Optional<KgSyncRecord> failRecordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+                failRecordOpt.ifPresent(record -> {
+                    record.completeFailure(e.getMessage());
+                    kgSyncRecordRepository.save(record);
+                });
             }
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
             if (syncRecord != null) {
-                recordService.failSyncRecord(syncRecord.getId(), e.getMessage());
+                Optional<KgSyncRecord> failRecordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
+                failRecordOpt.ifPresent(record -> {
+                    record.completeFailure(e.getMessage());
+                    kgSyncRecordRepository.save(record);
+                });
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "教材同步失败: " + e.getMessage());
         } finally {
@@ -235,7 +270,8 @@ public class KgSyncAppService {
      * 查询同步状态
      */
     public SyncStatusDTO getSyncStatus() {
-        KgSyncRecord latest = recordService.getLatestSyncRecord();
+        List<KgSyncRecord> records = kgSyncRecordRepository.findRecent(1);
+        KgSyncRecord latest = records.isEmpty() ? null : records.get(0);
         return KgConvert.toSyncStatusDTO(latest);
     }
 
@@ -243,7 +279,7 @@ public class KgSyncAppService {
      * 查询同步历史记录
      */
     public List<SyncRecordDTO> getSyncRecords(int page, int size) {
-        List<KgSyncRecord> records = recordService.getSyncRecords(size);
+        List<KgSyncRecord> records = kgSyncRecordRepository.findRecent(size);
         return KgConvert.toSyncRecordDTOs(records);
     }
 
@@ -326,7 +362,12 @@ public class KgSyncAppService {
                 .collect(Collectors.toSet());
 
         // 5. URI 校验
-        UriValidationResult uriValidation = recordService.validateAllUris(textbooks, chapters, sections, kps);
+        UriValidationResult uriValidation = UriValidator.validateAllUris(
+                Map.of("Textbook", textbookUris.stream().toList()),
+                Map.of("Chapter", chapterUris.stream().toList()),
+                Map.of("Section", sectionUris.stream().toList()),
+                Map.of("KnowledgePoint", kpUris.stream().toList())
+        );
         if (!uriValidation.valid) {
             log.warn("URI validation warnings: {}", uriValidation.errors);
         }
@@ -388,10 +429,56 @@ public class KgSyncAppService {
         List<KgChapterSection> chSecRelations = relationSync.syncChapterSectionRelations();
         List<KgSectionKP> secKpRelations = relationSync.syncSectionKPRelations();
 
-        return recordService.reconcile(
-                neo4jTextbookUris, neo4jChapterUris, neo4jSectionUris, neo4jKpUris,
-                tbChRelations, chSecRelations, secKpRelations
-        );
+        List<String> differences = new ArrayList<>();
+
+        int mysqlTbCount = kgTextbookRepository.findAllActive().size();
+        if (mysqlTbCount != neo4jTextbookUris.size()) {
+            differences.add(String.format("Textbook count mismatch: MySQL=%d, Neo4j=%d", mysqlTbCount, neo4jTextbookUris.size()));
+        }
+
+        int mysqlChCount = kgChapterRepository.countActive();
+        if (mysqlChCount != neo4jChapterUris.size()) {
+            differences.add(String.format("Chapter count mismatch: MySQL=%d, Neo4j=%d", mysqlChCount, neo4jChapterUris.size()));
+        }
+
+        int mysqlSecCount = kgSectionRepository.countActive();
+        if (mysqlSecCount != neo4jSectionUris.size()) {
+            differences.add(String.format("Section count mismatch: MySQL=%d, Neo4j=%d", mysqlSecCount, neo4jSectionUris.size()));
+        }
+
+        int mysqlKpCount = kgKnowledgePointRepository.countActive();
+        if (mysqlKpCount != neo4jKpUris.size()) {
+            differences.add(String.format("KP count mismatch: MySQL=%d, Neo4j=%d", mysqlKpCount, neo4jKpUris.size()));
+        }
+
+        int mysqlTbChCount = kgTextbookChapterRepository.findAllActive().size();
+        if (mysqlTbChCount != tbChRelations.size()) {
+            differences.add(String.format("Textbook-Chapter relation count: MySQL=%d, Neo4j=%d", mysqlTbChCount, tbChRelations.size()));
+        }
+
+        int mysqlChSecCount = kgChapterSectionRepository.findAllActive().size();
+        if (mysqlChSecCount != chSecRelations.size()) {
+            differences.add(String.format("Chapter-Section relation count: MySQL=%d, Neo4j=%d", mysqlChSecCount, chSecRelations.size()));
+        }
+
+        int mysqlSecKpCount = kgSectionKPRepository.findAllActive().size();
+        if (mysqlSecKpCount != secKpRelations.size()) {
+            differences.add(String.format("Section-KP relation count: MySQL=%d, Neo4j=%d", mysqlSecKpCount, secKpRelations.size()));
+        }
+
+        boolean matched = differences.isEmpty();
+        String details = matched ? "All counts matched" : String.join("; ", differences);
+        log.info("Reconciliation: {} - {}", matched ? "PASS" : "FAIL", details);
+
+        return new ReconciliationResult(matched,
+                mysqlTbCount, neo4jTextbookUris.size(),
+                mysqlChCount, neo4jChapterUris.size(),
+                mysqlSecCount, neo4jSectionUris.size(),
+                mysqlKpCount, neo4jKpUris.size(),
+                mysqlTbChCount, tbChRelations.size(),
+                mysqlChSecCount, chSecRelations.size(),
+                mysqlSecKpCount, secKpRelations.size(),
+                differences);
     }
 
     /**

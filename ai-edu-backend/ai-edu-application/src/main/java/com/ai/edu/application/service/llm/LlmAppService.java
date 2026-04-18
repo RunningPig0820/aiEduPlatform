@@ -1,7 +1,7 @@
-package com.ai.edu.application.service;
+package com.ai.edu.application.service.llm;
 
 import com.ai.edu.application.dto.llm.*;
-import com.ai.edu.application.service.convert.LlmConvert;
+import com.ai.edu.application.assembler.LlmConvert;
 import com.ai.edu.domain.llm.model.AiEduChatRequest;
 import com.ai.edu.domain.llm.service.LlmGateway;
 import jakarta.annotation.Resource;

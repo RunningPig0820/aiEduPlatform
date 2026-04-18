@@ -2,7 +2,7 @@ package com.ai.edu.interface_.api;
 
 import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.*;
-import com.ai.edu.application.service.UserAppService;
+import com.ai.edu.application.service.user.UserAppService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;

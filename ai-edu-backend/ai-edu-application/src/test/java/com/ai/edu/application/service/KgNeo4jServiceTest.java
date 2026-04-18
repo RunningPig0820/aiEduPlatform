@@ -2,12 +2,12 @@ package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.BatchRelationsDTO;
 import com.ai.edu.application.dto.kg.HealthDTO;
-import com.ai.edu.common.dto.kg.HealthCheckResult;
+import com.ai.edu.application.service.kg.KgNeo4jService;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
-import com.ai.edu.domain.edukg.service.KgSyncRecordService;
+import com.ai.edu.domain.shared.service.Neo4jHealthChecker;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
 class KgNeo4jServiceTest {
 
     @Mock
-    private KgSyncRecordService recordService;
+    private Neo4jHealthChecker neo4jHealthChecker;
     @Mock
     private KgKnowledgeGraphQueryRepository kgKnowledgeGraphQueryRepository;
 
@@ -43,30 +43,26 @@ class KgNeo4jServiceTest {
     @Order(1)
     @DisplayName("getNeo4jHealth 健康 — 应返回 available=true")
     void getNeo4jHealth_healthy_shouldReturnAvailable() {
-        when(recordService.checkNeo4jHealth())
-                .thenReturn(new HealthCheckResult(true, 15, "Connected"));
+        when(neo4jHealthChecker.isConnected()).thenReturn(true);
 
         HealthDTO result = kgNeo4jService.getNeo4jHealth();
 
         assertNotNull(result);
         assertTrue(result.isAvailable());
-        assertEquals(15, result.getResponseTimeMs());
-        assertEquals("Connected", result.getMessage());
+        assertEquals("Neo4j is healthy", result.getMessage());
     }
 
     @Test
     @Order(2)
     @DisplayName("getNeo4jHealth 异常 — 应返回 available=false")
     void getNeo4jHealth_unhealthy_shouldReturnUnavailable() {
-        when(recordService.checkNeo4jHealth())
-                .thenReturn(new HealthCheckResult(false, 0, "Connection refused"));
+        when(neo4jHealthChecker.isConnected()).thenReturn(false);
 
         HealthDTO result = kgNeo4jService.getNeo4jHealth();
 
         assertNotNull(result);
         assertFalse(result.isAvailable());
-        assertEquals(0, result.getResponseTimeMs());
-        assertEquals("Connection refused", result.getMessage());
+        assertEquals("Neo4j connection failed", result.getMessage());
     }
 
     // ==================== 6.10.2 batchGetConceptRelations ====================

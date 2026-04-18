@@ -2,7 +2,7 @@ package com.ai.edu.interface_.api;
 
 import com.ai.edu.application.dto.LoginRequest;
 import com.ai.edu.application.dto.UserResponse;
-import com.ai.edu.application.service.UserAppService;
+import com.ai.edu.application.service.user.UserAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.constant.LoginType;
 import com.ai.edu.common.exception.BusinessException;

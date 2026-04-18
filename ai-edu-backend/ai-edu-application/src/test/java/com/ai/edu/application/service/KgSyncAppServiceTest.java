@@ -4,13 +4,9 @@ import com.ai.edu.application.dto.kg.SyncRecordDTO;
 import com.ai.edu.application.dto.kg.SyncRequest;
 import com.ai.edu.application.dto.kg.SyncResult;
 import com.ai.edu.application.dto.kg.SyncStatusDTO;
-import com.ai.edu.common.dto.kg.ReconciliationResult;
-import com.ai.edu.common.dto.kg.UriValidationResult;
+import com.ai.edu.application.service.kg.KgSyncAppService;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.*;
-import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
-import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
-import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,16 +15,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
+import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.edukg.repository.KgSectionKPRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
+import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
+import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.domain.edukg.service.KgNodeSyncService;
 import com.ai.edu.domain.edukg.service.KgRelationSyncService;
-import com.ai.edu.domain.edukg.service.KgSyncRecordService;
 import com.ai.edu.domain.shared.service.RedisService;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,7 +50,7 @@ class KgSyncAppServiceTest {
     private KgRelationSyncService relationSync;
 
     @Mock
-    private KgSyncRecordService recordService;
+    private KgSyncRecordRepository kgSyncRecordRepository;
 
     @Mock
     private KgTextbookRepository kgTextbookRepository;
@@ -64,6 +63,15 @@ class KgSyncAppServiceTest {
 
     @Mock
     private KgKnowledgePointRepository kgKnowledgePointRepository;
+
+    @Mock
+    private KgTextbookChapterRepository kgTextbookChapterRepository;
+
+    @Mock
+    private KgChapterSectionRepository kgChapterSectionRepository;
+
+    @Mock
+    private KgSectionKPRepository kgSectionKPRepository;
 
     @Mock
     private RedisService redisService;
@@ -81,11 +89,6 @@ class KgSyncAppServiceTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private ReconciliationResult createReconcileResult(boolean matched) {
-        return new ReconciliationResult(matched,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of());
     }
 
     private void mockFullSyncChain() {
@@ -113,11 +116,15 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(recordService.validateAllUris(anyList(), anyList(), anyList(), anyList()))
-                .thenReturn(new UriValidationResult(true, List.of()));
         when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        when(recordService.reconcile(anySet(), anySet(), anySet(), anySet(), anyList(), anyList(), anyList()))
-                .thenReturn(createReconcileResult(true));
+        // Repository mocks for reconcile
+        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+        when(kgChapterRepository.countActive()).thenReturn(chapters.size());
+        when(kgSectionRepository.countActive()).thenReturn(sections.size());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(kps.size());
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
     }
 
     private KgSyncRecord createSyncRecord(Long id) {
@@ -134,7 +141,8 @@ class KgSyncAppServiceTest {
     void syncFull_fullSync_shouldCallFullChainAndReturnSuccess() {
         SyncRequest request = SyncRequest.builder().subject("math").edition("人教版").build();
         KgSyncRecord syncRecord = createSyncRecord(1L);
-        when(recordService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(1L)).thenReturn(Optional.of(syncRecord));
         mockFullSyncChain();
 
         SyncResult result = kgSyncAppService.syncFull(request);
@@ -156,8 +164,7 @@ class KgSyncAppServiceTest {
         verify(relationSync).rebuildChapterSectionRelations(anyList());
         verify(relationSync).rebuildSectionKPRelations(anyList());
         verify(nodeSync, atLeast(1)).markDeletedNodes(anyString(), anySet());
-        verify(recordService, atLeast(1)).reconcile(anySet(), anySet(), anySet(), anySet(), anyList(), anyList(), anyList());
-        verify(recordService).completeSyncRecord(anyLong(), anyInt(), anyInt(), anyInt(), anyString(), anyString());
+        verify(kgSyncRecordRepository, atLeast(2)).save(any(KgSyncRecord.class));
     }
 
     // ==================== 6.7.2 syncFull 定向同步 ====================
@@ -188,14 +195,19 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(recordService.validateAllUris(anyList(), anyList(), anyList(), anyList()))
-                .thenReturn(new UriValidationResult(true, List.of()));
         when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        when(recordService.reconcile(anySet(), anySet(), anySet(), anySet(), anyList(), anyList(), anyList()))
-                .thenReturn(createReconcileResult(true));
+        // Repository mocks for reconcile
+        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
+        when(kgSectionRepository.countActive()).thenReturn(0);
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(2L);
-        when(recordService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(2L)).thenReturn(Optional.of(syncRecord));
 
         SyncResult result = kgSyncAppService.syncFull(request);
 
@@ -231,14 +243,19 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(recordService.validateAllUris(anyList(), anyList(), anyList(), anyList()))
-                .thenReturn(new UriValidationResult(true, List.of()));
         when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        when(recordService.reconcile(anySet(), anySet(), anySet(), anySet(), anyList(), anyList(), anyList()))
-                .thenReturn(createReconcileResult(true));
+        // Repository mocks for reconcile
+        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
+        when(kgSectionRepository.countActive()).thenReturn(0);
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(3L);
-        when(recordService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(3L)).thenReturn(Optional.of(syncRecord));
 
         SyncResult result = kgSyncAppService.syncFull(request);
 
@@ -288,7 +305,7 @@ class KgSyncAppServiceTest {
     @Order(6)
     @DisplayName("getSyncStatus 从未同步过应返回 never_synced")
     void getSyncStatus_neverSynced_shouldReturnNeverSynced() {
-        when(recordService.getLatestSyncRecord()).thenReturn(null);
+        when(kgSyncRecordRepository.findRecent(1)).thenReturn(List.of());
 
         SyncStatusDTO result = kgSyncAppService.getSyncStatus();
 
@@ -303,7 +320,7 @@ class KgSyncAppServiceTest {
         KgSyncRecord record = KgSyncRecord.create("full", "math", 0L);
         record.completeSuccess(10, 5, 3, "matched", "All counts matched");
 
-        when(recordService.getLatestSyncRecord()).thenReturn(record);
+        when(kgSyncRecordRepository.findRecent(1)).thenReturn(List.of(record));
 
         SyncStatusDTO result = kgSyncAppService.getSyncStatus();
 
@@ -326,7 +343,7 @@ class KgSyncAppServiceTest {
         record2.completeSuccess(8, 2, 1, "matched", "ok");
         setSyncRecordId(record2, 2L);
 
-        when(recordService.getSyncRecords(5)).thenReturn(List.of(record1, record2));
+        when(kgSyncRecordRepository.findRecent(5)).thenReturn(List.of(record1, record2));
 
         List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(1, 5);
 
@@ -341,7 +358,7 @@ class KgSyncAppServiceTest {
     @Order(9)
     @DisplayName("getSyncRecords 无记录应返回空列表")
     void getSyncRecords_noRecords_shouldReturnEmpty() {
-        when(recordService.getSyncRecords(10)).thenReturn(List.of());
+        when(kgSyncRecordRepository.findRecent(10)).thenReturn(List.of());
 
         List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(1, 10);
 
@@ -409,7 +426,8 @@ class KgSyncAppServiceTest {
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
 
         KgSyncRecord syncRecord = createSyncRecord(20L);
-        when(recordService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(20L)).thenReturn(Optional.of(syncRecord));
 
         SyncRequest request = SyncRequest.builder().subject("math").edition("人教版").build();
         SyncResult result = kgSyncAppService.syncTextbooksOnly(request);
@@ -422,7 +440,7 @@ class KgSyncAppServiceTest {
         verify(kgTextbookRepository).upsert(argThat(tbs ->
                 tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getEdition().equals("人教版")
         ));
-        verify(recordService).completeSyncRecord(eq(20L), eq(1), eq(0), eq(0), eq("skipped"), anyString());
+        verify(kgSyncRecordRepository, times(2)).save(any(KgSyncRecord.class));
     }
 
     // ==================== 6.7.13 syncTextbooksOnly 同步锁 ====================
@@ -448,7 +466,8 @@ class KgSyncAppServiceTest {
     void syncTextbooksOnly_nodeSyncThrows_shouldRecordFailed() {
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         KgSyncRecord syncRecord = createSyncRecord(30L);
-        when(recordService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(30L)).thenReturn(Optional.of(syncRecord));
         when(nodeSync.syncTextbookNodes())
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
@@ -457,7 +476,7 @@ class KgSyncAppServiceTest {
         );
         assertTrue(ex.getMessage().contains("Neo4j connection timeout"));
 
-        verify(recordService).failSyncRecord(eq(30L), anyString());
+        verify(kgSyncRecordRepository, times(2)).save(any(KgSyncRecord.class));
 
         // 验证锁被释放
         verify(redisService).unlock(anyString(), anyString());

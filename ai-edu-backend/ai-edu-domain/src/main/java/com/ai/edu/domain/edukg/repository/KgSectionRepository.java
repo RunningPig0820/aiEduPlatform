@@ -25,4 +25,9 @@ public interface KgSectionRepository {
     int upsert(List<KgSection> sections);
 
     void updateStatus(String uri, String status);
+
+    /**
+     * 统计活跃小节数量（用于对账）
+     */
+    int countActive();
 }

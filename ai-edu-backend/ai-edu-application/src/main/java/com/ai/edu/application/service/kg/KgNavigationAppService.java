@@ -1,4 +1,4 @@
-package com.ai.edu.application.service;
+package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.ChapterTreeNode;

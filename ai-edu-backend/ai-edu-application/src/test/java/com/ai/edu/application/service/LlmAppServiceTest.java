@@ -6,6 +6,7 @@ import com.ai.edu.application.dto.llm.ChatResponse;
 import com.ai.edu.application.dto.llm.ModelInfo;
 import com.ai.edu.application.dto.llm.ModelsResponse;
 import com.ai.edu.application.dto.llm.ScenesResponse;
+import com.ai.edu.application.service.llm.LlmAppService;
 import com.ai.edu.domain.llm.model.AiEduChatRequest;
 import com.ai.edu.domain.llm.model.AiEduChatResponse;
 import com.ai.edu.domain.llm.model.Usage;

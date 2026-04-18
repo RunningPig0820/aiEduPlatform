@@ -4,6 +4,7 @@ import com.ai.edu.application.dto.kg.ChapterTreeNode;
 import com.ai.edu.application.dto.kg.KgDimensionDTO;
 import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
 import com.ai.edu.application.dto.kg.KgTextbookDTO;
+import com.ai.edu.application.service.kg.KgNavigationAppService;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.*;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;

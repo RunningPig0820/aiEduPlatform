@@ -7,7 +7,7 @@ import com.ai.edu.application.dto.llm.ChatResponse;
 import com.ai.edu.application.dto.llm.ModelInfo;
 import com.ai.edu.application.dto.llm.ModelsResponse;
 import com.ai.edu.application.dto.llm.ScenesResponse;
-import com.ai.edu.application.service.LlmAppService;
+import com.ai.edu.application.service.llm.LlmAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import jakarta.annotation.Resource;

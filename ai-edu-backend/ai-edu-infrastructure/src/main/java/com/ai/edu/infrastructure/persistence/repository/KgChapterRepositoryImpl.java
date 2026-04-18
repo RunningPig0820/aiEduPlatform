@@ -73,4 +73,9 @@ public class KgChapterRepositoryImpl implements KgChapterRepository {
     public void updateStatus(String uri, String status) {
         kgChapterMapper.updateStatus(uri, status, 0L);
     }
+
+    @Override
+    public int countActive() {
+        return kgChapterMapper.selectByStatus("active").size();
+    }
 }

@@ -78,4 +78,9 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
     public void updateStatus(String uri, String status) {
         kgKnowledgePointMapper.updateStatus(uri, status, 0L);
     }
+
+    @Override
+    public int countActive() {
+        return kgKnowledgePointMapper.selectByStatus("active").size();
+    }
 }

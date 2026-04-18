@@ -1,24 +1,18 @@
-package com.ai.edu.application.service;
+package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.BatchRelationsDTO;
 import com.ai.edu.application.dto.kg.HealthDTO;
 import com.ai.edu.application.dto.kg.KgGraphDTO;
-import com.ai.edu.common.dto.kg.HealthCheckResult;
-import com.ai.edu.domain.edukg.model.entity.KgChapter;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
-import com.ai.edu.domain.edukg.model.entity.KgSection;
 import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
 import com.ai.edu.domain.edukg.model.result.RelatedConcept;
 import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
-import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
-import com.ai.edu.domain.edukg.repository.KgSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
-import com.ai.edu.domain.edukg.service.KgSyncRecordService;
+import com.ai.edu.domain.shared.service.Neo4jHealthChecker;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -37,8 +31,7 @@ import java.util.Optional;
 public class KgNeo4jService {
 
     @Resource
-    @Qualifier("neo4jSyncRecordService")
-    private KgSyncRecordService recordService;
+    private Neo4jHealthChecker neo4jHealthChecker;
 
     @Resource
     private KgKnowledgeGraphQueryRepository kgKnowledgeGraphQueryRepository;
@@ -51,8 +44,11 @@ public class KgNeo4jService {
      * Neo4j 健康检查
      */
     public HealthDTO getNeo4jHealth() {
-        HealthCheckResult health = recordService.checkNeo4jHealth();
-        return KgConvert.toHealthDTO(health.healthy, health.responseTimeMs, health.message);
+        long startTime = System.currentTimeMillis();
+        boolean healthy = neo4jHealthChecker.isConnected();
+        long responseTime = System.currentTimeMillis() - startTime;
+        String message = healthy ? "Neo4j is healthy" : "Neo4j connection failed";
+        return KgConvert.toHealthDTO(healthy, responseTime, message);
     }
 
     /**

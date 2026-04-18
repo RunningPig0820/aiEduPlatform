@@ -2,10 +2,10 @@ package com.ai.edu.interface_.api;
 
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.kg.*;
-import com.ai.edu.application.service.KgKnowledgeSystemAppService;
-import com.ai.edu.application.service.KgNavigationAppService;
-import com.ai.edu.application.service.KgNeo4jService;
-import com.ai.edu.application.service.KgSyncAppService;
+import com.ai.edu.application.service.kg.KgKnowledgeSystemAppService;
+import com.ai.edu.application.service.kg.KgNavigationAppService;
+import com.ai.edu.application.service.kg.KgNeo4jService;
+import com.ai.edu.application.service.kg.KgSyncAppService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;

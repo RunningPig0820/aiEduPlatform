@@ -1,7 +1,7 @@
 package com.ai.edu.interface_.api;
 
 import com.ai.edu.application.dto.*;
-import com.ai.edu.application.service.UserAppService;
+import com.ai.edu.application.service.user.UserAppService;
 import com.ai.edu.common.constant.CodeScene;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.constant.LoginType;

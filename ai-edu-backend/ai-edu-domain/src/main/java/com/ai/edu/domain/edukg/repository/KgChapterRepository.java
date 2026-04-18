@@ -25,4 +25,9 @@ public interface KgChapterRepository {
     int upsert(List<KgChapter> chapters);
 
     void updateStatus(String uri, String status);
+
+    /**
+     * 统计活跃章节数量（用于对账）
+     */
+    int countActive();
 }

@@ -73,4 +73,9 @@ public class KgSectionRepositoryImpl implements KgSectionRepository {
     public void updateStatus(String uri, String status) {
         kgSectionMapper.updateStatus(uri, status, 0L);
     }
+
+    @Override
+    public int countActive() {
+        return kgSectionMapper.selectByStatus("active").size();
+    }
 }
