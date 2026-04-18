@@ -13,7 +13,7 @@ public class HomeworkSubmittedEvent extends DomainEvent {
     private final String imageUrl;
 
     public HomeworkSubmittedEvent(Homework homework) {
-        super(homework);
+        super();
         this.homeworkId = homework.getId();
         this.studentId = homework.getStudentId();
         this.imageUrl = homework.getImageUrl();
