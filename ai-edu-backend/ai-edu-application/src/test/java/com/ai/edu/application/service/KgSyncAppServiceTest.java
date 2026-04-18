@@ -20,7 +20,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
+
+import com.ai.edu.domain.shared.service.RedisService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -37,6 +39,9 @@ class KgSyncAppServiceTest {
 
     @Mock
     private KgSyncDomainService kgSyncDomainService;
+
+    @Mock
+    private RedisService redisService;
 
     @InjectMocks
     private KgSyncAppService kgSyncAppService;
@@ -59,6 +64,7 @@ class KgSyncAppServiceTest {
     }
 
     private void mockFullSyncChain() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         List<KgTextbook> textbooks = List.of(
                 KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
         );
@@ -101,7 +107,7 @@ class KgSyncAppServiceTest {
     @Order(1)
     @DisplayName("syncFull 全量同步 — 应调用完整链路并返回成功结果")
     void syncFull_fullSync_shouldCallFullChainAndReturnSuccess() {
-        SyncRequest request = SyncRequest.builder().subject("math").build();
+        SyncRequest request = SyncRequest.builder().subject("math").edition("人教版").build();
         KgSyncRecord syncRecord = createSyncRecord(1L);
         when(kgSyncDomainService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
         mockFullSyncChain();
@@ -133,14 +139,15 @@ class KgSyncAppServiceTest {
 
     @Test
     @Order(2)
-    @DisplayName("syncFull 定向同步 — 按 textbookUri 过滤")
-    void syncFull_targetedByUri_shouldFilterByTextbookUri() {
-        String targetUri = "uri:tb1";
-        SyncRequest request = SyncRequest.builder().subject("math").textbookUri(targetUri).build();
+    @DisplayName("syncFull 定向同步 — 按 edition 过滤")
+    void syncFull_targetedByEdition_shouldFilterByEdition() {
+        String targetEdition = "人教版";
+        SyncRequest request = SyncRequest.builder().subject("math").edition(targetEdition).build();
 
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         List<KgTextbook> allTextbooks = List.of(
-                KgTextbook.create(targetUri, "教材1", "七年级", "junior", "人教版", "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "人教版", "math")
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", targetEdition, "math"),
+                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
         );
         when(kgSyncDomainService.syncTextbookNodes()).thenReturn(allTextbooks);
         when(kgSyncDomainService.syncChapterNodes()).thenReturn(List.of());
@@ -169,7 +176,7 @@ class KgSyncAppServiceTest {
 
         // 应只 upsert 1 个教材（被过滤后的）
         verify(kgSyncDomainService).upsertTextbooks(argThat(tbs ->
-                tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getUri().equals(targetUri)
+                tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getEdition().equals(targetEdition)
         ));
         assertEquals("success", result.getStatus());
     }
@@ -178,8 +185,9 @@ class KgSyncAppServiceTest {
     @Order(3)
     @DisplayName("syncFull 定向同步 — 按 subject 过滤")
     void syncFull_targetedBySubject_shouldFilterBySubject() {
-        SyncRequest request = SyncRequest.builder().subject("english").build();
+        SyncRequest request = SyncRequest.builder().subject("english").edition("人教版").build();
 
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         List<KgTextbook> textbooks = List.of(
                 KgTextbook.create("uri:math", "数学教材", "七年级", "junior", "人教版", "math"),
                 KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "人教版", "english")
@@ -221,17 +229,10 @@ class KgSyncAppServiceTest {
     @Order(4)
     @DisplayName("syncFull 手动触发同步锁 — 连续调用应抛异常")
     void syncFull_concurrentCalls_shouldThrowOnSecondCall() {
-        try {
-            var field = KgSyncAppService.class.getDeclaredField("syncing");
-            field.setAccessible(true);
-            AtomicBoolean syncingField = (AtomicBoolean) field.get(kgSyncAppService);
-            syncingField.set(true);
-        } catch (Exception e) {
-            fail("Failed to set syncing field: " + e.getMessage());
-        }
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(false);
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
-                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").build())
+                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").edition("人教版").build())
         );
         assertEquals("70006", ex.getCode());
         assertTrue(ex.getMessage().contains("已有同步任务正在执行"));
@@ -243,23 +244,17 @@ class KgSyncAppServiceTest {
     @Order(5)
     @DisplayName("syncFull 异常回滚 — DomainService 抛异常应传播 BusinessException")
     void syncFull_domainServiceThrows_shouldThrowBusinessException() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(kgSyncDomainService.syncTextbookNodes())
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
-                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").build())
+                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").edition("人教版").build())
         );
         assertTrue(ex.getMessage().contains("Neo4j connection timeout"));
 
-        // 验证 syncing 被重置
-        try {
-            var field = KgSyncAppService.class.getDeclaredField("syncing");
-            field.setAccessible(true);
-            AtomicBoolean syncingField = (AtomicBoolean) field.get(kgSyncAppService);
-            assertFalse(syncingField.get(), "syncing 应在 finally 中重置为 false");
-        } catch (Exception e) {
-            fail("Failed to check syncing field: " + e.getMessage());
-        }
+        // 验证锁被释放
+        verify(redisService).unlock(anyString(), anyString());
     }
 
     // ==================== 6.7.5 getSyncStatus ====================
@@ -329,34 +324,117 @@ class KgSyncAppServiceTest {
         assertTrue(result.isEmpty());
     }
 
-    // ==================== syncFull request=null 默认值 ====================
+    // ==================== syncFull request=null 参数校验 ====================
 
     @Test
     @Order(10)
-    @DisplayName("syncFull request 为 null 应使用默认值 subject=math")
-    void syncFull_nullRequest_shouldUseDefaults() {
-        mockFullSyncChain();
-        KgSyncRecord syncRecord = createSyncRecord(10L);
-        when(kgSyncDomainService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+    @DisplayName("syncFull request 为 null 应抛 KG_SYNC_PARAM_ERROR")
+    void syncFull_nullRequest_shouldThrowParamError() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
 
-        SyncResult result = kgSyncAppService.syncFull(null);
-
-        assertNotNull(result);
-        assertEquals("success", result.getStatus());
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                kgSyncAppService.syncFull(null)
+        );
+        assertEquals("70007", ex.getCode());
+        assertTrue(ex.getMessage().contains("同步参数不能为空"));
     }
 
     // ==================== syncFull 参数校验 ====================
 
     @Test
     @Order(11)
-    @DisplayName("syncFull subject 为空字符串应抛 KG_SYNC_PARAM_ERROR")
+    @DisplayName("syncFull subject 为空应抛 KG_SYNC_PARAM_ERROR")
     void syncFull_blankSubject_shouldThrowParamError() {
-        SyncRequest request = SyncRequest.builder().subject("  ").build();
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        SyncRequest request = SyncRequest.builder().subject("  ").edition("人教版").build();
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 kgSyncAppService.syncFull(request)
         );
         assertEquals("70007", ex.getCode());
         assertTrue(ex.getMessage().contains("学科不能为空"));
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("syncFull edition 为空应抛 KG_SYNC_PARAM_ERROR")
+    void syncFull_blankEdition_shouldThrowParamError() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        SyncRequest request = SyncRequest.builder().subject("math").build();
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                kgSyncAppService.syncFull(request)
+        );
+        assertEquals("70007", ex.getCode());
+        assertTrue(ex.getMessage().contains("版本不能为空"));
+    }
+
+    // ==================== 6.7.12 syncTextbooksOnly 正常流程 ====================
+
+    @Test
+    @Order(12)
+    @DisplayName("syncTextbooksOnly 正常流程 — 按 edition 过滤并返回成功")
+    void syncTextbooksOnly_withEdition_shouldFilterAndReturnSuccess() {
+        List<KgTextbook> textbooks = List.of(
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
+        );
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(kgSyncDomainService.syncTextbookNodes()).thenReturn(textbooks);
+        when(kgSyncDomainService.upsertTextbooks(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+
+        KgSyncRecord syncRecord = createSyncRecord(20L);
+        when(kgSyncDomainService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+
+        SyncRequest request = SyncRequest.builder().subject("math").edition("人教版").build();
+        SyncResult result = kgSyncAppService.syncTextbooksOnly(request);
+
+        assertNotNull(result);
+        assertEquals("success", result.getStatus());
+        assertEquals(20L, result.getSyncId());
+        assertEquals(1, result.getInsertedCount());
+
+        verify(kgSyncDomainService).upsertTextbooks(argThat(tbs ->
+                tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getEdition().equals("人教版")
+        ));
+        verify(kgSyncDomainService).completeSyncRecord(eq(20L), eq(1), eq(0), eq(0), eq("skipped"), anyString());
+    }
+
+    // ==================== 6.7.13 syncTextbooksOnly 同步锁 ====================
+
+    @Test
+    @Order(13)
+    @DisplayName("syncTextbooksOnly 同步锁 — 同步中再次调用应抛异常")
+    void syncTextbooksOnly_concurrentCalls_shouldThrowOnSecondCall() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                kgSyncAppService.syncTextbooksOnly(SyncRequest.builder().subject("math").edition("人教版").build())
+        );
+        assertEquals("70006", ex.getCode());
+        assertTrue(ex.getMessage().contains("已有同步任务正在执行"));
+    }
+
+    // ==================== 6.7.14 syncTextbooksOnly 异常场景 ====================
+
+    @Test
+    @Order(14)
+    @DisplayName("syncTextbooksOnly 异常场景 — DomainService 抛异常应记录 failed")
+    void syncTextbooksOnly_domainServiceThrows_shouldRecordFailed() {
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        KgSyncRecord syncRecord = createSyncRecord(30L);
+        when(kgSyncDomainService.createSyncRecord(anyString(), anyString(), anyLong())).thenReturn(syncRecord);
+        when(kgSyncDomainService.syncTextbookNodes())
+                .thenThrow(new RuntimeException("Neo4j connection timeout"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                kgSyncAppService.syncTextbooksOnly(SyncRequest.builder().subject("math").edition("人教版").build())
+        );
+        assertTrue(ex.getMessage().contains("Neo4j connection timeout"));
+
+        verify(kgSyncDomainService).failSyncRecord(eq(30L), anyString());
+
+        // 验证锁被释放
+        verify(redisService).unlock(anyString(), anyString());
     }
 }

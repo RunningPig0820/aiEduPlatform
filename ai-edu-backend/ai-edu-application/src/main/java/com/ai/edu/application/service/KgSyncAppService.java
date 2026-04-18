@@ -12,13 +12,15 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.service.KgSyncDomainService;
+import com.ai.edu.domain.shared.service.RedisService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -32,21 +34,22 @@ public class KgSyncAppService {
     @Resource
     private KgSyncDomainService kgSyncDomainService;
 
-    private final AtomicBoolean syncing = new AtomicBoolean(false);
+    @Resource
+    private RedisService redisService;
+
+    private static final String KG_SYNC_LOCK_KEY = "ai-edu:kg:sync:lock";
+    private static final long KG_SYNC_LOCK_TIMEOUT_SECONDS = 600;
 
     /**
      * 全量/定向同步
      *
-     * @param request 同步请求（可选参数：subject/stage/grade/textbookUri）
+     * @param request 同步请求（必传参数：subject + edition）
      * @return 同步结果
      */
     public SyncResult syncFull(SyncRequest request) {
-        if (request == null) {
-            request = SyncRequest.builder().subject("math").build();
-        }
-
-        // 同步锁检查（原子操作）
-        if (!syncing.compareAndSet(false, true)) {
+        // 同步锁检查（Redis 分布式锁）
+        String lockValue = UUID.randomUUID().toString();
+        if (!redisService.tryLock(KG_SYNC_LOCK_KEY, lockValue, KG_SYNC_LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             throw new BusinessException(ErrorCode.KG_SYNC_IN_PROGRESS, "已有同步任务正在执行，请稍后重试");
         }
 
@@ -54,8 +57,8 @@ public class KgSyncAppService {
         validateSyncRequest(request);
 
         long startTime = System.currentTimeMillis();
-        log.info("Starting KG sync: subject={}, stage={}, grade={}, textbookUri={}",
-                request.getSubject(), request.getStage(), request.getGrade(), request.getTextbookUri());
+        log.info("Starting KG sync: subject={}, edition={}",
+                request.getSubject(), request.getEdition());
 
         KgSyncRecord syncRecord = null;
         try {
@@ -114,7 +117,85 @@ public class KgSyncAppService {
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "同步失败: " + e.getMessage());
         } finally {
-            syncing.set(false);
+            redisService.unlock(KG_SYNC_LOCK_KEY, lockValue);
+        }
+    }
+
+    /**
+     * 单独同步教材节点（不同步章节/小节/知识点）
+     *
+     * @param request 同步过滤条件（必传：subject + edition）
+     * @return 同步结果
+     */
+    public SyncResult syncTextbooksOnly(SyncRequest request) {
+        // 同步锁检查（Redis 分布式锁）
+        String lockValue = UUID.randomUUID().toString();
+        if (!redisService.tryLock(KG_SYNC_LOCK_KEY, lockValue, KG_SYNC_LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            throw new BusinessException(ErrorCode.KG_SYNC_IN_PROGRESS, "已有同步任务正在执行，请稍后重试");
+        }
+
+        // 参数校验
+        validateSyncRequest(request);
+
+        long startTime = System.currentTimeMillis();
+        log.info("Starting textbook-only sync: subject={}, edition={}",
+                request.getSubject(), request.getEdition());
+
+        KgSyncRecord syncRecord = null;
+        try {
+            // 创建同步记录
+            String scope = buildScope(request);
+            syncRecord = kgSyncDomainService.createSyncRecord("textbook", scope, 0L);
+
+            // 从 Neo4j 读取教材节点
+            List<KgTextbook> textbooks = kgSyncDomainService.syncTextbookNodes();
+
+            // 按 edition 过滤
+            textbooks = textbooks.stream()
+                    .filter(tb -> request.getEdition().equals(tb.getEdition()))
+                    .toList();
+
+            // 写入 MySQL（按 uri 去重：insert or update）
+            int insertedCount = kgSyncDomainService.upsertTextbooks(textbooks);
+
+            // 完成同步记录
+            kgSyncDomainService.completeSyncRecord(
+                    syncRecord.getId(),
+                    insertedCount,
+                    0,
+                    0,
+                    "skipped",
+                    "Textbook-only sync, reconciliation skipped"
+            );
+
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Textbook sync completed in {}ms: inserted/updated={}", duration, insertedCount);
+
+            return KgConvert.toSyncResult(
+                    syncRecord.getId(),
+                    "success",
+                    insertedCount,
+                    0,
+                    0,
+                    "skipped",
+                    duration
+            );
+        } catch (BusinessException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
+            if (syncRecord != null) {
+                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+            }
+            throw e;
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Textbook sync failed after {}ms: {}", duration, e.getMessage(), e);
+            if (syncRecord != null) {
+                kgSyncDomainService.failSyncRecord(syncRecord.getId(), e.getMessage());
+            }
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "教材同步失败: " + e.getMessage());
+        } finally {
+            redisService.unlock(KG_SYNC_LOCK_KEY, lockValue);
         }
     }
 
@@ -137,18 +218,24 @@ public class KgSyncAppService {
     // ==================== 私有方法 ====================
 
     private void validateSyncRequest(SyncRequest request) {
-        if (request.getSubject() != null && request.getSubject().isBlank()) {
-            throw new BusinessException(ErrorCode.KG_SYNC_PARAM_ERROR, "学科不能为空字符串");
+        if (request == null) {
+            throw new BusinessException(ErrorCode.KG_SYNC_PARAM_ERROR, "同步参数不能为空");
+        }
+        if (request.getSubject() == null || request.getSubject().isBlank()) {
+            throw new BusinessException(ErrorCode.KG_SYNC_PARAM_ERROR, "学科不能为空");
+        }
+        if (request.getEdition() == null || request.getEdition().isBlank()) {
+            throw new BusinessException(ErrorCode.KG_SYNC_PARAM_ERROR, "版本不能为空");
         }
     }
 
     private String buildScope(SyncRequest request) {
         return String.format(
-                "{\"subject\":\"%s\",\"stage\":\"%s\",\"grade\":\"%s\",\"textbookUri\":\"%s\"}",
-                request.getSubject() != null ? request.getSubject() : "math",
+                "{\"subject\":\"%s\",\"stage\":\"%s\",\"grade\":\"%s\",\"edition\":\"%s\"}",
+                request.getSubject() != null ? request.getSubject() : "",
                 request.getStage() != null ? request.getStage() : "",
                 request.getGrade() != null ? request.getGrade() : "",
-                request.getTextbookUri() != null ? request.getTextbookUri() : ""
+                request.getEdition() != null ? request.getEdition() : ""
         );
     }
 
@@ -158,9 +245,10 @@ public class KgSyncAppService {
 
         // 1. 同步教材节点
         List<KgTextbook> textbooks = kgSyncDomainService.syncTextbookNodes();
-        if (request.getTextbookUri() != null && !request.getTextbookUri().isBlank()) {
+        // 按 edition / subject / grade 过滤
+        if (request.getEdition() != null && !request.getEdition().isBlank()) {
             textbooks = textbooks.stream()
-                    .filter(tb -> request.getTextbookUri().equals(tb.getUri()))
+                    .filter(tb -> request.getEdition().equals(tb.getEdition()))
                     .toList();
         }
         if (request.getSubject() != null) {

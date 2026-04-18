@@ -84,4 +84,27 @@ public class MockRedisService implements RedisService {
         Long expire = expireTime.get(key);
         return expire != null && System.currentTimeMillis() > expire;
     }
+
+    @Override
+    public Boolean tryLock(String key, String value, long timeout, TimeUnit unit) {
+        if (isExpired(key)) {
+            store.remove(key);
+            expireTime.remove(key);
+        }
+        if (store.containsKey(key)) {
+            return false;
+        }
+        store.put(key, value);
+        expireTime.put(key, System.currentTimeMillis() + unit.toMillis(timeout));
+        return true;
+    }
+
+    @Override
+    public void unlock(String key, String value) {
+        String current = store.get(key);
+        if (value.equals(current)) {
+            store.remove(key);
+            expireTime.remove(key);
+        }
+    }
 }

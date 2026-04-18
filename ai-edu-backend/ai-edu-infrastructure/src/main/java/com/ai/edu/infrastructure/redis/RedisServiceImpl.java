@@ -59,4 +59,26 @@ public class RedisServiceImpl implements RedisService {
     public Long increment(String key, long delta) {
         return stringRedisTemplate.opsForValue().increment(key, delta);
     }
+
+    @Override
+    public Boolean tryLock(String key, String value, long timeout, TimeUnit unit) {
+        return Boolean.TRUE.equals(
+                stringRedisTemplate.opsForValue().setIfAbsent(key, value, timeout, unit)
+        );
+    }
+
+    @Override
+    public void unlock(String key, String value) {
+        String script =
+                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+                "  return redis.call('del', KEYS[1]) " +
+                "else " +
+                "  return 0 " +
+                "end";
+        stringRedisTemplate.execute(
+                new org.springframework.data.redis.core.script.DefaultRedisScript<>(script, Long.class),
+                java.util.List.of(key),
+                value
+        );
+    }
 }

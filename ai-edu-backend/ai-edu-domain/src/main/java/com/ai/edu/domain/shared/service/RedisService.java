@@ -78,4 +78,23 @@ public interface RedisService {
      * @return 自增后的值
      */
     Long increment(String key, long delta);
+
+    /**
+     * 尝试获取分布式锁（SET NX EX 原子操作）
+     *
+     * @param key     锁键
+     * @param value   锁值（用于释放时校验）
+     * @param timeout 锁自动释放时间
+     * @param unit    时间单位
+     * @return 获取成功返回 true，失败返回 false
+     */
+    Boolean tryLock(String key, String value, long timeout, TimeUnit unit);
+
+    /**
+     * 释放分布式锁（Lua 脚本保证原子性：判断值相等再删除）
+     *
+     * @param key   锁键
+     * @param value 锁值
+     */
+    void unlock(String key, String value);
 }

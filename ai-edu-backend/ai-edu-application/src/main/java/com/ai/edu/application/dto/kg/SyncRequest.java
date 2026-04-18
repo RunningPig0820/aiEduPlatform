@@ -23,5 +23,5 @@ public class SyncRequest implements Serializable {
     private String subject;
     private String stage;
     private String grade;
-    private String textbookUri;
+    private String edition;
 }

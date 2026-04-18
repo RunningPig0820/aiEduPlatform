@@ -47,6 +47,18 @@ public class KnowledgeGraphController {
     }
 
     /**
+     * 单独同步教材节点（不同步章节/小节/知识点）
+     * POST /api/auth/kg/sync/textbooks
+     */
+    @PostMapping("/sync/textbooks")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public ApiResponse<SyncResult> syncTextbooksOnly(@RequestBody(required = false) SyncRequest request) {
+        log.info("知识图谱教材同步请求: {}", request);
+        SyncResult result = kgSyncAppService.syncTextbooksOnly(request);
+        return ApiResponse.success(result);
+    }
+
+    /**
      * 5.3 同步状态查询
      * GET /api/kg/sync/status
      */
