@@ -117,10 +117,10 @@ class KgDatasourceRoutingTest {
     @DisplayName("KgSyncAppService.syncFull() 应携带 @Transactional(\"kg\") 注解（源码验证）")
     void syncFull_shouldHaveTransactionalKg() throws IOException {
         // 由于 infrastructure 模块无法加载 application 模块的类，通过源码文件验证
-        Path serviceFile = Paths.get("src/main/java/com/ai/edu/infrastructure/service/KgSyncAppService.java");
+        Path serviceFile = Paths.get("src/main/java/com/ai/edu/infrastructure/service/kg/KgSyncAppService.java");
         // 尝试另一个可能的路径
         if (!Files.exists(serviceFile)) {
-            serviceFile = Paths.get("../ai-edu-application/src/main/java/com/ai/edu/application/service/KgSyncAppService.java");
+            serviceFile = Paths.get("../ai-edu-application/src/main/java/com/ai/edu/application/service/kg/KgSyncAppService.java");
         }
 
         assertTrue(Files.exists(serviceFile),
@@ -137,7 +137,7 @@ class KgDatasourceRoutingTest {
     @Order(6)
     @DisplayName("KgSyncAppService 类级别不应有 @Transactional（仅方法级）")
     void kgSyncAppService_noClassLevelTransactional() throws IOException {
-        Path serviceFile = Paths.get("../ai-edu-application/src/main/java/com/ai/edu/application/service/KgSyncAppService.java");
+        Path serviceFile = Paths.get("../ai-edu-application/src/main/java/com/ai/edu/application/service/kg/KgSyncAppService.java");
         assertTrue(Files.exists(serviceFile), "KgSyncAppService.java 源文件应存在");
 
         String content = Files.readString(serviceFile);

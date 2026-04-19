@@ -16,12 +16,12 @@ import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.edukg.repository.Neo4jNodeRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionKPRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
-import com.ai.edu.domain.edukg.service.KgNodeSyncService;
 import com.ai.edu.domain.edukg.service.KgRelationSyncService;
 import com.ai.edu.common.util.UriValidator;
 import com.ai.edu.domain.shared.service.RedisService;
@@ -49,8 +49,7 @@ import java.util.stream.Collectors;
 public class KgSyncAppService {
 
     @Resource
-    @Qualifier("neo4jNodeSyncService")
-    private KgNodeSyncService nodeSync;
+    private Neo4jNodeRepository neo4jNodeRepository;
 
     @Resource
     @Qualifier("neo4jRelationSyncService")
@@ -92,6 +91,7 @@ public class KgSyncAppService {
      * @param request 同步请求（必传参数：subject + edition）
      * @return 同步结果
      */
+    @Transactional("kg")
     public SyncResult syncFull(SyncRequest request) {
         // 同步锁检查（Redis 分布式锁）
         String lockValue = UUID.randomUUID().toString();
@@ -208,7 +208,7 @@ public class KgSyncAppService {
             syncRecord = kgSyncRecordRepository.save(newRecord);
 
             // 从 Neo4j 读取教材节点
-            List<KgTextbook> textbooks = nodeSync.syncTextbookNodes();
+            List<KgTextbook> textbooks = neo4jNodeRepository.findAllTextbooks();
 
             // 按 edition 过滤
             textbooks = textbooks.stream()
@@ -312,7 +312,7 @@ public class KgSyncAppService {
         int totalUpdated = 0;
 
         // 1. 同步教材节点
-        List<KgTextbook> textbooks = nodeSync.syncTextbookNodes();
+        List<KgTextbook> textbooks = neo4jNodeRepository.findAllTextbooks();
         // 按 edition / subject / grade 过滤
         if (request.getEdition() != null && !request.getEdition().isBlank()) {
             textbooks = textbooks.stream()
@@ -336,7 +336,7 @@ public class KgSyncAppService {
         totalInserted += kgTextbookRepository.upsert(textbooks);
 
         // 2. 同步章节节点
-        List<KgChapter> chapters = nodeSync.syncChapterNodes();
+        List<KgChapter> chapters = neo4jNodeRepository.findAllChapters();
         int chapterInserts = kgChapterRepository.upsert(chapters);
         // TODO: domain service upsert methods currently return total count (insert+update)
         // For now, treat all as inserted. Future: return separate insert/update counts.
@@ -346,7 +346,7 @@ public class KgSyncAppService {
                 .collect(Collectors.toSet());
 
         // 3. 同步小节节点
-        List<KgSection> sections = nodeSync.syncSectionNodes();
+        List<KgSection> sections = neo4jNodeRepository.findAllSections();
         int sectionInserts = kgSectionRepository.upsert(sections);
         totalInserted += sectionInserts;
         Set<String> sectionUris = sections.stream()
@@ -354,7 +354,7 @@ public class KgSyncAppService {
                 .collect(Collectors.toSet());
 
         // 4. 同步知识点节点
-        List<KgKnowledgePoint> kps = nodeSync.syncKnowledgePointNodes();
+        List<KgKnowledgePoint> kps = neo4jNodeRepository.findAllKnowledgePoints();
         int kpInserts = kgKnowledgePointRepository.upsert(kps);
         totalInserted += kpInserts;
         Set<String> kpUris = kps.stream()
@@ -388,40 +388,64 @@ public class KgSyncAppService {
     private int markDeletedNodes() {
         int totalChanged = 0;
 
-        Set<String> neo4jTextbookUris = nodeSync.syncTextbookNodes().stream()
+        // Textbook
+        Set<String> neo4jTextbookUris = neo4jNodeRepository.findAllTextbooks().stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += nodeSync.markDeletedNodes("Textbook", neo4jTextbookUris);
+        for (KgTextbook tb : kgTextbookRepository.findAllActive()) {
+            if (!neo4jTextbookUris.contains(tb.getUri())) {
+                kgTextbookRepository.updateStatus(tb.getUri(), "deleted");
+                totalChanged++;
+            }
+        }
 
-        Set<String> neo4jChapterUris = nodeSync.syncChapterNodes().stream()
+        // Chapter
+        Set<String> neo4jChapterUris = neo4jNodeRepository.findAllChapters().stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += nodeSync.markDeletedNodes("Chapter", neo4jChapterUris);
+        for (KgChapter ch : kgChapterRepository.findAllActive()) {
+            if (!neo4jChapterUris.contains(ch.getUri())) {
+                kgChapterRepository.updateStatus(ch.getUri(), "deleted");
+                totalChanged++;
+            }
+        }
 
-        Set<String> neo4jSectionUris = nodeSync.syncSectionNodes().stream()
+        // Section
+        Set<String> neo4jSectionUris = neo4jNodeRepository.findAllSections().stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += nodeSync.markDeletedNodes("Section", neo4jSectionUris);
+        for (KgSection sec : kgSectionRepository.findAllActive()) {
+            if (!neo4jSectionUris.contains(sec.getUri())) {
+                kgSectionRepository.updateStatus(sec.getUri(), "deleted");
+                totalChanged++;
+            }
+        }
 
-        Set<String> neo4jKpUris = nodeSync.syncKnowledgePointNodes().stream()
+        // KnowledgePoint
+        Set<String> neo4jKpUris = neo4jNodeRepository.findAllKnowledgePoints().stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
-        totalChanged += nodeSync.markDeletedNodes("KnowledgePoint", neo4jKpUris);
+        for (KgKnowledgePoint kp : kgKnowledgePointRepository.findAllActive()) {
+            if (!neo4jKpUris.contains(kp.getUri())) {
+                kgKnowledgePointRepository.updateStatus(kp.getUri(), "deleted");
+                totalChanged++;
+            }
+        }
 
         return totalChanged;
     }
 
     private ReconciliationResult reconcile() {
-        Set<String> neo4jTextbookUris = nodeSync.syncTextbookNodes().stream()
+        Set<String> neo4jTextbookUris = neo4jNodeRepository.findAllTextbooks().stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jChapterUris = nodeSync.syncChapterNodes().stream()
+        Set<String> neo4jChapterUris = neo4jNodeRepository.findAllChapters().stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jSectionUris = nodeSync.syncSectionNodes().stream()
+        Set<String> neo4jSectionUris = neo4jNodeRepository.findAllSections().stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
-        Set<String> neo4jKpUris = nodeSync.syncKnowledgePointNodes().stream()
+        Set<String> neo4jKpUris = neo4jNodeRepository.findAllKnowledgePoints().stream()
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
 

@@ -1,47 +1,34 @@
 package com.ai.edu.infrastructure.persistence.neo4j;
 
 import com.ai.edu.domain.edukg.model.entity.*;
-import com.ai.edu.domain.edukg.service.KgNodeSyncService;
-import com.ai.edu.infrastructure.persistence.edukg.mapper.*;
-import com.ai.edu.infrastructure.persistence.edukg.po.*;
+import com.ai.edu.domain.edukg.repository.Neo4jNodeRepository;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.*;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.types.Node;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Repository;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * Neo4j 节点同步服务
+ * Neo4j 节点读取仓储实现
  *
- * 负责：Neo4j 节点查询 + MySQL 节点 UPSERT
+ * 负责：从 Neo4j 查询节点并映射为领域实体
  */
 @Slf4j
-@Service
-public class Neo4jNodeSyncService implements KgNodeSyncService {
+@Repository
+public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
 
     @Resource
     private Driver neo4jDriver;
 
-    @Resource
-    private KgTextbookMapper kgTextbookMapper;
-
-    @Resource
-    private KgChapterMapper kgChapterMapper;
-
-    @Resource
-    private KgSectionMapper kgSectionMapper;
-
-    @Resource
-    private KgKnowledgePointMapper kgKnowledgePointMapper;
-
     // ==================== Neo4j 节点查询 ====================
 
-    public List<KgTextbook> syncTextbookNodes() {
+    @Override
+    public List<KgTextbook> findAllTextbooks() {
         return queryNeo4jNodes("Textbook", record -> {
             String uri = getUri(record);
             String label = getLabel(record);
@@ -53,7 +40,8 @@ public class Neo4jNodeSyncService implements KgNodeSyncService {
         });
     }
 
-    public List<KgChapter> syncChapterNodes() {
+    @Override
+    public List<KgChapter> findAllChapters() {
         return queryNeo4jNodes("Chapter", record -> {
             String uri = getUri(record);
             String label = getLabel(record);
@@ -61,7 +49,8 @@ public class Neo4jNodeSyncService implements KgNodeSyncService {
         });
     }
 
-    public List<KgSection> syncSectionNodes() {
+    @Override
+    public List<KgSection> findAllSections() {
         return queryNeo4jNodes("Section", record -> {
             String uri = getUri(record);
             String label = getLabel(record);
@@ -69,7 +58,8 @@ public class Neo4jNodeSyncService implements KgNodeSyncService {
         });
     }
 
-    public List<KgKnowledgePoint> syncKnowledgePointNodes() {
+    @Override
+    public List<KgKnowledgePoint> findAllKnowledgePoints() {
         return queryNeo4jNodes("KnowledgePoint", record -> {
             String uri = getUri(record);
             String label = getLabel(record);
@@ -78,10 +68,7 @@ public class Neo4jNodeSyncService implements KgNodeSyncService {
     }
 
     private <T> List<T> queryNeo4jNodes(String label, Function<Record, T> mapper) {
-        String query = String.format(
-                "MATCH (n:%s) WHERE n.status IS NULL OR n.status <> 'deleted' RETURN n",
-                label
-        );
+        String query = String.format("MATCH (n:%s) RETURN n", label);
         List<T> results = new ArrayList<>();
         try (var session = neo4jDriver.session()) {
             session.readTransaction(tx -> {
@@ -100,54 +87,6 @@ public class Neo4jNodeSyncService implements KgNodeSyncService {
         }
         log.info("Queried {} nodes of type '{}' from Neo4j", results.size(), label);
         return results;
-    }
-
-    // ==================== 标记删除 ====================
-
-    public int markDeletedNodes(String neo4jNodeType, Set<String> neo4jUris) {
-        int count = 0;
-        switch (neo4jNodeType) {
-            case "Textbook":
-                List<KgTextbookPo> allTextbookPos = kgTextbookMapper.selectAllActive();
-                for (KgTextbookPo po : allTextbookPos) {
-                    if (!neo4jUris.contains(po.getUri())) {
-                        kgTextbookMapper.updateStatus(po.getUri(), "deleted", 0L);
-                        count++;
-                    }
-                }
-                break;
-            case "Chapter":
-                List<KgChapterPo> allChapterPos = kgChapterMapper.selectByStatus("active");
-                for (KgChapterPo po : allChapterPos) {
-                    if (!neo4jUris.contains(po.getUri())) {
-                        kgChapterMapper.updateStatus(po.getUri(), "deleted", 0L);
-                        count++;
-                    }
-                }
-                break;
-            case "Section":
-                List<KgSectionPo> allSectionPos = kgSectionMapper.selectByStatus("active");
-                for (KgSectionPo po : allSectionPos) {
-                    if (!neo4jUris.contains(po.getUri())) {
-                        kgSectionMapper.updateStatus(po.getUri(), "deleted", 0L);
-                        count++;
-                    }
-                }
-                break;
-            case "KnowledgePoint":
-                List<KgKnowledgePointPo> allKpPos = kgKnowledgePointMapper.selectByStatus("active");
-                for (KgKnowledgePointPo po : allKpPos) {
-                    if (!neo4jUris.contains(po.getUri())) {
-                        kgKnowledgePointMapper.updateStatus(po.getUri(), "deleted", 0L);
-                        count++;
-                    }
-                }
-                break;
-        }
-        if (count > 0) {
-            log.info("Marked {} {} nodes as deleted (not found in Neo4j)", count, neo4jNodeType);
-        }
-        return count;
     }
 
     // ==================== 辅助方法 ====================

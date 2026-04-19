@@ -78,4 +78,9 @@ public class KgChapterRepositoryImpl implements KgChapterRepository {
     public int countActive() {
         return kgChapterMapper.selectByStatus("active").size();
     }
+
+    @Override
+    public List<KgChapter> findAllActive() {
+        return KgChapterPo.toEntityList(kgChapterMapper.selectByStatus("active"));
+    }
 }

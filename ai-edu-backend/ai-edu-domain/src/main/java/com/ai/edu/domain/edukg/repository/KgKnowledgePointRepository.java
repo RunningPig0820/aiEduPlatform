@@ -27,6 +27,11 @@ public interface KgKnowledgePointRepository {
     List<KgKnowledgePoint> findByStatus(String status);
 
     /**
+     * 查询所有活跃的知识点
+     */
+    List<KgKnowledgePoint> findAllActive();
+
+    /**
      * 统计活跃知识点数量（用于对账）
      */
     int countActive();

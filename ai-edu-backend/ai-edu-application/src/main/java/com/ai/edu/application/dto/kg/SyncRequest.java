@@ -1,5 +1,6 @@
 package com.ai.edu.application.dto.kg;
 
+import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,8 +21,12 @@ public class SyncRequest implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @ApiModelProperty(value = "学科")
     private String subject;
+    @ApiModelProperty(value = "阶段")
     private String stage;
+    @ApiModelProperty(value = "年级")
     private String grade;
+    @ApiModelProperty(value = "教材")
     private String edition;
 }

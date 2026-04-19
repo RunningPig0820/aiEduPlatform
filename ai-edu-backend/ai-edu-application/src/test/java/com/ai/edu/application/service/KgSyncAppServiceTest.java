@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import com.ai.edu.domain.edukg.repository.Neo4jNodeRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
@@ -26,7 +27,6 @@ import com.ai.edu.domain.edukg.repository.KgSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
-import com.ai.edu.domain.edukg.service.KgNodeSyncService;
 import com.ai.edu.domain.edukg.service.KgRelationSyncService;
 import com.ai.edu.domain.shared.service.RedisService;
 
@@ -44,7 +44,7 @@ import static org.mockito.Mockito.*;
 class KgSyncAppServiceTest {
 
     @Mock
-    private KgNodeSyncService nodeSync;
+    private Neo4jNodeRepository neo4jNodeRepository;
 
     @Mock
     private KgRelationSyncService relationSync;
@@ -102,10 +102,10 @@ class KgSyncAppServiceTest {
                 KgKnowledgePoint.create("uri:kp1", "知识点1")
         );
 
-        when(nodeSync.syncTextbookNodes()).thenReturn(textbooks);
-        when(nodeSync.syncChapterNodes()).thenReturn(chapters);
-        when(nodeSync.syncSectionNodes()).thenReturn(sections);
-        when(nodeSync.syncKnowledgePointNodes()).thenReturn(kps);
+        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
+        when(neo4jNodeRepository.findAllChapters()).thenReturn(chapters);
+        when(neo4jNodeRepository.findAllSections()).thenReturn(sections);
+        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(kps);
         when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
         when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
         when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
@@ -116,12 +116,14 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        // Repository mocks for reconcile
+        // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
-        when(kgChapterRepository.countActive()).thenReturn(chapters.size());
-        when(kgSectionRepository.countActive()).thenReturn(sections.size());
-        when(kgKnowledgePointRepository.countActive()).thenReturn(kps.size());
+        when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(1);
+        when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.countActive()).thenReturn(1);
+        when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(1);
         when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
         when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
         when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
@@ -152,10 +154,10 @@ class KgSyncAppServiceTest {
         assertEquals(1L, result.getSyncId());
         assertEquals("matched", result.getReconciliationStatus());
 
-        verify(nodeSync, atLeast(1)).syncTextbookNodes();
-        verify(nodeSync, atLeast(1)).syncChapterNodes();
-        verify(nodeSync, atLeast(1)).syncSectionNodes();
-        verify(nodeSync, atLeast(1)).syncKnowledgePointNodes();
+        verify(neo4jNodeRepository, atLeast(1)).findAllTextbooks();
+        verify(neo4jNodeRepository, atLeast(1)).findAllChapters();
+        verify(neo4jNodeRepository, atLeast(1)).findAllSections();
+        verify(neo4jNodeRepository, atLeast(1)).findAllKnowledgePoints();
         verify(kgTextbookRepository).upsert(anyList());
         verify(kgChapterRepository).upsert(anyList());
         verify(kgSectionRepository).upsert(anyList());
@@ -163,7 +165,6 @@ class KgSyncAppServiceTest {
         verify(relationSync).rebuildTextbookChapterRelations(anyList());
         verify(relationSync).rebuildChapterSectionRelations(anyList());
         verify(relationSync).rebuildSectionKPRelations(anyList());
-        verify(nodeSync, atLeast(1)).markDeletedNodes(anyString(), anySet());
         verify(kgSyncRecordRepository, atLeast(2)).save(any(KgSyncRecord.class));
     }
 
@@ -181,10 +182,10 @@ class KgSyncAppServiceTest {
                 KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", targetEdition, "math"),
                 KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
         );
-        when(nodeSync.syncTextbookNodes()).thenReturn(allTextbooks);
-        when(nodeSync.syncChapterNodes()).thenReturn(List.of());
-        when(nodeSync.syncSectionNodes()).thenReturn(List.of());
-        when(nodeSync.syncKnowledgePointNodes()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(allTextbooks);
+        when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
         when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
         when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
         when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
@@ -195,15 +196,11 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        // Repository mocks for reconcile
+        // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterRepository.countActive()).thenReturn(0);
-        when(kgSectionRepository.countActive()).thenReturn(0);
-        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(2L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
@@ -229,10 +226,10 @@ class KgSyncAppServiceTest {
                 KgTextbook.create("uri:math", "数学教材", "七年级", "junior", "人教版", "math"),
                 KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "人教版", "english")
         );
-        when(nodeSync.syncTextbookNodes()).thenReturn(textbooks);
-        when(nodeSync.syncChapterNodes()).thenReturn(List.of());
-        when(nodeSync.syncSectionNodes()).thenReturn(List.of());
-        when(nodeSync.syncKnowledgePointNodes()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
+        when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
+        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
         when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
         when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
         when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
@@ -243,15 +240,11 @@ class KgSyncAppServiceTest {
         when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
         when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
-        when(nodeSync.markDeletedNodes(anyString(), anySet())).thenReturn(0);
-        // Repository mocks for reconcile
+        // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterRepository.countActive()).thenReturn(0);
-        when(kgSectionRepository.countActive()).thenReturn(0);
-        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(3L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
@@ -287,7 +280,7 @@ class KgSyncAppServiceTest {
     @DisplayName("syncFull 异常回滚 — NodeSync 抛异常应传播 BusinessException")
     void syncFull_nodeSyncThrows_shouldThrowBusinessException() {
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(nodeSync.syncTextbookNodes())
+        when(neo4jNodeRepository.findAllTextbooks())
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
@@ -422,7 +415,7 @@ class KgSyncAppServiceTest {
                 KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
         );
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(nodeSync.syncTextbookNodes()).thenReturn(textbooks);
+        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
 
         KgSyncRecord syncRecord = createSyncRecord(20L);
@@ -468,7 +461,7 @@ class KgSyncAppServiceTest {
         KgSyncRecord syncRecord = createSyncRecord(30L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
         when(kgSyncRecordRepository.findById(30L)).thenReturn(Optional.of(syncRecord));
-        when(nodeSync.syncTextbookNodes())
+        when(neo4jNodeRepository.findAllTextbooks())
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BusinessException ex = assertThrows(BusinessException.class, () ->

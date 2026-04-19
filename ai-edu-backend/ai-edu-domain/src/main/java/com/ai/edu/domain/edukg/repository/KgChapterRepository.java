@@ -27,6 +27,11 @@ public interface KgChapterRepository {
     void updateStatus(String uri, String status);
 
     /**
+     * 查询所有活跃的章节
+     */
+    List<KgChapter> findAllActive();
+
+    /**
      * 统计活跃章节数量（用于对账）
      */
     int countActive();

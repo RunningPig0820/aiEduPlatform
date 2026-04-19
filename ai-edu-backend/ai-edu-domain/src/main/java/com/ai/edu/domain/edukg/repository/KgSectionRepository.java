@@ -27,6 +27,11 @@ public interface KgSectionRepository {
     void updateStatus(String uri, String status);
 
     /**
+     * 查询所有活跃的小节
+     */
+    List<KgSection> findAllActive();
+
+    /**
      * 统计活跃小节数量（用于对账）
      */
     int countActive();

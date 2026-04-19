@@ -78,4 +78,9 @@ public class KgSectionRepositoryImpl implements KgSectionRepository {
     public int countActive() {
         return kgSectionMapper.selectByStatus("active").size();
     }
+
+    @Override
+    public List<KgSection> findAllActive() {
+        return KgSectionPo.toEntityList(kgSectionMapper.selectByStatus("active"));
+    }
 }

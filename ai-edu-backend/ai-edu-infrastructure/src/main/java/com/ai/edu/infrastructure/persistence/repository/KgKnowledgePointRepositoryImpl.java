@@ -83,4 +83,9 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
     public int countActive() {
         return kgKnowledgePointMapper.selectByStatus("active").size();
     }
+
+    @Override
+    public List<KgKnowledgePoint> findAllActive() {
+        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByStatus("active"));
+    }
 }
