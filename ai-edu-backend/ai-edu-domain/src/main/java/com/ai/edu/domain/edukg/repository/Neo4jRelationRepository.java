@@ -13,9 +13,18 @@ import java.util.List;
  */
 public interface Neo4jRelationRepository {
 
-    List<KgTextbookChapter> findTextbookChapterRelations();
+    /**
+     * 按教材 URI 列表查询教材-章节关联
+     */
+    List<KgTextbookChapter> findTextbookChapterRelations(List<String> textbookUris);
 
-    List<KgChapterSection> findChapterSectionRelations();
+    /**
+     * 按章节 URI 列表查询章节-小节关联
+     */
+    List<KgChapterSection> findChapterSectionRelations(List<String> chapterUris);
 
-    List<KgSectionKP> findSectionKPRelations();
+    /**
+     * 按小节 URI 列表查询小节-知识点关联
+     */
+    List<KgSectionKP> findSectionKPRelations(List<String> sectionUris);
 }

@@ -102,13 +102,13 @@ class KgSyncAppServiceTest {
                 KgKnowledgePoint.create("uri:kp1", "知识点1")
         );
 
-        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
-        when(neo4jNodeRepository.findAllChapters()).thenReturn(chapters);
-        when(neo4jNodeRepository.findAllSections()).thenReturn(sections);
-        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(kps);
-        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(textbooks);
+        when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(chapters);
+        when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(sections);
+        when(neo4jNodeRepository.findKnowledgePointsByTextbookUris(anyList())).thenReturn(kps);
+        when(neo4jRelationRepository.findTextbookChapterRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations(anyList())).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenReturn(1);
         when(kgChapterRepository.upsert(anyList())).thenReturn(1);
         when(kgSectionRepository.upsert(anyList())).thenReturn(1);
@@ -151,10 +151,10 @@ class KgSyncAppServiceTest {
         assertEquals(1L, result.getSyncId());
         assertEquals("matched", result.getReconciliationStatus());
 
-        verify(neo4jNodeRepository, atLeast(1)).findAllTextbooks();
-        verify(neo4jNodeRepository, atLeast(1)).findAllChapters();
-        verify(neo4jNodeRepository, atLeast(1)).findAllSections();
-        verify(neo4jNodeRepository, atLeast(1)).findAllKnowledgePoints();
+        verify(neo4jNodeRepository, atLeast(1)).findTextbooks(any(), any(), any(), any());
+        verify(neo4jNodeRepository, atLeast(1)).findChaptersByTextbookUris(anyList());
+        verify(neo4jNodeRepository, atLeast(1)).findSectionsByTextbookUris(anyList());
+        verify(neo4jNodeRepository, atLeast(1)).findKnowledgePointsByTextbookUris(anyList());
         verify(kgTextbookRepository).upsert(anyList());
         verify(kgChapterRepository).upsert(anyList());
         verify(kgSectionRepository).upsert(anyList());
@@ -172,22 +172,21 @@ class KgSyncAppServiceTest {
         SyncRequest request = SyncRequest.builder().subject("math").edition(targetEdition).build();
 
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        List<KgTextbook> allTextbooks = List.of(
-                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", targetEdition, "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
+        // Neo4j 层已按 edition/subject 过滤，只返回匹配的教材
+        List<KgTextbook> filteredTextbooks = List.of(
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", targetEdition, "math")
         );
-        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(allTextbooks);
-        when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
-        when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
-        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
-        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(filteredTextbooks);
+        when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findKnowledgePointsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations(anyList())).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
-        // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
         when(kgSectionRepository.findAllActive()).thenReturn(List.of());
@@ -199,7 +198,7 @@ class KgSyncAppServiceTest {
 
         SyncResult result = kgSyncAppService.syncFull(request);
 
-        // 应只 upsert 1 个教材（被过滤后的）
+        // 应只 upsert 1 个教材（Neo4j 已过滤）
         verify(kgTextbookRepository).upsert(argThat(tbs ->
                 tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getEdition().equals(targetEdition)
         ));
@@ -213,17 +212,16 @@ class KgSyncAppServiceTest {
         SyncRequest request = SyncRequest.builder().subject("english").edition("人教版").build();
 
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:math", "数学教材", "七年级", "junior", "人教版", "math"),
+        List<KgTextbook> filteredTextbooks = List.of(
                 KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "人教版", "english")
         );
-        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
-        when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
-        when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
-        when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
-        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
-        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(filteredTextbooks);
+        when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findKnowledgePointsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations(anyList())).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
@@ -268,7 +266,7 @@ class KgSyncAppServiceTest {
     @DisplayName("syncFull 异常回滚 — NodeSync 抛异常应传播 BusinessException")
     void syncFull_nodeSyncThrows_shouldThrowBusinessException() {
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(neo4jNodeRepository.findAllTextbooks())
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
@@ -398,12 +396,12 @@ class KgSyncAppServiceTest {
     @Order(12)
     @DisplayName("syncTextbooksOnly 正常流程 — 按 edition 过滤并返回成功")
     void syncTextbooksOnly_withEdition_shouldFilterAndReturnSuccess() {
-        List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "北师大版", "math")
+        // Neo4j 层已过滤，只返回匹配的教材
+        List<KgTextbook> filteredTextbooks = List.of(
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
         );
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(neo4jNodeRepository.findAllTextbooks()).thenReturn(textbooks);
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(filteredTextbooks);
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
 
         KgSyncRecord syncRecord = createSyncRecord(20L);
@@ -449,7 +447,7 @@ class KgSyncAppServiceTest {
         KgSyncRecord syncRecord = createSyncRecord(30L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
         when(kgSyncRecordRepository.findById(30L)).thenReturn(Optional.of(syncRecord));
-        when(neo4jNodeRepository.findAllTextbooks())
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
         BusinessException ex = assertThrows(BusinessException.class, () ->

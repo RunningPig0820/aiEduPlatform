@@ -11,11 +11,23 @@ import java.util.List;
  */
 public interface Neo4jNodeRepository {
 
-    List<KgTextbook> findAllTextbooks();
+    /**
+     * 按教材/学科查询（edition 和 subject 必传）
+     */
+    List<KgTextbook> findTextbooks(String edition, String subject, String stage, String grade);
 
-    List<KgChapter> findAllChapters();
+    /**
+     * 按所属教材 URI 列表查询章节
+     */
+    List<KgChapter> findChaptersByTextbookUris(List<String> textbookUris);
 
-    List<KgSection> findAllSections();
+    /**
+     * 按所属教材 URI 列表查询小节（通过 chapter 关联）
+     */
+    List<KgSection> findSectionsByTextbookUris(List<String> textbookUris);
 
-    List<KgKnowledgePoint> findAllKnowledgePoints();
+    /**
+     * 按所属教材 URI 列表查询知识点（通过 section 关联）
+     */
+    List<KgKnowledgePoint> findKnowledgePointsByTextbookUris(List<String> textbookUris);
 }

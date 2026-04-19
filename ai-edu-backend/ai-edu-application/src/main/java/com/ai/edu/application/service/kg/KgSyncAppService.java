@@ -117,10 +117,10 @@ public class KgSyncAppService {
             SyncExecutionResult syncResult = executeSync(request);
 
             // 状态变更：标记 MySQL 中有但 Neo4j 中无的节点为 deleted
-            int statusChangedCount = markDeletedNodes();
+            int statusChangedCount = markDeletedNodes(request);
 
             // 对账校验
-            ReconciliationResult reconciliation = reconcile();
+            ReconciliationResult reconciliation = reconcile(request);
 
             // 完成同步记录
             Optional<KgSyncRecord> recordOpt = kgSyncRecordRepository.findById(syncRecord.getId());
@@ -205,13 +205,9 @@ public class KgSyncAppService {
             KgSyncRecord newRecord = KgSyncRecord.create("textbook", scope, 0L);
             syncRecord = kgSyncRecordRepository.save(newRecord);
 
-            // 从 Neo4j 读取教材节点
-            List<KgTextbook> textbooks = neo4jNodeRepository.findAllTextbooks();
-
-            // 按 edition 过滤
-            textbooks = textbooks.stream()
-                    .filter(tb -> request.getEdition().equals(tb.getEdition()))
-                    .toList();
+            // 从 Neo4j 读取教材节点（按 edition/subject 过滤）
+            List<KgTextbook> textbooks = neo4jNodeRepository.findTextbooks(
+                    request.getEdition(), request.getSubject(), null, null);
 
             // 写入 MySQL（按 uri 去重：insert or update）
             int insertedCount = kgTextbookRepository.upsert(textbooks);
@@ -309,50 +305,33 @@ public class KgSyncAppService {
         int totalInserted = 0;
         int totalUpdated = 0;
 
-        // 1. 同步教材节点
-        List<KgTextbook> textbooks = neo4jNodeRepository.findAllTextbooks();
-        // 按 edition / subject / grade 过滤
-        if (request.getEdition() != null && !request.getEdition().isBlank()) {
-            textbooks = textbooks.stream()
-                    .filter(tb -> request.getEdition().equals(tb.getEdition()))
-                    .toList();
-        }
-        if (request.getSubject() != null) {
-            textbooks = textbooks.stream()
-                    .filter(tb -> request.getSubject().equals(tb.getSubject()))
-                    .toList();
-        }
-        if (request.getGrade() != null) {
-            textbooks = textbooks.stream()
-                    .filter(tb -> request.getGrade().equals(tb.getGrade()))
-                    .toList();
-        }
+        // 1. 同步教材节点（edition/subject 必传）
+        List<KgTextbook> textbooks = neo4jNodeRepository.findTextbooks(
+                request.getEdition(), request.getSubject(), request.getStage(), request.getGrade());
 
         Set<String> textbookUris = textbooks.stream()
                 .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
         totalInserted += kgTextbookRepository.upsert(textbooks);
 
-        // 2. 同步章节节点
-        List<KgChapter> chapters = neo4jNodeRepository.findAllChapters();
+        // 2. 同步章节节点（按教材过滤）
+        List<KgChapter> chapters = neo4jNodeRepository.findChaptersByTextbookUris(new ArrayList<>(textbookUris));
         int chapterInserts = kgChapterRepository.upsert(chapters);
-        // TODO: domain service upsert methods currently return total count (insert+update)
-        // For now, treat all as inserted. Future: return separate insert/update counts.
         totalInserted += chapterInserts;
         Set<String> chapterUris = chapters.stream()
                 .map(KgChapter::getUri)
                 .collect(Collectors.toSet());
 
-        // 3. 同步小节节点
-        List<KgSection> sections = neo4jNodeRepository.findAllSections();
+        // 3. 同步小节节点（按教材过滤）
+        List<KgSection> sections = neo4jNodeRepository.findSectionsByTextbookUris(new ArrayList<>(textbookUris));
         int sectionInserts = kgSectionRepository.upsert(sections);
         totalInserted += sectionInserts;
         Set<String> sectionUris = sections.stream()
                 .map(KgSection::getUri)
                 .collect(Collectors.toSet());
 
-        // 4. 同步知识点节点
-        List<KgKnowledgePoint> kps = neo4jNodeRepository.findAllKnowledgePoints();
+        // 4. 同步知识点节点（按教材过滤）
+        List<KgKnowledgePoint> kps = neo4jNodeRepository.findKnowledgePointsByTextbookUris(new ArrayList<>(textbookUris));
         int kpInserts = kgKnowledgePointRepository.upsert(kps);
         totalInserted += kpInserts;
         Set<String> kpUris = kps.stream()
@@ -370,26 +349,26 @@ public class KgSyncAppService {
             log.warn("URI validation warnings: {}", uriValidation.errors);
         }
 
-        // 6. 同步层级关联
-        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations();
+        // 6. 同步层级关联（按教材过滤）
+        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations(new ArrayList<>(textbookUris));
         totalInserted += rebuildTextbookChapterRelations(tbChRelations);
 
-        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations();
+        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations(new ArrayList<>(chapterUris));
         totalInserted += rebuildChapterSectionRelations(chSecRelations);
 
-        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations();
+        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations(new ArrayList<>(sectionUris));
         totalInserted += rebuildSectionKPRelations(secKpRelations);
 
         return new SyncExecutionResult(totalInserted, totalUpdated);
     }
 
-    private int markDeletedNodes() {
+    private int markDeletedNodes(SyncRequest request) {
         int totalChanged = 0;
 
         // Textbook
-        Set<String> neo4jTextbookUris = neo4jNodeRepository.findAllTextbooks().stream()
-                .map(KgTextbook::getUri)
-                .collect(Collectors.toSet());
+        List<KgTextbook> neo4jTextbooks = neo4jNodeRepository.findTextbooks(
+                request.getEdition(), request.getSubject(), request.getStage(), request.getGrade());
+        Set<String> neo4jTextbookUris = neo4jTextbooks.stream().map(KgTextbook::getUri).collect(Collectors.toSet());
         for (KgTextbook tb : kgTextbookRepository.findAllActive()) {
             if (!neo4jTextbookUris.contains(tb.getUri())) {
                 kgTextbookRepository.updateStatus(tb.getUri(), "deleted");
@@ -398,20 +377,21 @@ public class KgSyncAppService {
         }
 
         // Chapter
-        Set<String> neo4jChapterUris = neo4jNodeRepository.findAllChapters().stream()
-                .map(KgChapter::getUri)
+        Set<String> neo4jChapterUris = neo4jTextbooks.stream()
+                .map(KgTextbook::getUri)
                 .collect(Collectors.toSet());
+        List<KgChapter> neo4jChapters = neo4jNodeRepository.findChaptersByTextbookUris(new ArrayList<>(neo4jChapterUris));
+        Set<String> neo4jChapterUrisSet = neo4jChapters.stream().map(KgChapter::getUri).collect(Collectors.toSet());
         for (KgChapter ch : kgChapterRepository.findAllActive()) {
-            if (!neo4jChapterUris.contains(ch.getUri())) {
+            if (!neo4jChapterUrisSet.contains(ch.getUri())) {
                 kgChapterRepository.updateStatus(ch.getUri(), "deleted");
                 totalChanged++;
             }
         }
 
         // Section
-        Set<String> neo4jSectionUris = neo4jNodeRepository.findAllSections().stream()
-                .map(KgSection::getUri)
-                .collect(Collectors.toSet());
+        List<KgSection> neo4jSections = neo4jNodeRepository.findSectionsByTextbookUris(new ArrayList<>(neo4jChapterUris));
+        Set<String> neo4jSectionUris = neo4jSections.stream().map(KgSection::getUri).collect(Collectors.toSet());
         for (KgSection sec : kgSectionRepository.findAllActive()) {
             if (!neo4jSectionUris.contains(sec.getUri())) {
                 kgSectionRepository.updateStatus(sec.getUri(), "deleted");
@@ -420,9 +400,8 @@ public class KgSyncAppService {
         }
 
         // KnowledgePoint
-        Set<String> neo4jKpUris = neo4jNodeRepository.findAllKnowledgePoints().stream()
-                .map(KgKnowledgePoint::getUri)
-                .collect(Collectors.toSet());
+        List<KgKnowledgePoint> neo4jKps = neo4jNodeRepository.findKnowledgePointsByTextbookUris(new ArrayList<>(neo4jChapterUris));
+        Set<String> neo4jKpUris = neo4jKps.stream().map(KgKnowledgePoint::getUri).collect(Collectors.toSet());
         for (KgKnowledgePoint kp : kgKnowledgePointRepository.findAllActive()) {
             if (!neo4jKpUris.contains(kp.getUri())) {
                 kgKnowledgePointRepository.updateStatus(kp.getUri(), "deleted");
@@ -433,23 +412,23 @@ public class KgSyncAppService {
         return totalChanged;
     }
 
-    private ReconciliationResult reconcile() {
-        Set<String> neo4jTextbookUris = neo4jNodeRepository.findAllTextbooks().stream()
-                .map(KgTextbook::getUri)
-                .collect(Collectors.toSet());
-        Set<String> neo4jChapterUris = neo4jNodeRepository.findAllChapters().stream()
-                .map(KgChapter::getUri)
-                .collect(Collectors.toSet());
-        Set<String> neo4jSectionUris = neo4jNodeRepository.findAllSections().stream()
-                .map(KgSection::getUri)
-                .collect(Collectors.toSet());
-        Set<String> neo4jKpUris = neo4jNodeRepository.findAllKnowledgePoints().stream()
-                .map(KgKnowledgePoint::getUri)
-                .collect(Collectors.toSet());
+    private ReconciliationResult reconcile(SyncRequest request) {
+        List<KgTextbook> neo4jTextbooks = neo4jNodeRepository.findTextbooks(
+                request.getEdition(), request.getSubject(), request.getStage(), request.getGrade());
+        Set<String> neo4jTextbookUris = neo4jTextbooks.stream().map(KgTextbook::getUri).collect(Collectors.toSet());
 
-        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations();
-        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations();
-        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations();
+        List<KgChapter> neo4jChapters = neo4jNodeRepository.findChaptersByTextbookUris(new ArrayList<>(neo4jTextbookUris));
+        Set<String> neo4jChapterUris = neo4jChapters.stream().map(KgChapter::getUri).collect(Collectors.toSet());
+
+        List<KgSection> neo4jSections = neo4jNodeRepository.findSectionsByTextbookUris(new ArrayList<>(neo4jTextbookUris));
+        Set<String> neo4jSectionUris = neo4jSections.stream().map(KgSection::getUri).collect(Collectors.toSet());
+
+        List<KgKnowledgePoint> neo4jKps = neo4jNodeRepository.findKnowledgePointsByTextbookUris(new ArrayList<>(neo4jTextbookUris));
+        Set<String> neo4jKpUris = neo4jKps.stream().map(KgKnowledgePoint::getUri).collect(Collectors.toSet());
+
+        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations(new ArrayList<>(neo4jTextbookUris));
+        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations(new ArrayList<>(neo4jChapterUris));
+        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations(new ArrayList<>(neo4jSectionUris));
 
         List<String> differences = new ArrayList<>();
 

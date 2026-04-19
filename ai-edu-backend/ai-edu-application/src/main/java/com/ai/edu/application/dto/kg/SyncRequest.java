@@ -21,12 +21,13 @@ public class SyncRequest implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @ApiModelProperty(value = "教材")
+    private String edition;
     @ApiModelProperty(value = "学科")
     private String subject;
-    @ApiModelProperty(value = "阶段")
+    @ApiModelProperty(value = "学段")
     private String stage;
     @ApiModelProperty(value = "年级")
     private String grade;
-    @ApiModelProperty(value = "教材")
-    private String edition;
+
 }
