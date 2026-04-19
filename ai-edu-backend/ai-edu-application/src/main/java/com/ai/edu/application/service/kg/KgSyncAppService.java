@@ -17,17 +17,16 @@ import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.edukg.repository.Neo4jNodeRepository;
+import com.ai.edu.domain.edukg.repository.Neo4jRelationRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionKPRepository;
 import com.ai.edu.domain.edukg.repository.KgSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
-import com.ai.edu.domain.edukg.service.KgRelationSyncService;
 import com.ai.edu.common.util.UriValidator;
 import com.ai.edu.domain.shared.service.RedisService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,8 +51,7 @@ public class KgSyncAppService {
     private Neo4jNodeRepository neo4jNodeRepository;
 
     @Resource
-    @Qualifier("neo4jRelationSyncService")
-    private KgRelationSyncService relationSync;
+    private Neo4jRelationRepository neo4jRelationRepository;
 
     @Resource
     private KgSyncRecordRepository kgSyncRecordRepository;
@@ -373,14 +371,14 @@ public class KgSyncAppService {
         }
 
         // 6. 同步层级关联
-        List<KgTextbookChapter> tbChRelations = relationSync.syncTextbookChapterRelations();
-        totalInserted += relationSync.rebuildTextbookChapterRelations(tbChRelations);
+        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations();
+        totalInserted += rebuildTextbookChapterRelations(tbChRelations);
 
-        List<KgChapterSection> chSecRelations = relationSync.syncChapterSectionRelations();
-        totalInserted += relationSync.rebuildChapterSectionRelations(chSecRelations);
+        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations();
+        totalInserted += rebuildChapterSectionRelations(chSecRelations);
 
-        List<KgSectionKP> secKpRelations = relationSync.syncSectionKPRelations();
-        totalInserted += relationSync.rebuildSectionKPRelations(secKpRelations);
+        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations();
+        totalInserted += rebuildSectionKPRelations(secKpRelations);
 
         return new SyncExecutionResult(totalInserted, totalUpdated);
     }
@@ -449,9 +447,9 @@ public class KgSyncAppService {
                 .map(KgKnowledgePoint::getUri)
                 .collect(Collectors.toSet());
 
-        List<KgTextbookChapter> tbChRelations = relationSync.syncTextbookChapterRelations();
-        List<KgChapterSection> chSecRelations = relationSync.syncChapterSectionRelations();
-        List<KgSectionKP> secKpRelations = relationSync.syncSectionKPRelations();
+        List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations();
+        List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations();
+        List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations();
 
         List<String> differences = new ArrayList<>();
 
@@ -503,6 +501,177 @@ public class KgSyncAppService {
                 mysqlChSecCount, chSecRelations.size(),
                 mysqlSecKpCount, secKpRelations.size(),
                 differences);
+    }
+
+    // ==================== 关联表 rebuild 私有方法 ====================
+
+    /**
+     * 教材-章节关联 UPSERT：按父端分组对比 Neo4j 与 MySQL
+     */
+    private int rebuildTextbookChapterRelations(List<KgTextbookChapter> neo4jRelations) {
+        if (neo4jRelations == null || neo4jRelations.isEmpty()) {
+            kgTextbookChapterRepository.deleteByTextbookUri("__ALL__");
+            return 0;
+        }
+
+        int totalOps = 0;
+        Map<String, List<KgTextbookChapter>> neo4jGrouped = neo4jRelations.stream()
+                .collect(Collectors.groupingBy(KgTextbookChapter::getTextbookUri));
+        Set<String> neo4jParentUris = neo4jGrouped.keySet();
+
+        for (Map.Entry<String, List<KgTextbookChapter>> entry : neo4jGrouped.entrySet()) {
+            String textbookUri = entry.getKey();
+            List<KgTextbookChapter> neo4jGroup = entry.getValue();
+            List<KgTextbookChapter> mysqlGroup = kgTextbookChapterRepository.findByTextbookUri(textbookUri);
+
+            Set<String> mysqlKeys = mysqlGroup.stream().map(KgTextbookChapter::getChapterUri).collect(Collectors.toSet());
+            Set<String> neo4jKeys = neo4jGroup.stream().map(KgTextbookChapter::getChapterUri).collect(Collectors.toSet());
+            Map<String, KgTextbookChapter> mysqlByChapterUri = mysqlGroup.stream()
+                    .collect(Collectors.toMap(KgTextbookChapter::getChapterUri, r -> r));
+
+            for (KgTextbookChapter neo4jRel : neo4jGroup) {
+                if (!mysqlKeys.contains(neo4jRel.getChapterUri())) {
+                    kgTextbookChapterRepository.save(neo4jRel);
+                    totalOps++;
+                } else {
+                    KgTextbookChapter mysqlRel = mysqlByChapterUri.get(neo4jRel.getChapterUri());
+                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                        kgTextbookChapterRepository.updateOrderIndex(textbookUri, neo4jRel.getChapterUri(), neo4jRel.getOrderIndex());
+                        totalOps++;
+                    }
+                }
+            }
+
+            for (KgTextbookChapter mysqlRel : mysqlGroup) {
+                if (!neo4jKeys.contains(mysqlRel.getChapterUri())) {
+                    kgTextbookChapterRepository.deleteRelation(textbookUri, mysqlRel.getChapterUri());
+                    totalOps++;
+                }
+            }
+        }
+
+        // 清理 Neo4j 中已不存在的父端下的所有关联
+        for (KgTextbookChapter mysqlRel : kgTextbookChapterRepository.findAllActive()) {
+            if (!neo4jParentUris.contains(mysqlRel.getTextbookUri())) {
+                kgTextbookChapterRepository.deleteByTextbookUri(mysqlRel.getTextbookUri());
+                totalOps++;
+            }
+        }
+
+        log.info("Textbook-chapter UPSERT: {} operations", totalOps);
+        return totalOps;
+    }
+
+    /**
+     * 章节-小节关联 UPSERT
+     */
+    private int rebuildChapterSectionRelations(List<KgChapterSection> neo4jRelations) {
+        if (neo4jRelations == null || neo4jRelations.isEmpty()) {
+            kgChapterSectionRepository.deleteByChapterUri("__ALL__");
+            return 0;
+        }
+
+        int totalOps = 0;
+        Map<String, List<KgChapterSection>> neo4jGrouped = neo4jRelations.stream()
+                .collect(Collectors.groupingBy(KgChapterSection::getChapterUri));
+        Set<String> neo4jParentUris = neo4jGrouped.keySet();
+
+        for (Map.Entry<String, List<KgChapterSection>> entry : neo4jGrouped.entrySet()) {
+            String chapterUri = entry.getKey();
+            List<KgChapterSection> neo4jGroup = entry.getValue();
+            List<KgChapterSection> mysqlGroup = kgChapterSectionRepository.findByChapterUri(chapterUri);
+
+            Set<String> mysqlKeys = mysqlGroup.stream().map(KgChapterSection::getSectionUri).collect(Collectors.toSet());
+            Set<String> neo4jKeys = neo4jGroup.stream().map(KgChapterSection::getSectionUri).collect(Collectors.toSet());
+            Map<String, KgChapterSection> mysqlBySectionUri = mysqlGroup.stream()
+                    .collect(Collectors.toMap(KgChapterSection::getSectionUri, r -> r));
+
+            for (KgChapterSection neo4jRel : neo4jGroup) {
+                if (!mysqlKeys.contains(neo4jRel.getSectionUri())) {
+                    kgChapterSectionRepository.save(neo4jRel);
+                    totalOps++;
+                } else {
+                    KgChapterSection mysqlRel = mysqlBySectionUri.get(neo4jRel.getSectionUri());
+                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                        kgChapterSectionRepository.updateOrderIndex(chapterUri, neo4jRel.getSectionUri(), neo4jRel.getOrderIndex());
+                        totalOps++;
+                    }
+                }
+            }
+
+            for (KgChapterSection mysqlRel : mysqlGroup) {
+                if (!neo4jKeys.contains(mysqlRel.getSectionUri())) {
+                    kgChapterSectionRepository.deleteRelation(chapterUri, mysqlRel.getSectionUri());
+                    totalOps++;
+                }
+            }
+        }
+
+        for (KgChapterSection mysqlRel : kgChapterSectionRepository.findAllActive()) {
+            if (!neo4jParentUris.contains(mysqlRel.getChapterUri())) {
+                kgChapterSectionRepository.deleteByChapterUri(mysqlRel.getChapterUri());
+                totalOps++;
+            }
+        }
+
+        log.info("Chapter-section UPSERT: {} operations", totalOps);
+        return totalOps;
+    }
+
+    /**
+     * 小节-知识点关联 UPSERT
+     */
+    private int rebuildSectionKPRelations(List<KgSectionKP> neo4jRelations) {
+        if (neo4jRelations == null || neo4jRelations.isEmpty()) {
+            kgSectionKPRepository.deleteBySectionUri("__ALL__");
+            return 0;
+        }
+
+        int totalOps = 0;
+        Map<String, List<KgSectionKP>> neo4jGrouped = neo4jRelations.stream()
+                .collect(Collectors.groupingBy(KgSectionKP::getSectionUri));
+        Set<String> neo4jParentUris = neo4jGrouped.keySet();
+
+        for (Map.Entry<String, List<KgSectionKP>> entry : neo4jGrouped.entrySet()) {
+            String sectionUri = entry.getKey();
+            List<KgSectionKP> neo4jGroup = entry.getValue();
+            List<KgSectionKP> mysqlGroup = kgSectionKPRepository.findBySectionUri(sectionUri);
+
+            Set<String> mysqlKeys = mysqlGroup.stream().map(KgSectionKP::getKpUri).collect(Collectors.toSet());
+            Set<String> neo4jKeys = neo4jGroup.stream().map(KgSectionKP::getKpUri).collect(Collectors.toSet());
+            Map<String, KgSectionKP> mysqlByKpUri = mysqlGroup.stream()
+                    .collect(Collectors.toMap(KgSectionKP::getKpUri, r -> r));
+
+            for (KgSectionKP neo4jRel : neo4jGroup) {
+                if (!mysqlKeys.contains(neo4jRel.getKpUri())) {
+                    kgSectionKPRepository.save(neo4jRel);
+                    totalOps++;
+                } else {
+                    KgSectionKP mysqlRel = mysqlByKpUri.get(neo4jRel.getKpUri());
+                    if (!mysqlRel.getOrderIndex().equals(neo4jRel.getOrderIndex())) {
+                        kgSectionKPRepository.updateOrderIndex(sectionUri, neo4jRel.getKpUri(), neo4jRel.getOrderIndex());
+                        totalOps++;
+                    }
+                }
+            }
+
+            for (KgSectionKP mysqlRel : mysqlGroup) {
+                if (!neo4jKeys.contains(mysqlRel.getKpUri())) {
+                    kgSectionKPRepository.deleteRelation(sectionUri, mysqlRel.getKpUri());
+                    totalOps++;
+                }
+            }
+        }
+
+        for (KgSectionKP mysqlRel : kgSectionKPRepository.findAllActive()) {
+            if (!neo4jParentUris.contains(mysqlRel.getSectionUri())) {
+                kgSectionKPRepository.deleteBySectionUri(mysqlRel.getSectionUri());
+                totalOps++;
+            }
+        }
+
+        log.info("Section-KP UPSERT: {} operations", totalOps);
+        return totalOps;
     }
 
     /**

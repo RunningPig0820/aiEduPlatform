@@ -61,4 +61,14 @@ public class KgTextbookChapterRepositoryImpl implements KgTextbookChapterReposit
     public List<KgTextbookChapter> findAllActive() {
         return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectAllActiveRelations());
     }
+
+    @Override
+    public void deleteRelation(String textbookUri, String chapterUri) {
+        kgTextbookChapterMapper.softDeleteRelation(textbookUri, chapterUri, 0L);
+    }
+
+    @Override
+    public void updateOrderIndex(String textbookUri, String chapterUri, int orderIndex) {
+        kgTextbookChapterMapper.updateOrderIndex(textbookUri, chapterUri, orderIndex, 0L);
+    }
 }

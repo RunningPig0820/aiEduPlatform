@@ -22,4 +22,14 @@ public interface KgSectionKPRepository {
     List<KgSectionKP> findByKpUri(String kpUri);
 
     List<KgSectionKP> findAllActive();
+
+    /**
+     * 删除单条关联记录
+     */
+    void deleteRelation(String sectionUri, String kpUri);
+
+    /**
+     * 更新排序索引
+     */
+    void updateOrderIndex(String sectionUri, String kpUri, int orderIndex);
 }

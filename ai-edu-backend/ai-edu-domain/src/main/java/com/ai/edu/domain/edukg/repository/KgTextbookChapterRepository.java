@@ -22,4 +22,14 @@ public interface KgTextbookChapterRepository {
     List<KgTextbookChapter> findByChapterUri(String chapterUri);
 
     List<KgTextbookChapter> findAllActive();
+
+    /**
+     * 删除单条关联记录
+     */
+    void deleteRelation(String textbookUri, String chapterUri);
+
+    /**
+     * 更新排序索引
+     */
+    void updateOrderIndex(String textbookUri, String chapterUri, int orderIndex);
 }

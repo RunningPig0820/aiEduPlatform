@@ -61,4 +61,14 @@ public class KgSectionKPRepositoryImpl implements KgSectionKPRepository {
     public List<KgSectionKP> findAllActive() {
         return KgSectionKPPo.toEntityList(kgSectionKPMapper.selectAllActiveRelations());
     }
+
+    @Override
+    public void deleteRelation(String sectionUri, String kpUri) {
+        kgSectionKPMapper.softDeleteRelation(sectionUri, kpUri, 0L);
+    }
+
+    @Override
+    public void updateOrderIndex(String sectionUri, String kpUri, int orderIndex) {
+        kgSectionKPMapper.updateOrderIndex(sectionUri, kpUri, orderIndex, 0L);
+    }
 }

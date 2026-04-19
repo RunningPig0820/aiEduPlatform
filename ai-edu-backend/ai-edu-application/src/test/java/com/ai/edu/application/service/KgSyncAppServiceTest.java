@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import com.ai.edu.domain.edukg.repository.Neo4jNodeRepository;
+import com.ai.edu.domain.edukg.repository.Neo4jRelationRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgChapterSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
@@ -27,7 +28,6 @@ import com.ai.edu.domain.edukg.repository.KgSectionRepository;
 import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
-import com.ai.edu.domain.edukg.service.KgRelationSyncService;
 import com.ai.edu.domain.shared.service.RedisService;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,7 +47,7 @@ class KgSyncAppServiceTest {
     private Neo4jNodeRepository neo4jNodeRepository;
 
     @Mock
-    private KgRelationSyncService relationSync;
+    private Neo4jRelationRepository neo4jRelationRepository;
 
     @Mock
     private KgSyncRecordRepository kgSyncRecordRepository;
@@ -106,16 +106,13 @@ class KgSyncAppServiceTest {
         when(neo4jNodeRepository.findAllChapters()).thenReturn(chapters);
         when(neo4jNodeRepository.findAllSections()).thenReturn(sections);
         when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(kps);
-        when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
-        when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
-        when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenReturn(1);
         when(kgChapterRepository.upsert(anyList())).thenReturn(1);
         when(kgSectionRepository.upsert(anyList())).thenReturn(1);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(1);
-        when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
         // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
@@ -162,9 +159,6 @@ class KgSyncAppServiceTest {
         verify(kgChapterRepository).upsert(anyList());
         verify(kgSectionRepository).upsert(anyList());
         verify(kgKnowledgePointRepository).upsert(anyList());
-        verify(relationSync).rebuildTextbookChapterRelations(anyList());
-        verify(relationSync).rebuildChapterSectionRelations(anyList());
-        verify(relationSync).rebuildSectionKPRelations(anyList());
         verify(kgSyncRecordRepository, atLeast(2)).save(any(KgSyncRecord.class));
     }
 
@@ -186,16 +180,13 @@ class KgSyncAppServiceTest {
         when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
         when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
         when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
-        when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
-        when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
-        when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
-        when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
         // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
@@ -230,16 +221,13 @@ class KgSyncAppServiceTest {
         when(neo4jNodeRepository.findAllChapters()).thenReturn(List.of());
         when(neo4jNodeRepository.findAllSections()).thenReturn(List.of());
         when(neo4jNodeRepository.findAllKnowledgePoints()).thenReturn(List.of());
-        when(relationSync.syncTextbookChapterRelations()).thenReturn(List.of());
-        when(relationSync.syncChapterSectionRelations()).thenReturn(List.of());
-        when(relationSync.syncSectionKPRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations()).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations()).thenReturn(List.of());
         when(kgTextbookRepository.upsert(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
-        when(relationSync.rebuildTextbookChapterRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildChapterSectionRelations(anyList())).thenReturn(0);
-        when(relationSync.rebuildSectionKPRelations(anyList())).thenReturn(0);
         // Repository mocks for markDeletedNodes + reconcile
         when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
