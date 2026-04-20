@@ -41,6 +41,16 @@ public interface KgSectionKPMapper extends BaseMapper<KgSectionKPPo> {
     @Select("SELECT * FROM t_kg_section_kp WHERE is_deleted = false")
     List<KgSectionKPPo> selectAllActiveRelations();
 
+    /**
+     * 批量查询：按多个 section_uri 查询所有 kp_uri（用于 Repository 组装）
+     */
+    @Select("<script>" +
+            "SELECT DISTINCT kp_uri FROM t_kg_section_kp WHERE section_uri IN " +
+            "<foreach item='uri' collection='sectionUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false" +
+            "</script>")
+    List<String> selectKpUrisBySectionUris(@Param("sectionUris") List<String> sectionUris);
+
     @Insert("<script>" +
             "INSERT INTO t_kg_section_kp (section_uri, kp_uri, order_index, created_by, modified_by, is_deleted) VALUES " +
             "<foreach item='item' collection='list' separator=','>" +

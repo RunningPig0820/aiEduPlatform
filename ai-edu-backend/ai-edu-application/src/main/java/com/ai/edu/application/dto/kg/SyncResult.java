@@ -42,4 +42,20 @@ public class SyncResult implements Serializable {
      * 总年级数（grade-scoped 模式下）
      */
     private int totalGrades;
+
+
+    public  SyncResult buildEmptySyncResult(long startTime) {
+        long duration = System.currentTimeMillis() - startTime;
+        return SyncResult.builder()
+                .status("success")
+                .insertedCount(0)
+                .updatedCount(0)
+                .statusChangedCount(0)
+                .reconciliationStatus("matched")
+                .duration(duration)
+                .completedGrades(0)
+                .failedGrades(0)
+                .totalGrades(0)
+                .build();
+    }
 }

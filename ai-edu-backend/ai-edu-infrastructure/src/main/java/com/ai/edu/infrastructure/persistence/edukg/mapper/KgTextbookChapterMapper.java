@@ -41,6 +41,16 @@ public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapterPo>
     @Select("SELECT * FROM t_kg_textbook_chapter WHERE is_deleted = false")
     List<KgTextbookChapterPo> selectAllActiveRelations();
 
+    /**
+     * 批量查询：按多个 textbook_uri 查询所有 chapter_uri（用于 Repository 组装）
+     */
+    @Select("<script>" +
+            "SELECT DISTINCT chapter_uri FROM t_kg_textbook_chapter WHERE textbook_uri IN " +
+            "<foreach item='uri' collection='textbookUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false" +
+            "</script>")
+    List<String> selectChapterUrisByTextbookUris(@Param("textbookUris") List<String> textbookUris);
+
     @Insert("<script>" +
             "INSERT INTO t_kg_textbook_chapter (textbook_uri, chapter_uri, order_index, created_by, modified_by, is_deleted) VALUES " +
             "<foreach item='item' collection='list' separator=','>" +

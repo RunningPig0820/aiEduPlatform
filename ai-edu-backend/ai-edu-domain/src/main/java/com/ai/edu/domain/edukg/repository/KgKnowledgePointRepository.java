@@ -32,6 +32,11 @@ public interface KgKnowledgePointRepository {
     List<KgKnowledgePoint> findAllActive();
 
     /**
+     * 查询与指定小节 URI 列表关联的活跃知识点（用于按 grade 范围隔离）
+     */
+    List<KgKnowledgePoint> findAllActiveBySectionUris(List<String> sectionUris);
+
+    /**
      * 统计活跃知识点数量（用于对账）
      */
     int countActive();

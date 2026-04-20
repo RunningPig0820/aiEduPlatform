@@ -102,7 +102,7 @@ public class KgSyncAppService {
         List<String> allGrades = neo4jNodeRepository.findDistinctGrades(edition, subject);
         if (allGrades.isEmpty()) {
             log.warn("No grades found in Neo4j for edition={}, subject={}", edition, subject);
-            return buildEmptySyncResult(startTime);
+            return new SyncResult().buildEmptySyncResult(startTime);
         }
 
         // 如果指定了 grade 参数，过滤为仅该 grade
@@ -113,7 +113,7 @@ public class KgSyncAppService {
         if (targetGrades.isEmpty()) {
             log.warn("No matching grade found for edition={}, subject={}, grade={}",
                     edition, subject, grade);
-            return buildEmptySyncResult(startTime);
+            return new SyncResult().buildEmptySyncResult(startTime);
         }
 
         log.info("Sync will process {} grade(s): {}", targetGrades.size(), targetGrades);
@@ -245,7 +245,6 @@ public class KgSyncAppService {
     /**
      * 同步单个年级（独立锁、独立记录、独立对账）
      */
-    @Transactional("kg")
     protected GradeSyncResult syncOneGrade(String edition, String subject, String stage, String grade) {
         String lockKey = buildSyncLockKey(edition, subject, stage, grade);
         String lockValue = UUID.randomUUID().toString();
@@ -362,21 +361,6 @@ public class KgSyncAppService {
         return String.format("ai-edu:kg:sync:lock:textbooks:%s:%s", edition, subject);
     }
 
-    private SyncResult buildEmptySyncResult(long startTime) {
-        long duration = System.currentTimeMillis() - startTime;
-        return SyncResult.builder()
-                .status("success")
-                .insertedCount(0)
-                .updatedCount(0)
-                .statusChangedCount(0)
-                .reconciliationStatus("matched")
-                .duration(duration)
-                .completedGrades(0)
-                .failedGrades(0)
-                .totalGrades(0)
-                .build();
-    }
-
     private SyncExecutionResult executeSync(SyncRequest request) {
         int totalInserted = 0;
         int totalUpdated = 0;
@@ -455,36 +439,36 @@ public class KgSyncAppService {
             }
         }
 
-        // Chapter / Section / KnowledgePoint — 通过 textbookUris 做 reachable URIs 集合
-        Set<String> neo4jChapterUris = neo4jTextbooks.stream()
-                .map(KgTextbook::getUri).collect(Collectors.toSet());
+        // Chapter — 通过 textbook_chapter 关联表，只查与当前 grade 教材关联的章节
         List<KgChapter> neo4jChapters = neo4jNodeRepository
-                .findChaptersByTextbookUris(new ArrayList<>(neo4jChapterUris));
+                .findChaptersByTextbookUris(new ArrayList<>(neo4jTextbookUris));
         Set<String> neo4jChapterUrisSet = neo4jChapters.stream()
                 .map(KgChapter::getUri).collect(Collectors.toSet());
-        for (KgChapter ch : kgChapterRepository.findAllActive()) {
+        for (KgChapter ch : kgChapterRepository.findAllActiveByTextbookUris(new ArrayList<>(neo4jTextbookUris))) {
             if (!neo4jChapterUrisSet.contains(ch.getUri())) {
                 kgChapterRepository.updateStatus(ch.getUri(), "deleted");
                 totalChanged++;
             }
         }
 
+        // Section — 通过 chapter_section 关联表，用 Neo4j chapter URIs 做 scope
         List<KgSection> neo4jSections = neo4jNodeRepository
-                .findSectionsByTextbookUris(new ArrayList<>(neo4jChapterUris));
+                .findSectionsByTextbookUris(new ArrayList<>(neo4jTextbookUris));
         Set<String> neo4jSectionUris = neo4jSections.stream()
                 .map(KgSection::getUri).collect(Collectors.toSet());
-        for (KgSection sec : kgSectionRepository.findAllActive()) {
+        for (KgSection sec : kgSectionRepository.findAllActiveByChapterUris(new ArrayList<>(neo4jChapterUrisSet))) {
             if (!neo4jSectionUris.contains(sec.getUri())) {
                 kgSectionRepository.updateStatus(sec.getUri(), "deleted");
                 totalChanged++;
             }
         }
 
+        // KnowledgePoint — 通过 section_kp 关联表，用 Neo4j section URIs 做 scope
         List<KgKnowledgePoint> neo4jKps = neo4jNodeRepository
-                .findKnowledgePointsByTextbookUris(new ArrayList<>(neo4jChapterUris));
+                .findKnowledgePointsByTextbookUris(new ArrayList<>(neo4jTextbookUris));
         Set<String> neo4jKpUris = neo4jKps.stream()
                 .map(KgKnowledgePoint::getUri).collect(Collectors.toSet());
-        for (KgKnowledgePoint kp : kgKnowledgePointRepository.findAllActive()) {
+        for (KgKnowledgePoint kp : kgKnowledgePointRepository.findAllActiveBySectionUris(new ArrayList<>(neo4jSectionUris))) {
             if (!neo4jKpUris.contains(kp.getUri())) {
                 kgKnowledgePointRepository.updateStatus(kp.getUri(), "deleted");
                 totalChanged++;
@@ -536,20 +520,25 @@ public class KgSyncAppService {
                     mysqlTbCount, neo4jTextbookUris.size()));
         }
 
-        // Chapter / Section / KP 对账 — 全局计数（复用原有逻辑）
-        int mysqlChCount = kgChapterRepository.countActive();
+        // Chapter 对账 — 仅对比与当前 grade 教材关联的章节
+        int mysqlChCount = kgChapterRepository
+                .findAllActiveByTextbookUris(new ArrayList<>(neo4jTextbookUris)).size();
         if (mysqlChCount != neo4jChapterUris.size()) {
             differences.add(String.format("Chapter count mismatch: MySQL=%d, Neo4j=%d",
                     mysqlChCount, neo4jChapterUris.size()));
         }
 
-        int mysqlSecCount = kgSectionRepository.countActive();
+        // Section 对账 — 仅对比与当前 grade 章节关联的小节
+        int mysqlSecCount = kgSectionRepository
+                .findAllActiveByChapterUris(new ArrayList<>(neo4jChapterUris)).size();
         if (mysqlSecCount != neo4jSectionUris.size()) {
             differences.add(String.format("Section count mismatch: MySQL=%d, Neo4j=%d",
                     mysqlSecCount, neo4jSectionUris.size()));
         }
 
-        int mysqlKpCount = kgKnowledgePointRepository.countActive();
+        // KP 对账 — 仅对比与当前 grade 小节关联的知识点
+        int mysqlKpCount = kgKnowledgePointRepository
+                .findAllActiveBySectionUris(new ArrayList<>(neo4jSectionUris)).size();
         if (mysqlKpCount != neo4jKpUris.size()) {
             differences.add(String.format("KP count mismatch: MySQL=%d, Neo4j=%d",
                     mysqlKpCount, neo4jKpUris.size()));

@@ -8,4 +8,4 @@ ALTER TABLE t_kg_sync_record
     ADD COLUMN grade VARCHAR(50)   DEFAULT NULL AFTER stage;
 
 ALTER TABLE t_kg_sync_record
-    ADD INDEX idx_scope (edition, subject, stage, grade, started_at DESC);
+    ADD INDEX idx_scope (edition, subject, stage, grade);

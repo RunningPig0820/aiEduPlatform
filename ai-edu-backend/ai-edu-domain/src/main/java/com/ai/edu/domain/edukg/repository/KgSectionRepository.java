@@ -32,6 +32,11 @@ public interface KgSectionRepository {
     List<KgSection> findAllActive();
 
     /**
+     * 查询与指定章节 URI 列表关联的活跃小节（用于按 grade 范围隔离）
+     */
+    List<KgSection> findAllActiveByChapterUris(List<String> chapterUris);
+
+    /**
      * 统计活跃小节数量（用于对账）
      */
     int countActive();

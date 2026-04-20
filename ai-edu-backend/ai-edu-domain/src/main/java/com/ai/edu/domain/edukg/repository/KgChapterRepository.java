@@ -32,6 +32,11 @@ public interface KgChapterRepository {
     List<KgChapter> findAllActive();
 
     /**
+     * 查询与指定教材 URI 列表关联的活跃章节（用于按 grade 范围隔离）
+     */
+    List<KgChapter> findAllActiveByTextbookUris(List<String> textbookUris);
+
+    /**
      * 统计活跃章节数量（用于对账）
      */
     int countActive();

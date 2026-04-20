@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgKnowledgePointMapper;
+import com.ai.edu.infrastructure.persistence.edukg.mapper.KgSectionKPMapper;
 import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
@@ -14,12 +15,19 @@ import java.util.stream.Collectors;
 
 /**
  * 知识点仓储实现
+ *
+ * Repository 可调用多个 Mapper 来组装领域数据，符合 DDD 规范：
+ * - Mapper 只做单表数据访问
+ * - Repository 负责领域数据的组装
  */
 @Repository
 public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepository {
 
     @Resource
     private KgKnowledgePointMapper kgKnowledgePointMapper;
+
+    @Resource
+    private KgSectionKPMapper kgSectionKPMapper;
 
     @Override
     public KgKnowledgePoint save(KgKnowledgePoint knowledgePoint) {
@@ -87,5 +95,26 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
     @Override
     public List<KgKnowledgePoint> findAllActive() {
         return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByStatus("active"));
+    }
+
+    /**
+     * 查询与指定小节 URI 列表关联的活跃知识点
+     *
+     * 使用两次查询模式（避免 JOIN 在大数据量时不可控）：
+     * 1. 从关联表 section_kp 查询 kp_uri 列表
+     * 2. 用 kp_uri 列表查知识点表
+     */
+    @Override
+    public List<KgKnowledgePoint> findAllActiveBySectionUris(List<String> sectionUris) {
+        if (sectionUris == null || sectionUris.isEmpty()) {
+            return List.of();
+        }
+        // 第一次查询：从关联表获取 kp_uris
+        List<String> kpUris = kgSectionKPMapper.selectKpUrisBySectionUris(sectionUris);
+        if (kpUris.isEmpty()) {
+            return List.of();
+        }
+        // 第二次查询：用 uris 查知识点实体
+        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByUris(kpUris));
     }
 }

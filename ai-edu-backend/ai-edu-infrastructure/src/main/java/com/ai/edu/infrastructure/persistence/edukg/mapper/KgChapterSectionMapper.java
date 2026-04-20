@@ -41,6 +41,16 @@ public interface KgChapterSectionMapper extends BaseMapper<KgChapterSectionPo> {
     @Select("SELECT * FROM t_kg_chapter_section WHERE is_deleted = false")
     List<KgChapterSectionPo> selectAllActiveRelations();
 
+    /**
+     * 批量查询：按多个 chapter_uri 查询所有 section_uri（用于 Repository 组装）
+     */
+    @Select("<script>" +
+            "SELECT DISTINCT section_uri FROM t_kg_chapter_section WHERE chapter_uri IN " +
+            "<foreach item='uri' collection='chapterUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false" +
+            "</script>")
+    List<String> selectSectionUrisByChapterUris(@Param("chapterUris") List<String> chapterUris);
+
     @Insert("<script>" +
             "INSERT INTO t_kg_chapter_section (chapter_uri, section_uri, order_index, created_by, modified_by, is_deleted) VALUES " +
             "<foreach item='item' collection='list' separator=','>" +
