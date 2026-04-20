@@ -37,6 +37,12 @@ public class KgSyncRecordRepositoryImpl implements KgSyncRecordRepository {
     }
 
     @Override
+    public List<KgSyncRecord> findByScope(String edition, String subject, String stage, String grade, int limit) {
+        return KgSyncRecordPo.toEntityList(
+                kgSyncRecordMapper.selectByScopeFields(edition, subject, stage, grade, limit));
+    }
+
+    @Override
     public Optional<KgSyncRecord> findById(Long id) {
         KgSyncRecordPo po = kgSyncRecordMapper.selectById(id);
         return po != null ? Optional.of(po.toEntity()) : Optional.empty();

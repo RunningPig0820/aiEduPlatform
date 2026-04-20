@@ -131,17 +131,19 @@ class KnowledgeGraphControllerTest {
         assertEquals("success", response.getData().getLastSyncStatus());
     }
 
-    // ==================== 6.11.4 GET /api/kg/sync/records ====================
+    // ==================== 6.11.4 POST /api/kg/sync/records ====================
 
     @Test
     @Order(4)
-    @DisplayName("getSyncRecords 分页查询")
-    void getSyncRecords_pagination() {
+    @DisplayName("getSyncRecords 查询（支持维度筛选）")
+    void getSyncRecords_withScopeFilter() {
         List<SyncRecordDTO> records = List.of(
                 SyncRecordDTO.builder()
                         .id(1L)
                         .syncType("full")
-                        .scope("math")
+                        .edition("人教版")
+                        .subject("math")
+                        .grade("七年级")
                         .status("success")
                         .insertedCount(10)
                         .updatedCount(5)
@@ -151,7 +153,9 @@ class KnowledgeGraphControllerTest {
                 SyncRecordDTO.builder()
                         .id(2L)
                         .syncType("full")
-                        .scope("english")
+                        .edition("人教版")
+                        .subject("english")
+                        .grade("八年级")
                         .status("success")
                         .insertedCount(8)
                         .updatedCount(2)
@@ -159,14 +163,19 @@ class KnowledgeGraphControllerTest {
                         .reconciliationStatus("matched")
                         .build()
         );
-        when(kgSyncAppService.getSyncRecords(1, 10)).thenReturn(records);
+        SyncRecordQueryRequest request = SyncRecordQueryRequest.builder()
+                .edition("人教版")
+                .subject("math")
+                .size(10)
+                .build();
+        when(kgSyncAppService.getSyncRecords(any(SyncRecordQueryRequest.class))).thenReturn(records);
 
-        List<SyncRecordDTO> response = knowledgeGraphController.getSyncRecords(1, 10).getData();
+        List<SyncRecordDTO> response = knowledgeGraphController.getSyncRecords(request).getData();
 
         assertEquals(2, response.size());
         assertEquals("full", response.get(0).getSyncType());
-        assertEquals("math", response.get(0).getScope());
-        assertEquals("english", response.get(1).getScope());
+        assertEquals("math", response.get(0).getSubject());
+        assertEquals("english", response.get(1).getSubject());
     }
 
     // ==================== 6.11.5 GET /api/kg/textbooks ====================

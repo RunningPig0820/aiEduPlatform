@@ -22,7 +22,10 @@ public class SyncRecordDTO implements Serializable {
 
     private Long id;
     private String syncType;
-    private String scope;
+    private String edition;
+    private String subject;
+    private String stage;
+    private String grade;
     private String status;
     private int insertedCount;
     private int updatedCount;

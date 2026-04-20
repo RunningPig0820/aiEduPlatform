@@ -17,8 +17,24 @@ public interface KgSyncRecordMapper extends BaseMapper<KgSyncRecordPo> {
     @Select("SELECT * FROM t_kg_sync_record WHERE is_deleted = false ORDER BY started_at DESC LIMIT #{limit}")
     List<KgSyncRecordPo> selectRecent(@Param("limit") int limit);
 
-    @Select("SELECT * FROM t_kg_sync_record WHERE scope = #{scope} AND is_deleted = false ORDER BY started_at DESC")
-    List<KgSyncRecordPo> selectByScope(@Param("scope") String scope);
+    /**
+     * 按维度字段筛选查询同步记录
+     * 参数为 null 时表示不限制该维度
+     */
+    @Select("<script>" +
+            "SELECT * FROM t_kg_sync_record WHERE is_deleted = false " +
+            "<if test='edition != null'> AND edition = #{edition}</if>" +
+            "<if test='subject != null'> AND subject = #{subject}</if>" +
+            "<if test='stage != null'> AND stage = #{stage}</if>" +
+            "<if test='grade != null'> AND grade = #{grade}</if>" +
+            " ORDER BY started_at DESC LIMIT #{limit}" +
+            "</script>")
+    List<KgSyncRecordPo> selectByScopeFields(
+            @Param("edition") String edition,
+            @Param("subject") String subject,
+            @Param("stage") String stage,
+            @Param("grade") String grade,
+            @Param("limit") int limit);
 
     @Select("SELECT * FROM t_kg_sync_record WHERE edition = #{edition} AND subject = #{subject} "
             + "AND ((#{stage} IS NULL AND stage IS NULL) OR stage = #{stage}) "

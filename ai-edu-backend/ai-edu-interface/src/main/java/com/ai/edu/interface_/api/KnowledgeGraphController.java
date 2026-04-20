@@ -70,15 +70,17 @@ public class KnowledgeGraphController {
     }
 
     /**
-     * 5.4 同步历史记录
-     * GET /api/kg/sync/records
+     * 5.4 同步历史记录查询
+     * POST /api/kg/sync/records
      */
-    @GetMapping("/sync/records")
-    public ApiResponse<List<SyncRecordDTO>> getSyncRecords(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        log.info("查询同步历史: page={}, size={}", page, size);
-        List<SyncRecordDTO> records = kgSyncAppService.getSyncRecords(page, size);
+    @PostMapping("/sync/records")
+    public ApiResponse<List<SyncRecordDTO>> getSyncRecords(@RequestBody(required = false) SyncRecordQueryRequest request) {
+        if (request == null) {
+            request = SyncRecordQueryRequest.builder().page(1).size(10).build();
+        }
+        log.info("查询同步历史: edition={}, subject={}, stage={}, grade={}, size={}",
+                request.getEdition(), request.getSubject(), request.getStage(), request.getGrade(), request.getSize());
+        List<SyncRecordDTO> records = kgSyncAppService.getSyncRecords(request);
         return ApiResponse.success(records);
     }
 

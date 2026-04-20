@@ -1,6 +1,7 @@
 package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.SyncRecordDTO;
+import com.ai.edu.application.dto.kg.SyncRecordQueryRequest;
 import com.ai.edu.application.dto.kg.SyncRequest;
 import com.ai.edu.application.dto.kg.SyncResult;
 import com.ai.edu.application.dto.kg.SyncStatusDTO;
@@ -336,9 +337,10 @@ class KgSyncAppServiceTest {
         record2.completeSuccess(8, 2, 1, "matched", "ok");
         setSyncRecordId(record2, 2L);
 
-        when(kgSyncRecordRepository.findRecent(5)).thenReturn(List.of(record1, record2));
+        when(kgSyncRecordRepository.findByScope(null, null, null, null, 5)).thenReturn(List.of(record1, record2));
 
-        List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(1, 5);
+        SyncRecordQueryRequest request = SyncRecordQueryRequest.builder().size(5).build();
+        List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(request);
 
         assertNotNull(result);
         assertEquals(2, result.size());
@@ -351,9 +353,10 @@ class KgSyncAppServiceTest {
     @Order(9)
     @DisplayName("getSyncRecords 无记录应返回空列表")
     void getSyncRecords_noRecords_shouldReturnEmpty() {
-        when(kgSyncRecordRepository.findRecent(10)).thenReturn(List.of());
+        when(kgSyncRecordRepository.findByScope(null, null, null, null, 10)).thenReturn(List.of());
 
-        List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(1, 10);
+        SyncRecordQueryRequest request = SyncRecordQueryRequest.builder().size(10).build();
+        List<SyncRecordDTO> result = kgSyncAppService.getSyncRecords(request);
 
         assertNotNull(result);
         assertTrue(result.isEmpty());

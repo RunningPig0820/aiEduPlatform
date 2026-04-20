@@ -110,12 +110,12 @@ class KgDatasourceRoutingTest {
         assertNull(questionMapper.getAnnotation(DS.class), "QuestionMapper 不应有 @DS 注解");
     }
 
-    // ==================== 6.14.3 @Transactional("kg") on syncFull() ====================
+    // ==================== 6.14.3 syncFull() 无整体事务（拆分为独立子任务） ====================
 
     @Test
     @Order(5)
-    @DisplayName("KgSyncAppService.syncFull() 应携带 @Transactional(\"kg\") 注解（源码验证）")
-    void syncFull_shouldHaveTransactionalKg() throws IOException {
+    @DisplayName("syncFull() 无整体事务注解（拆分为独立子任务，每个 grade 有独立锁）")
+    void syncFull_noOverallTransaction() throws IOException {
         // 由于 infrastructure 模块无法加载 application 模块的类，通过源码文件验证
         Path serviceFile = Paths.get("src/main/java/com/ai/edu/infrastructure/service/kg/KgSyncAppService.java");
         // 尝试另一个可能的路径
@@ -128,9 +128,19 @@ class KgDatasourceRoutingTest {
 
         String content = Files.readString(serviceFile);
 
-        // 验证 syncFull 方法上有 @Transactional("kg")
-        assertTrue(content.contains("@Transactional(\"kg\")") || content.contains("@Transactional(value = \"kg\")"),
-                "syncFull() 方法应携带 @Transactional(\"kg\") 注解");
+        // syncFull 是编排器，拆分为独立子任务，无需整体事务
+        // 验证 syncFull 方法附近没有 @Transactional 注解
+        int syncFullIndex = content.indexOf("public SyncResult syncFull");
+        assertTrue(syncFullIndex > 0, "应找到 syncFull 方法");
+
+        // 检查 syncFull 方法定义之前 5 行内是否有 @Transactional
+        String beforeSyncFull = content.substring(Math.max(0, syncFullIndex - 500), syncFullIndex);
+        assertFalse(beforeSyncFull.contains("@Transactional"),
+                "syncFull() 方法不应有 @Transactional 注解（拆分为独立子任务）");
+
+        // 验证存在 syncOneGrade 方法（子任务执行）
+        assertTrue(content.contains("syncOneGrade"),
+                "应存在 syncOneGrade 方法处理单个年级同步");
     }
 
     @Test

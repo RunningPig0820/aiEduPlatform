@@ -21,6 +21,11 @@ public interface KgSyncRecordRepository {
     List<KgSyncRecord> findRecent(int limit);
 
     /**
+     * 按维度筛选查询同步记录
+     */
+    List<KgSyncRecord> findByScope(String edition, String subject, String stage, String grade, int limit);
+
+    /**
      * 根据 ID 查询同步记录
      */
     Optional<KgSyncRecord> findById(Long id);

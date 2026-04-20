@@ -2,6 +2,7 @@ package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.SyncRecordDTO;
+import com.ai.edu.application.dto.kg.SyncRecordQueryRequest;
 import com.ai.edu.application.dto.kg.SyncRequest;
 import com.ai.edu.application.dto.kg.SyncResult;
 import com.ai.edu.application.dto.kg.SyncStatusDTO;
@@ -233,10 +234,16 @@ public class KgSyncAppService {
     }
 
     /**
-     * 查询同步历史记录
+     * 查询同步历史记录（支持按维度筛选）
      */
-    public List<SyncRecordDTO> getSyncRecords(int page, int size) {
-        List<KgSyncRecord> records = kgSyncRecordRepository.findRecent(size);
+    public List<SyncRecordDTO> getSyncRecords(SyncRecordQueryRequest request) {
+        int size = request.getSize() != null ? request.getSize() : 10;
+        List<KgSyncRecord> records = kgSyncRecordRepository.findByScope(
+                request.getEdition(),
+                request.getSubject(),
+                request.getStage(),
+                request.getGrade(),
+                size);
         return KgConvert.toSyncRecordDTOs(records);
     }
 
