@@ -39,4 +39,9 @@ public interface KgTextbookRepository {
     int upsert(List<KgTextbook> textbooks);
 
     void updateStatus(String uri, String status);
+
+    /**
+     * 按版本+学科+年级查询所有活跃教材
+     */
+    List<KgTextbook> findAllActiveByEditionSubjectGrade(String edition, String subject, String grade);
 }

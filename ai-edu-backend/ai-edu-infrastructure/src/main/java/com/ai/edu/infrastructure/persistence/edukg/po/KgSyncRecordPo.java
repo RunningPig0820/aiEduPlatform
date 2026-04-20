@@ -28,6 +28,18 @@ public class KgSyncRecordPo {
     @TableField("sync_type")
     private String syncType;
 
+    @TableField("edition")
+    private String edition;
+
+    @TableField("subject")
+    private String subject;
+
+    @TableField("stage")
+    private String stage;
+
+    @TableField("grade")
+    private String grade;
+
     @TableField("scope")
     private String scope;
 
@@ -75,6 +87,10 @@ public class KgSyncRecordPo {
         KgSyncRecordPo po = new KgSyncRecordPo();
         po.id = entity.getId();
         po.syncType = entity.getSyncType();
+        po.edition = entity.getEdition();
+        po.subject = entity.getSubject();
+        po.stage = entity.getStage();
+        po.grade = entity.getGrade();
         po.scope = entity.getScope();
         po.status = entity.getStatus();
         po.insertedCount = entity.getInsertedCount();
@@ -96,6 +112,10 @@ public class KgSyncRecordPo {
         KgSyncRecord entity = EntityFactory.create(KgSyncRecord.class);
         entity.setId(this.id);
         entity.setSyncType(this.syncType);
+        entity.setEdition(this.edition);
+        entity.setSubject(this.subject);
+        entity.setStage(this.stage);
+        entity.setGrade(this.grade);
         entity.setScope(this.scope);
         entity.setStatus(this.status);
         entity.setInsertedCount(this.insertedCount);

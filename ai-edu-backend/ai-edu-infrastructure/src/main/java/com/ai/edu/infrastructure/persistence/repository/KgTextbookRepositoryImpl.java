@@ -97,4 +97,10 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     public void updateStatus(String uri, String status) {
         kgTextbookMapper.updateStatus(uri, status, 0L);
     }
+
+    @Override
+    public List<KgTextbook> findAllActiveByEditionSubjectGrade(String edition, String subject, String grade) {
+        return KgTextbookPo.toEntityList(
+                kgTextbookMapper.selectAllActiveByEditionSubjectGrade(edition, subject, grade));
+    }
 }

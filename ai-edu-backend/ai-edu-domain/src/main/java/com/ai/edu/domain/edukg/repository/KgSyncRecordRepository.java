@@ -24,4 +24,10 @@ public interface KgSyncRecordRepository {
      * 根据 ID 查询同步记录
      */
     Optional<KgSyncRecord> findById(Long id);
+
+    /**
+     * 按同步范围查询最新运行中的同步记录（用于检测过期任务）
+     */
+    Optional<KgSyncRecord> findLatestRunningByScope(
+            String edition, String subject, String stage, String grade);
 }

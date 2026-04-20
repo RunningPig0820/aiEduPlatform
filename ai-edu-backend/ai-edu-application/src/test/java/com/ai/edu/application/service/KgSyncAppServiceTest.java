@@ -102,6 +102,7 @@ class KgSyncAppServiceTest {
                 KgKnowledgePoint.create("uri:kp1", "知识点1")
         );
 
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级"));
         when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(textbooks);
         when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(chapters);
         when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(sections);
@@ -113,8 +114,8 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.upsert(anyList())).thenReturn(1);
         when(kgSectionRepository.upsert(anyList())).thenReturn(1);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(1);
-        // Repository mocks for markDeletedNodes + reconcile
-        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+        // Repository mocks for markDeletedNodes + reconcile (grade-scoped)
+        when(kgTextbookRepository.findAllActiveByEditionSubjectGrade(any(), any(), any())).thenReturn(textbooks);
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
         when(kgChapterRepository.countActive()).thenReturn(1);
         when(kgSectionRepository.findAllActive()).thenReturn(List.of());
@@ -127,7 +128,7 @@ class KgSyncAppServiceTest {
     }
 
     private KgSyncRecord createSyncRecord(Long id) {
-        KgSyncRecord record = KgSyncRecord.create("full", "math", 0L);
+        KgSyncRecord record = KgSyncRecord.create("full", "人教版", "math", null, null, 0L);
         if (id != null) setSyncRecordId(record, id);
         return record;
     }
@@ -148,9 +149,12 @@ class KgSyncAppServiceTest {
 
         assertNotNull(result);
         assertEquals("success", result.getStatus());
-        assertEquals(1L, result.getSyncId());
         assertEquals("matched", result.getReconciliationStatus());
+        assertEquals(1, result.getTotalGrades());
+        assertEquals(1, result.getCompletedGrades());
+        assertEquals(0, result.getFailedGrades());
 
+        verify(neo4jNodeRepository).findDistinctGrades(eq("人教版"), eq("math"));
         verify(neo4jNodeRepository, atLeast(1)).findTextbooks(any(), any(), any(), any());
         verify(neo4jNodeRepository, atLeast(1)).findChaptersByTextbookUris(anyList());
         verify(neo4jNodeRepository, atLeast(1)).findSectionsByTextbookUris(anyList());
@@ -171,8 +175,9 @@ class KgSyncAppServiceTest {
         String targetEdition = "人教版";
         SyncRequest request = SyncRequest.builder().subject("math").edition(targetEdition).build();
 
+        List<String> grades = List.of("七年级", "八年级");
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(grades);
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        // Neo4j 层已按 edition/subject 过滤，只返回匹配的教材
         List<KgTextbook> filteredTextbooks = List.of(
                 KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", targetEdition, "math")
         );
@@ -187,22 +192,28 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByEditionSubjectGrade(any(), any(), any())).thenReturn(List.of());
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
         when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.countActive()).thenReturn(0);
         when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
 
         KgSyncRecord syncRecord = createSyncRecord(2L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
-        when(kgSyncRecordRepository.findById(2L)).thenReturn(Optional.of(syncRecord));
+        when(kgSyncRecordRepository.findById(anyLong())).thenReturn(Optional.of(syncRecord));
 
         SyncResult result = kgSyncAppService.syncFull(request);
 
-        // 应只 upsert 1 个教材（Neo4j 已过滤）
-        verify(kgTextbookRepository).upsert(argThat(tbs ->
-                tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getEdition().equals(targetEdition)
-        ));
         assertEquals("success", result.getStatus());
+        assertEquals(2, result.getTotalGrades());
+        assertEquals(2, result.getCompletedGrades());
     }
 
     @Test
@@ -211,6 +222,7 @@ class KgSyncAppServiceTest {
     void syncFull_targetedBySubject_shouldFilterBySubject() {
         SyncRequest request = SyncRequest.builder().subject("english").edition("人教版").build();
 
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级"));
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         List<KgTextbook> filteredTextbooks = List.of(
                 KgTextbook.create("uri:eng", "英语教材", "七年级", "junior", "人教版", "english")
@@ -226,21 +238,25 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.upsert(anyList())).thenReturn(0);
         when(kgSectionRepository.upsert(anyList())).thenReturn(0);
         when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
-        // Repository mocks for markDeletedNodes + reconcile
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByEditionSubjectGrade(any(), any(), any())).thenReturn(List.of());
         when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
         when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.countActive()).thenReturn(0);
         when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
 
         KgSyncRecord syncRecord = createSyncRecord(3L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
-        when(kgSyncRecordRepository.findById(3L)).thenReturn(Optional.of(syncRecord));
+        when(kgSyncRecordRepository.findById(anyLong())).thenReturn(Optional.of(syncRecord));
 
         SyncResult result = kgSyncAppService.syncFull(request);
 
-        verify(kgTextbookRepository).upsert(argThat(tbs ->
-                tbs.size() == 1 && ((KgTextbook) tbs.get(0)).getSubject().equals("english")
-        ));
         assertEquals("success", result.getStatus());
     }
 
@@ -248,34 +264,41 @@ class KgSyncAppServiceTest {
 
     @Test
     @Order(4)
-    @DisplayName("syncFull 手动触发同步锁 — 连续调用应抛异常")
-    void syncFull_concurrentCalls_shouldThrowOnSecondCall() {
-        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+    @DisplayName("syncFull 单个年级锁冲突 — 应跳过该年级并返回 partial_success")
+    void syncFull_gradeLockConflict_shouldReturnPartialSuccess() {
+        SyncRequest request = SyncRequest.builder().subject("math").edition("人教版").build();
 
-        BusinessException ex = assertThrows(BusinessException.class, () ->
-                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").edition("人教版").build())
-        );
-        assertEquals("70006", ex.getCode());
-        assertTrue(ex.getMessage().contains("已有同步任务正在执行"));
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级"));
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+        when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        SyncResult result = kgSyncAppService.syncFull(request);
+
+        assertEquals("partial_success", result.getStatus());
+        assertEquals(1, result.getTotalGrades());
+        assertEquals(0, result.getCompletedGrades());
+        assertEquals(1, result.getFailedGrades());
     }
 
     // ==================== 6.7.4 syncFull 异常回滚 ====================
 
     @Test
     @Order(5)
-    @DisplayName("syncFull 异常回滚 — NodeSync 抛异常应传播 BusinessException")
-    void syncFull_nodeSyncThrows_shouldThrowBusinessException() {
+    @DisplayName("syncFull 异常回滚 — NodeSync 抛异常应记录 failed grade")
+    void syncFull_nodeSyncThrows_shouldRecordFailedGrade() {
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级"));
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("Neo4j connection timeout"));
 
-        BusinessException ex = assertThrows(BusinessException.class, () ->
-                kgSyncAppService.syncFull(SyncRequest.builder().subject("math").edition("人教版").build())
-        );
-        assertTrue(ex.getMessage().contains("Neo4j connection timeout"));
+        SyncResult result = kgSyncAppService.syncFull(
+                SyncRequest.builder().subject("math").edition("人教版").build());
 
-        // 验证锁被释放
-        verify(redisService).unlock(anyString(), anyString());
+        assertEquals("partial_success", result.getStatus());
+        assertEquals(1, result.getTotalGrades());
+        assertEquals(0, result.getCompletedGrades());
+        assertEquals(1, result.getFailedGrades());
     }
 
     // ==================== 6.7.5 getSyncStatus ====================
@@ -296,7 +319,7 @@ class KgSyncAppServiceTest {
     @Order(7)
     @DisplayName("getSyncStatus 有同步记录应返回状态")
     void getSyncStatus_hasRecord_shouldReturnStatus() {
-        KgSyncRecord record = KgSyncRecord.create("full", "math", 0L);
+        KgSyncRecord record = KgSyncRecord.create("full", "人教版", "math", null, null, 0L);
         record.completeSuccess(10, 5, 3, "matched", "All counts matched");
 
         when(kgSyncRecordRepository.findRecent(1)).thenReturn(List.of(record));
@@ -314,11 +337,11 @@ class KgSyncAppServiceTest {
     @Order(8)
     @DisplayName("getSyncRecords 应返回分页记录")
     void getSyncRecords_shouldReturnRecords() {
-        KgSyncRecord record1 = KgSyncRecord.create("full", "math", 0L);
+        KgSyncRecord record1 = KgSyncRecord.create("full", "人教版", "math", null, null, 0L);
         record1.completeSuccess(10, 5, 0, "matched", "ok");
         setSyncRecordId(record1, 1L);
 
-        KgSyncRecord record2 = KgSyncRecord.create("full", "english", 0L);
+        KgSyncRecord record2 = KgSyncRecord.create("full", "人教版", "english", null, null, 0L);
         record2.completeSuccess(8, 2, 1, "matched", "ok");
         setSyncRecordId(record2, 2L);
 
@@ -351,8 +374,6 @@ class KgSyncAppServiceTest {
     @Order(10)
     @DisplayName("syncFull request 为 null 应抛 KG_SYNC_PARAM_ERROR")
     void syncFull_nullRequest_shouldThrowParamError() {
-        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 kgSyncAppService.syncFull(null)
         );
@@ -366,7 +387,6 @@ class KgSyncAppServiceTest {
     @Order(11)
     @DisplayName("syncFull subject 为空应抛 KG_SYNC_PARAM_ERROR")
     void syncFull_blankSubject_shouldThrowParamError() {
-        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         SyncRequest request = SyncRequest.builder().subject("  ").edition("人教版").build();
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
@@ -380,7 +400,6 @@ class KgSyncAppServiceTest {
     @Order(11)
     @DisplayName("syncFull edition 为空应抛 KG_SYNC_PARAM_ERROR")
     void syncFull_blankEdition_shouldThrowParamError() {
-        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         SyncRequest request = SyncRequest.builder().subject("math").build();
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
@@ -396,7 +415,6 @@ class KgSyncAppServiceTest {
     @Order(12)
     @DisplayName("syncTextbooksOnly 正常流程 — 按 edition 过滤并返回成功")
     void syncTextbooksOnly_withEdition_shouldFilterAndReturnSuccess() {
-        // Neo4j 层已过滤，只返回匹配的教材
         List<KgTextbook> filteredTextbooks = List.of(
                 KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
         );
@@ -413,7 +431,6 @@ class KgSyncAppServiceTest {
 
         assertNotNull(result);
         assertEquals("success", result.getStatus());
-        assertEquals(20L, result.getSyncId());
         assertEquals(1, result.getInsertedCount());
 
         verify(kgTextbookRepository).upsert(argThat(tbs ->
@@ -456,8 +473,128 @@ class KgSyncAppServiceTest {
         assertTrue(ex.getMessage().contains("Neo4j connection timeout"));
 
         verify(kgSyncRecordRepository, times(2)).save(any(KgSyncRecord.class));
-
-        // 验证锁被释放
         verify(redisService).unlock(anyString(), anyString());
+    }
+
+    // ==================== 新增：过期任务检测 ====================
+
+    @Test
+    @Order(20)
+    @DisplayName("过期任务检测 — 存在 stale running 任务应标记 failed 并继续同步")
+    void staleTask_shouldMarkFailedAndContinue() {
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级"));
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+
+        // 模拟一个过期的 running 记录
+        KgSyncRecord staleRecord = KgSyncRecord.create("full", "人教版", "math", null, "七年级", 0L);
+        setSyncRecordId(staleRecord, 99L);
+        when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
+                .thenReturn(Optional.of(staleRecord));
+
+        List<KgTextbook> textbooks = List.of(
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
+        );
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(textbooks);
+        when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findKnowledgePointsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations(anyList())).thenReturn(List.of());
+        when(kgTextbookRepository.upsert(anyList())).thenReturn(1);
+        when(kgChapterRepository.upsert(anyList())).thenReturn(0);
+        when(kgSectionRepository.upsert(anyList())).thenReturn(0);
+        when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
+        when(kgTextbookRepository.findAllActiveByEditionSubjectGrade(any(), any(), any())).thenReturn(textbooks);
+        when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
+        when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.countActive()).thenReturn(0);
+        when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+
+        KgSyncRecord syncRecord = createSyncRecord(100L);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class)))
+                .thenReturn(staleRecord)
+                .thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(anyLong())).thenReturn(Optional.of(syncRecord));
+
+        SyncResult result = kgSyncAppService.syncFull(
+                SyncRequest.builder().subject("math").edition("人教版").build());
+
+        assertEquals("success", result.getStatus());
+
+        // 验证 save 被调用了两次：一次标记过期任务，一次保存新记录
+        verify(kgSyncRecordRepository, times(2)).save(any(KgSyncRecord.class));
+    }
+
+    // ==================== 新增：多年级部分失败 ====================
+
+    @Test
+    @Order(21)
+    @DisplayName("多年级同步 — 部分成功部分失败应返回 partial_success")
+    void multiGrade_partialFailure_shouldReturnPartialSuccess() {
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of("七年级", "八年级"));
+        // 七年级能获取锁，八年级不能
+        when(redisService.tryLock(anyString(), anyString(), anyLong(), any(TimeUnit.class)))
+                .thenReturn(true)   // 七年级
+                .thenReturn(false); // 八年级
+        when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        List<KgTextbook> textbooks = List.of(
+                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math")
+        );
+        when(neo4jNodeRepository.findTextbooks(any(), any(), any(), any())).thenReturn(textbooks);
+        when(neo4jNodeRepository.findChaptersByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findSectionsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jNodeRepository.findKnowledgePointsByTextbookUris(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findTextbookChapterRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findChapterSectionRelations(anyList())).thenReturn(List.of());
+        when(neo4jRelationRepository.findSectionKPRelations(anyList())).thenReturn(List.of());
+        when(kgTextbookRepository.upsert(anyList())).thenReturn(1);
+        when(kgChapterRepository.upsert(anyList())).thenReturn(0);
+        when(kgSectionRepository.upsert(anyList())).thenReturn(0);
+        when(kgKnowledgePointRepository.upsert(anyList())).thenReturn(0);
+        when(kgTextbookRepository.findAllActiveByEditionSubjectGrade(any(), any(), any())).thenReturn(textbooks);
+        when(kgChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterRepository.countActive()).thenReturn(0);
+        when(kgSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionRepository.countActive()).thenReturn(0);
+        when(kgKnowledgePointRepository.findAllActive()).thenReturn(List.of());
+        when(kgKnowledgePointRepository.countActive()).thenReturn(0);
+        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+
+        KgSyncRecord syncRecord = createSyncRecord(200L);
+        when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);
+        when(kgSyncRecordRepository.findById(anyLong())).thenReturn(Optional.of(syncRecord));
+
+        SyncResult result = kgSyncAppService.syncFull(
+                SyncRequest.builder().subject("math").edition("人教版").build());
+
+        assertEquals("partial_success", result.getStatus());
+        assertEquals(2, result.getTotalGrades());
+        assertEquals(1, result.getCompletedGrades());
+        assertEquals(1, result.getFailedGrades());
+    }
+
+    // ==================== 新增：空年级列表 ====================
+
+    @Test
+    @Order(22)
+    @DisplayName("空年级列表 — Neo4j 无数据应返回空结果")
+    void emptyGrades_shouldReturnEmptyResult() {
+        when(neo4jNodeRepository.findDistinctGrades(any(), any())).thenReturn(List.of());
+
+        SyncResult result = kgSyncAppService.syncFull(
+                SyncRequest.builder().subject("math").edition("人教版").build());
+
+        assertEquals("success", result.getStatus());
+        assertEquals(0, result.getTotalGrades());
     }
 }

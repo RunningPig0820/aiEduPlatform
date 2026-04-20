@@ -41,4 +41,11 @@ public class KgSyncRecordRepositoryImpl implements KgSyncRecordRepository {
         KgSyncRecordPo po = kgSyncRecordMapper.selectById(id);
         return po != null ? Optional.of(po.toEntity()) : Optional.empty();
     }
+
+    @Override
+    public Optional<KgSyncRecord> findLatestRunningByScope(
+            String edition, String subject, String stage, String grade) {
+        KgSyncRecordPo po = kgSyncRecordMapper.selectLatestRunningByScope(edition, subject, stage, grade);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
 }

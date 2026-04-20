@@ -19,4 +19,14 @@ public interface KgSyncRecordMapper extends BaseMapper<KgSyncRecordPo> {
 
     @Select("SELECT * FROM t_kg_sync_record WHERE scope = #{scope} AND is_deleted = false ORDER BY started_at DESC")
     List<KgSyncRecordPo> selectByScope(@Param("scope") String scope);
+
+    @Select("SELECT * FROM t_kg_sync_record WHERE edition = #{edition} AND subject = #{subject} "
+            + "AND ((#{stage} IS NULL AND stage IS NULL) OR stage = #{stage}) "
+            + "AND ((#{grade} IS NULL AND grade IS NULL) OR grade = #{grade}) "
+            + "AND status = 'running' AND is_deleted = false ORDER BY started_at DESC LIMIT 1")
+    KgSyncRecordPo selectLatestRunningByScope(
+            @Param("edition") String edition,
+            @Param("subject") String subject,
+            @Param("stage") String stage,
+            @Param("grade") String grade);
 }

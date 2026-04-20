@@ -30,4 +30,9 @@ public interface Neo4jNodeRepository {
      * 按所属教材 URI 列表查询知识点（通过 section 关联）
      */
     List<KgKnowledgePoint> findKnowledgePointsByTextbookUris(List<String> textbookUris);
+
+    /**
+     * 按版本+学科查询所有不重复的年级列表
+     */
+    List<String> findDistinctGrades(String edition, String subject);
 }

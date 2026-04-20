@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -19,6 +20,18 @@ public class KgSyncRecord {
 
     private String syncType;
 
+    private String edition;
+
+    private String subject;
+
+    private String stage;
+
+    private String grade;
+
+    /**
+     * @deprecated 使用 edition/subject/stage/grade 维度字段替代
+     */
+    @Deprecated
     private String scope;
 
     private String status;
@@ -47,14 +60,27 @@ public class KgSyncRecord {
 
     private Boolean deleted = false;
 
-    public static KgSyncRecord create(String syncType, String scope, Long createdBy) {
+    public static KgSyncRecord create(String syncType, String edition, String subject,
+                                       String stage, String grade, Long createdBy) {
         KgSyncRecord record = new KgSyncRecord();
         record.syncType = syncType;
-        record.scope = scope;
+        record.edition = edition;
+        record.subject = subject;
+        record.stage = stage;
+        record.grade = grade;
         record.status = "running";
         record.createdBy = createdBy;
         record.startedAt = LocalDateTime.now();
         return record;
+    }
+
+    /**
+     * 判断同步记录是否已过期（超时未更新）
+     * @param threshold 超时阈值时间点
+     * @return true 如果 startedAt 早于阈值（视为崩溃）
+     */
+    public boolean isStale(LocalDateTime threshold) {
+        return this.startedAt != null && this.startedAt.isBefore(threshold);
     }
 
     public void completeSuccess(int insertedCount, int updatedCount, int statusChangedCount,

@@ -90,6 +90,32 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
         });
     }
 
+    @Override
+    public List<String> findDistinctGrades(String edition, String subject) {
+        List<String> grades = new ArrayList<>();
+        String query = """
+                MATCH (t:Textbook)
+                WHERE t.edition = $edition AND t.subject = $subject
+                RETURN DISTINCT t.grade AS grade
+                ORDER BY grade
+                """;
+        try (var session = neo4jDriver.session()) {
+            session.readTransaction(tx -> {
+                var result = tx.run(query, parameters("edition", edition, "subject", subject));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    if (!record.get("grade").isNull()) {
+                        grades.add(record.get("grade").asString(""));
+                    }
+                }
+                return null;
+            });
+        }
+        log.info("Queried {} distinct grades from Neo4j for edition={}, subject={}",
+                grades.size(), edition, subject);
+        return grades;
+    }
+
     private <T> List<T> queryNeo4jNodes(String cypherQuery, Map<String, Object> params, Function<Record, T> mapper) {
         List<T> results = new ArrayList<>();
         try (var session = neo4jDriver.session()) {

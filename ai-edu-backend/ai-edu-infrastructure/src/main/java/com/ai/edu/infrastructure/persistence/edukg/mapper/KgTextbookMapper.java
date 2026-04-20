@@ -37,4 +37,11 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
 
     @Select("SELECT DISTINCT grade FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY grade")
     List<String> selectDistinctGradesBySubject(@Param("subject") String subject);
+
+    @Select("SELECT * FROM t_kg_textbook WHERE edition = #{edition} AND subject = #{subject} "
+            + "AND grade = #{grade} AND is_deleted = false ORDER BY grade, order_index")
+    List<KgTextbookPo> selectAllActiveByEditionSubjectGrade(
+            @Param("edition") String edition,
+            @Param("subject") String subject,
+            @Param("grade") String grade);
 }

@@ -16,10 +16,13 @@ class KgSyncRecordTest {
     @Order(1)
     @DisplayName("create() 应正确赋值并默认 status=running")
     void create_shouldSetFieldsAndDefaultStatus() {
-        KgSyncRecord record = KgSyncRecord.create("full", "grade=一年级", 100L);
+        KgSyncRecord record = KgSyncRecord.create("full", "人教版", "math", "junior", "七年级", 100L);
 
         assertEquals("full", record.getSyncType());
-        assertEquals("grade=一年级", record.getScope());
+        assertEquals("人教版", record.getEdition());
+        assertEquals("math", record.getSubject());
+        assertEquals("junior", record.getStage());
+        assertEquals("七年级", record.getGrade());
         assertEquals("running", record.getStatus());
         assertEquals(100L, record.getCreatedBy());
         assertEquals((Integer) 0, record.getInsertedCount());
@@ -37,7 +40,7 @@ class KgSyncRecordTest {
     @Order(2)
     @DisplayName("completeSuccess() 应更新状态和计数")
     void completeSuccess_shouldUpdateStatusAndCounts() {
-        KgSyncRecord record = KgSyncRecord.create("full", null, 100L);
+        KgSyncRecord record = KgSyncRecord.create("full", null, null, null, null, 100L);
 
         record.completeSuccess(10, 5, 2, "matched", "All counts matched");
 
@@ -55,7 +58,7 @@ class KgSyncRecordTest {
     @Order(3)
     @DisplayName("completeFailure() 应更新 status=failed 并设置错误信息")
     void completeFailure_shouldUpdateStatusAndSetErrorMessage() {
-        KgSyncRecord record = KgSyncRecord.create("full", null, 100L);
+        KgSyncRecord record = KgSyncRecord.create("full", null, null, null, null, 100L);
 
         record.completeFailure("Neo4j connection timeout");
 
@@ -68,7 +71,7 @@ class KgSyncRecordTest {
     @Order(4)
     @DisplayName("completeFailure() 不应修改 insertedCount 等计数字段")
     void completeFailure_shouldNotModifyCounts() {
-        KgSyncRecord record = KgSyncRecord.create("full", null, 100L);
+        KgSyncRecord record = KgSyncRecord.create("full", null, null, null, null, 100L);
         record.completeSuccess(10, 5, 2, "matched", "OK");
 
         record.completeFailure("error after success");
@@ -77,5 +80,20 @@ class KgSyncRecordTest {
         assertEquals("error after success", record.getErrorMessage());
         assertEquals(10, record.getInsertedCount());
         assertEquals(5, record.getUpdatedCount());
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("isStale() 应正确判断过期时间")
+    void isStale_shouldDetectStaleRecords() {
+        KgSyncRecord record = KgSyncRecord.create("full", "人教版", "math", null, "七年级", 100L);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+
+        // 刚创建的记录不应过期
+        assertFalse(record.isStale(threshold));
+
+        // 如果阈值在未来（模拟），应判定为过期
+        LocalDateTime futureThreshold = LocalDateTime.now().plusMinutes(10);
+        assertTrue(record.isStale(futureThreshold));
     }
 }

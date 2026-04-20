@@ -27,4 +27,19 @@ public class SyncResult implements Serializable {
     private int statusChangedCount;
     private String reconciliationStatus;
     private long duration;
+
+    /**
+     * 同步完成的年级数（grade-scoped 模式下）
+     */
+    private int completedGrades;
+
+    /**
+     * 同步失败的年级数（grade-scoped 模式下）
+     */
+    private int failedGrades;
+
+    /**
+     * 总年级数（grade-scoped 模式下）
+     */
+    private int totalGrades;
 }
