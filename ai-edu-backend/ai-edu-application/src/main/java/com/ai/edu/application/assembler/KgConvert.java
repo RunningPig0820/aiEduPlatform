@@ -23,7 +23,6 @@ public final class KgConvert {
                 .grade(textbook.getGrade())
                 .stage(textbook.getStage())
                 .edition(textbook.getEdition())
-                .orderIndex(textbook.getOrderIndex())
                 .subject(textbook.getSubject())
                 .status(textbook.getStatus())
                 .build();

@@ -10,6 +10,7 @@ import org.neo4j.driver.types.Node;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,21 +30,33 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
 
     @Override
     public List<KgTextbook> findTextbooks(String edition, String subject, String stage, String grade) {
-        String query = """
-                MATCH (t:Textbook)
-                WHERE t.edition = $edition AND t.subject = $subject
-                AND ($stage IS NULL OR t.stage = $stage)
-                AND ($grade IS NULL OR t.grade = $grade)
-                RETURN t
-                """;
-        return queryNeo4jNodes(query, parameters("edition", edition, "subject", subject,
-                "stage", stage, "grade", grade), record -> {
+        // edition 和 subject 必须传入，否则返回空列表
+        if (edition == null || edition.isBlank() || subject == null || subject.isBlank()) {
+            log.warn("findTextbooks: edition and subject are required, returning empty list");
+            return List.of();
+        }
+
+        // 动态构建 Cypher 查询
+        StringBuilder cypher = new StringBuilder("MATCH (t:Textbook) WHERE 1=1");
+        Map<String, Object> params = new HashMap<>();
+
+        addCondition(cypher, params, "t.edition = $edition", edition);
+        addCondition(cypher, params, "t.subject = $subject", subject);
+        addCondition(cypher, params, "t.stage = $stage", stage);
+        addCondition(cypher, params, "t.grade = $grade", grade);
+
+        cypher.append(" RETURN t");
+
+        log.info("findTextbooks: Cypher={}, params={}", cypher, params);
+
+        return queryNeo4jNodes(cypher.toString(), params, record -> {
             String uri = getUri(record);
             String label = getLabel(record);
             String g = getStringProperty(record, "grade");
             String s = getStringProperty(record, "stage");
             String e = getStringProperty(record, "edition");
             String sub = getStringProperty(record, "subject");
+            log.info("Neo4j Textbook mapped: uri={}, edition={}, stage={}, grade={}, subject={}", uri, e, s, g, sub);
             return KgTextbook.create(uri, label, g, s, e, sub);
         });
     }
@@ -92,16 +105,24 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
 
     @Override
     public List<String> findDistinctGrades(String edition, String subject) {
+        // edition 和 subject 必须传入，否则返回空列表
+        if (edition == null || edition.isBlank() || subject == null || subject.isBlank()) {
+            log.warn("findDistinctGrades: edition and subject are required, returning empty list");
+            return List.of();
+        }
+
         List<String> grades = new ArrayList<>();
-        String query = """
-                MATCH (t:Textbook)
-                WHERE t.edition = $edition AND t.subject = $subject
-                RETURN DISTINCT t.grade AS grade
-                ORDER BY grade
-                """;
+        StringBuilder cypher = new StringBuilder("MATCH (t:Textbook) WHERE 1=1");
+        Map<String, Object> params = new HashMap<>();
+
+        addCondition(cypher, params, "t.edition = $edition", edition);
+        addCondition(cypher, params, "t.subject = $subject", subject);
+
+        cypher.append(" RETURN DISTINCT t.grade AS grade ORDER BY grade");
+
         try (var session = neo4jDriver.session()) {
             session.readTransaction(tx -> {
-                var result = tx.run(query, parameters("edition", edition, "subject", subject));
+                var result = tx.run(cypher.toString(), params);
                 while (result.hasNext()) {
                     Record record = result.next();
                     if (!record.get("grade").isNull()) {
@@ -118,6 +139,7 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
 
     private <T> List<T> queryNeo4jNodes(String cypherQuery, Map<String, Object> params, Function<Record, T> mapper) {
         List<T> results = new ArrayList<>();
+        log.info("Executing Neo4j query: {}, params: {}", cypherQuery, params);
         try (var session = neo4jDriver.session()) {
             session.readTransaction(tx -> {
                 var result = tx.run(cypherQuery, params);
@@ -132,7 +154,7 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
                 return null;
             });
         }
-        log.info("Queried {} nodes from Neo4j", results.size());
+        log.info("Neo4j query returned {} nodes", results.size());
         return results;
     }
 
@@ -170,5 +192,17 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
             return node.get(property).asString("");
         }
         return "";
+    }
+
+    /**
+     * 通用工具方法：参数非空时，才拼接 Cypher 条件 + 放入参数
+     */
+    private void addCondition(StringBuilder cypher, Map<String, Object> params, String condition, String value) {
+        if (value == null || value.isBlank()) return;
+
+        cypher.append(" AND ").append(condition);
+        // 从条件中提取参数名，如 "t.edition = $edition" → "edition"
+        String paramKey = condition.split(" = ")[1].replace("$", "");
+        params.put(paramKey, value);
     }
 }

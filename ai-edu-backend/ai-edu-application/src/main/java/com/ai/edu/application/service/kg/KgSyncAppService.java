@@ -126,8 +126,8 @@ public class KgSyncAppService {
         int failedGrades = 0;
         boolean anyMismatch = false;
 
-        for (String g : targetGrades) {
-            GradeSyncResult gradeResult = syncOneGrade(edition, subject, stage, g);
+        for (String targetGrade : targetGrades) {
+            GradeSyncResult gradeResult = syncOneGrade(edition, subject, stage, targetGrade);
             if (gradeResult.success) {
                 completedGrades++;
                 totalInserted += gradeResult.insertedCount;

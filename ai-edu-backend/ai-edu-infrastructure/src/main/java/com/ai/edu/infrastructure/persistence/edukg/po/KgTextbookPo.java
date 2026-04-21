@@ -39,9 +39,6 @@ public class KgTextbookPo {
     @TableField("edition")
     private String edition;
 
-    @TableField("order_index")
-    private Integer orderIndex = 0;
-
     @TableField("subject")
     private String subject;
 
@@ -50,6 +47,9 @@ public class KgTextbookPo {
 
     @TableField("merged_to_uri")
     private String mergedToUri;
+
+    @TableField("sort")
+    private Integer sort;
 
     @TableField("created_by")
     private Long createdBy = 0L;
@@ -69,10 +69,10 @@ public class KgTextbookPo {
         po.grade = entity.getGrade();
         po.stage = entity.getStage();
         po.edition = entity.getEdition();
-        po.orderIndex = entity.getOrderIndex();
         po.subject = entity.getSubject();
         po.status = entity.getStatus();
         po.mergedToUri = entity.getMergedToUri();
+        po.sort = entity.getSort();
         po.createdBy = entity.getCreatedBy();
         po.modifiedBy = entity.getModifiedBy();
         po.deleted = entity.getDeleted();
@@ -87,7 +87,6 @@ public class KgTextbookPo {
         entity.setGrade(this.grade);
         entity.setStage(this.stage);
         entity.setEdition(this.edition);
-        entity.setOrderIndex(this.orderIndex);
         entity.setSubject(this.subject);
         entity.setStatus(this.status);
         entity.setMergedToUri(this.mergedToUri);

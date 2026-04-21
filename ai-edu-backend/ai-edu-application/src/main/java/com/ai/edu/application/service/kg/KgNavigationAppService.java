@@ -2,6 +2,7 @@ package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
 import com.ai.edu.application.dto.kg.ChapterTreeNode;
+import com.ai.edu.application.dto.kg.GradeTextbookDTO;
 import com.ai.edu.application.dto.kg.KgDimensionDTO;
 import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
 import com.ai.edu.application.dto.kg.KgTextbookDTO;
@@ -45,20 +46,6 @@ public class KgNavigationAppService {
     @Resource
     private KgSectionKPRepository kgSectionKPRepository;
 
-    /**
-     * 获取教材列表
-     */
-    public List<KgTextbookDTO> getTextbooks(String subject, String stage) {
-        List<KgTextbook> textbooks;
-        if (subject != null && stage != null) {
-            textbooks = kgTextbookRepository.findBySubjectAndStage(subject, stage);
-        } else if (subject != null) {
-            textbooks = kgTextbookRepository.findBySubject(subject);
-        } else {
-            textbooks = kgTextbookRepository.findAllActive();
-        }
-        return KgConvert.toTextbookDTOs(textbooks);
-    }
 
     /**
      * 获取教材详情
@@ -214,6 +201,27 @@ public class KgNavigationAppService {
      */
     public List<String> getGrades() {
         return kgTextbookRepository.findDistinctGrades();
+    }
+
+    /**
+     * 按版本/学科筛选获取年级列表（从 MySQL 聚合查询）
+     */
+    public List<String> getGradesByEditionSubject(String edition, String subject) {
+        return kgTextbookRepository.findDistinctGradesByEditionSubject(edition, subject);
+    }
+
+    /**
+     * 按版本+学科获取年级+教材URI列表（用于下拉选择器）
+     */
+    public List<GradeTextbookDTO> getGradeTextbooks(String edition, String subject) {
+        List<KgTextbook> textbooks = kgTextbookRepository.findByEditionSubject(edition, subject);
+        return textbooks.stream()
+                .map(tb -> GradeTextbookDTO.builder()
+                        .grade(tb.getGrade())
+                        .label(tb.getLabel())
+                        .textbookUri(tb.getUri())
+                        .build())
+                .toList();
     }
 
     /**

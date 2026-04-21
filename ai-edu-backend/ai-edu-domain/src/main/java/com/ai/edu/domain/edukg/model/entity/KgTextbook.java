@@ -26,13 +26,13 @@ public class KgTextbook {
 
     private String edition;
 
-    private Integer orderIndex = 0;
-
     private String subject;
 
     private String status;
 
     private String mergedToUri;
+
+    private Integer sort = 0;
 
     private Long createdBy = 0L;
 
@@ -48,7 +48,7 @@ public class KgTextbook {
         textbook.stage = stage;
         textbook.edition = edition;
         textbook.subject = subject;
-        textbook.orderIndex = 0;
+        textbook.sort = 0;
         textbook.status = "active";
         return textbook;
     }
@@ -64,7 +64,6 @@ public class KgTextbook {
         this.stage = other.stage;
         this.edition = other.edition;
         this.subject = other.subject;
-        this.orderIndex = other.orderIndex;
     }
 
     public boolean isMerged() {

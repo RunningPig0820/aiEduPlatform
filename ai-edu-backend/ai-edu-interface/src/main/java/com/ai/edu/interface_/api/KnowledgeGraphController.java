@@ -86,68 +86,62 @@ public class KnowledgeGraphController {
 
     // ==================== 教材/章节导航 ====================
 
-    /**
-     * 5.5 教材列表
-     * GET /api/kg/textbooks
-     */
-    @GetMapping("/textbooks")
-    public ApiResponse<List<KgTextbookDTO>> getTextbooks(
-            @RequestParam(required = false) String subject,
-            @RequestParam(required = false) String stage) {
-        log.info("获取教材列表: subject={}, stage={}", subject, stage);
-        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooks(subject, stage);
-        return ApiResponse.success(textbooks);
-    }
 
     /**
      * 5.6 教材章节树
-     * GET /api/kg/textbooks/{uri}/chapters
-     * 注意: {uri} 需要 URL 编码
+     * POST /api/kg/textbooks/chapters
      */
-    @GetMapping("/textbooks/{uri}/chapters")
+    @PostMapping("/textbooks/chapters")
     public ApiResponse<List<ChapterTreeNode>> getChaptersByTextbook(
-            @PathVariable String uri) {
-        log.info("获取教材章节树: textbookUri={}", uri);
-        List<ChapterTreeNode> chapters = kgNavigationAppService.getChaptersByTextbook(uri);
+            @RequestBody UriRequest request) {
+        log.info("获取教材章节树: textbookUri={}", request.getUri());
+        List<ChapterTreeNode> chapters = kgNavigationAppService.getChaptersByTextbook(request.getUri());
         return ApiResponse.success(chapters);
     }
 
     /**
      * 5.7 小节知识点列表
-     * GET /api/kg/sections/{uri}/points
+     * POST /api/kg/sections/points
      */
-    @GetMapping("/sections/{uri}/points")
+    @PostMapping("/sections/points")
     public ApiResponse<List<KgKnowledgePointDetailDTO>> getKnowledgePointsBySection(
-            @PathVariable String uri) {
-        log.info("获取小节知识点: sectionUri={}", uri);
-        List<KgKnowledgePointDetailDTO> points = kgNavigationAppService.getKnowledgePointsBySection(uri);
+            @RequestBody UriRequest request) {
+        log.info("获取小节知识点: sectionUri={}", request.getUri());
+        List<KgKnowledgePointDetailDTO> points = kgNavigationAppService.getKnowledgePointsBySection(request.getUri());
         return ApiResponse.success(points);
     }
 
     /**
      * 5.8 知识点详情（含 2 层父级）
-     * GET /api/kg/knowledge-points/{uri}
+     * POST /api/kg/knowledge-points/detail
      */
-    @GetMapping("/knowledge-points/{uri}")
+    @PostMapping("/knowledge-points/detail")
     public ApiResponse<KgKnowledgePointDetailDTO> getKnowledgePointDetail(
-            @PathVariable String uri) {
-        log.info("获取知识点详情: kpUri={}", uri);
-        KgKnowledgePointDetailDTO detail = kgNavigationAppService.getKnowledgePointDetail(uri);
+            @RequestBody UriRequest request) {
+        log.info("获取知识点详情: kpUri={}", request.getUri());
+        KgKnowledgePointDetailDTO detail = kgNavigationAppService.getKnowledgePointDetail(request.getUri());
         return ApiResponse.success(detail);
     }
 
     /**
      * 知识点图谱（用于前端图谱可视化）
-     * GET /api/kg/knowledge-points/{uri}/graph
+     * POST /api/kg/knowledge-points/graph
      */
-    @GetMapping("/knowledge-points/{uri}/graph")
-    public ApiResponse<KgGraphDTO> getKnowledgePointGraph(@PathVariable String uri) {
-        log.info("获取知识点图谱: kpUri={}", uri);
-        KgGraphDTO graph = kgNeo4jService.getKnowledgePointGraph(uri);
+    @PostMapping("/knowledge-points/graph")
+    public ApiResponse<KgGraphDTO> getKnowledgePointGraph(@RequestBody UriRequest request) {
+        log.info("获取知识点图谱: kpUri={}", request.getUri());
+        KgGraphDTO graph = kgNeo4jService.getKnowledgePointGraph(request.getUri());
         return ApiResponse.success(graph);
     }
 
     // ==================== 维度配置（下拉选择器） ====================
+
+    @GetMapping("/dimensions/textbooks")
+    public ApiResponse<List<KgDimensionDTO>> getTextbooks() {
+        log.info("获取教材下拉列表");
+        List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
+        return ApiResponse.success(textbooks);
+    }
 
     /**
      * 获取学科列表（枚举，前端下拉用）
@@ -161,13 +155,16 @@ public class KnowledgeGraphController {
     }
 
     /**
-     * 获取年级列表（MySQL 聚合，前端下拉用）
-     * GET /api/kg/dimensions/grades
+     * 获取年级+教材URI列表（MySQL 查询，前端下拉用）
+     * POST /api/kg/dimensions/grades
      */
-    @GetMapping("/dimensions/grades")
-    public ApiResponse<List<String>> getGrades() {
-        log.info("获取年级下拉列表");
-        List<String> grades = kgNavigationAppService.getGrades();
+    @PostMapping("/dimensions/grades")
+    public ApiResponse<List<GradeTextbookDTO>> getGrades(@RequestBody(required = false) GradeQueryRequest request) {
+        if (request == null) {
+            request = GradeQueryRequest.builder().build();
+        }
+        log.info("获取年级+教材列表: edition={}, subject={}", request.getEdition(), request.getSubject());
+        List<GradeTextbookDTO> grades = kgNavigationAppService.getGradeTextbooks(request.getEdition(), request.getSubject());
         return ApiResponse.success(grades);
     }
 
@@ -183,35 +180,27 @@ public class KnowledgeGraphController {
     }
 
     /**
-     * 获取教材列表（枚举，前端下拉用）
-     * GET /api/kg/dimensions/textbooks
+     * 获取学科下的年级列表（支持教材版本筛选）
+     * POST /api/kg/subjects/grades
      */
-    @GetMapping("/dimensions/textbooks")
-    public ApiResponse<List<KgDimensionDTO>> getTextbooks() {
-        log.info("获取教材下拉列表");
-        List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
-        return ApiResponse.success(textbooks);
-    }
-
-    /**
-     * 获取学科下的年级列表
-     * GET /api/kg/subjects/{subject}/grades
-     */
-    @GetMapping("/subjects/{subject}/grades")
-    public ApiResponse<List<String>> getGradesBySubject(@PathVariable String subject) {
-        log.info("获取学科下的年级: subject={}", subject);
-        List<String> grades = kgNavigationAppService.getGradesBySubject(subject);
+    @PostMapping("/subjects/grades")
+    public ApiResponse<List<String>> getGradesBySubject(@RequestBody GradeQueryRequest request) {
+        if (request == null) {
+            request = GradeQueryRequest.builder().build();
+        }
+        log.info("获取学科下的年级: edition={}, subject={}", request.getEdition(), request.getSubject());
+        List<String> grades = kgNavigationAppService.getGradesByEditionSubject(request.getEdition(), request.getSubject());
         return ApiResponse.success(grades);
     }
 
     /**
      * 获取年级下的教材列表
-     * GET /api/kg/grades/{grade}/textbooks
+     * POST /api/kg/grades/textbooks
      */
-    @GetMapping("/grades/{grade}/textbooks")
-    public ApiResponse<List<KgTextbookDTO>> getTextbooksByGrade(@PathVariable String grade) {
-        log.info("获取年级下的教材: grade={}", grade);
-        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooksByGrade(grade);
+    @PostMapping("/grades/textbooks")
+    public ApiResponse<List<KgTextbookDTO>> getTextbooksByGrade(@RequestBody GradeRequest request) {
+        log.info("获取年级下的教材: grade={}", request.getGrade());
+        List<KgTextbookDTO> textbooks = kgNavigationAppService.getTextbooksByGrade(request.getGrade());
         return ApiResponse.success(textbooks);
     }
 
@@ -219,25 +208,27 @@ public class KnowledgeGraphController {
 
     /**
      * 5.9 年级知识体系
-     * GET /api/kg/system/grade/{grade}
+     * POST /api/kg/system/grade
      */
-    @GetMapping("/system/grade/{grade}")
-    public ApiResponse<KgGradeSystemDTO> getGradeSystem(
-            @PathVariable String grade,
-            @RequestParam(required = false, defaultValue = "subject") String groupBy) {
-        log.info("获取年级知识体系: grade={}, groupBy={}", grade, groupBy);
-        KgGradeSystemDTO system = kgKnowledgeSystemAppService.getGradeSystem(grade, groupBy);
+    @PostMapping("/system/grade")
+    public ApiResponse<KgGradeSystemDTO> getGradeSystem(@RequestBody GradeSystemRequest request) {
+        if (request == null) {
+            request = GradeSystemRequest.builder().groupBy("subject").build();
+        }
+        String groupBy = request.getGroupBy() != null ? request.getGroupBy() : "subject";
+        log.info("获取年级知识体系: grade={}, groupBy={}", request.getGrade(), groupBy);
+        KgGradeSystemDTO system = kgKnowledgeSystemAppService.getGradeSystem(request.getGrade(), groupBy);
         return ApiResponse.success(system);
     }
 
     /**
      * 5.10 年级统计
-     * GET /api/kg/system/stats/{grade}
+     * POST /api/kg/system/stats
      */
-    @GetMapping("/system/stats/{grade}")
-    public ApiResponse<StatsDTO> getGradeStats(@PathVariable String grade) {
-        log.info("获取年级统计: grade={}", grade);
-        StatsDTO stats = kgKnowledgeSystemAppService.getGradeStats(grade);
+    @PostMapping("/system/stats")
+    public ApiResponse<StatsDTO> getGradeStats(@RequestBody GradeRequest request) {
+        log.info("获取年级统计: grade={}", request.getGrade());
+        StatsDTO stats = kgKnowledgeSystemAppService.getGradeStats(request.getGrade());
         return ApiResponse.success(stats);
     }
 
@@ -255,6 +246,7 @@ public class KnowledgeGraphController {
     }
 
     /**
+     * todo 待确认
      * 5.12 批量获取概念关联
      * POST /api/kg/concepts/batch-relations
      */

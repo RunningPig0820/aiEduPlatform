@@ -26,7 +26,7 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
     @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND stage = #{stage} AND is_deleted = false ORDER BY grade")
     List<KgTextbookPo> selectBySubjectAndStage(@Param("subject") String subject, @Param("stage") String stage);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, order_index")
+    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, order")
     List<KgTextbookPo> selectAllActive();
 
     @Update("UPDATE t_kg_textbook SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")
@@ -38,8 +38,34 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
     @Select("SELECT DISTINCT grade FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY grade")
     List<String> selectDistinctGradesBySubject(@Param("subject") String subject);
 
+    /**
+     * 按版本+学科查询不重复的年级列表（动态 SQL，参数为 null 时不过滤）
+     */
+    @Select("<script>" +
+            "SELECT DISTINCT grade FROM t_kg_textbook WHERE is_deleted = false " +
+            "<if test='edition != null'> AND edition = #{edition}</if>" +
+            "<if test='subject != null'> AND subject = #{subject}</if>" +
+            " ORDER BY grade" +
+            "</script>")
+    List<String> selectDistinctGradesByEditionSubject(
+            @Param("edition") String edition,
+            @Param("subject") String subject);
+
+    /**
+     * 按版本+学科查询教材列表（动态 SQL，参数为 null 时不过滤）
+     */
+    @Select("<script>" +
+            "SELECT * FROM t_kg_textbook WHERE is_deleted = false " +
+            "<if test='edition != null'> AND edition = #{edition}</if>" +
+            "<if test='subject != null'> AND subject = #{subject}</if>" +
+            " ORDER BY grade" +
+            "</script>")
+    List<KgTextbookPo> selectByEditionSubject(
+            @Param("edition") String edition,
+            @Param("subject") String subject);
+
     @Select("SELECT * FROM t_kg_textbook WHERE edition = #{edition} AND subject = #{subject} "
-            + "AND grade = #{grade} AND is_deleted = false ORDER BY grade, order_index")
+            + "AND grade = #{grade} AND is_deleted = false ORDER BY grade, sort")
     List<KgTextbookPo> selectAllActiveByEditionSubjectGrade(
             @Param("edition") String edition,
             @Param("subject") String subject,

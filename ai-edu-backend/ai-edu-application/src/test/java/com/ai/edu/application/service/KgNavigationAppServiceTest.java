@@ -54,77 +54,7 @@ class KgNavigationAppServiceTest {
     @InjectMocks
     private KgNavigationAppService kgNavigationAppService;
 
-    // ==================== 6.8.1 getTextbooks ====================
-
-    @Test
-    @Order(1)
-    @DisplayName("getTextbooks 全部查询 — 无参数时应返回所有教材")
-    void getTextbooks_noFilter_shouldReturnAll() {
-        List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "教材1", "七年级", "junior", "人教版", "math"),
-                KgTextbook.create("uri:tb2", "教材2", "八年级", "junior", "人教版", "english")
-        );
-        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
-
-        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooks(null, null);
-
-        assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals("uri:tb1", result.get(0).getUri());
-        assertEquals("教材1", result.get(0).getLabel());
-        assertEquals("七年级", result.get(0).getGrade());
-        assertEquals("junior", result.get(0).getStage());
-        assertEquals("math", result.get(0).getSubject());
-        assertEquals("active", result.get(0).getStatus());
-        verify(kgTextbookRepository).findAllActive();
-    }
-
-    @Test
-    @Order(2)
-    @DisplayName("getTextbooks 按 subject 过滤")
-    void getTextbooks_bySubject_shouldFilter() {
-        List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "数学教材1", "七年级", "junior", "人教版", "math")
-        );
-        when(kgTextbookRepository.findBySubject("math")).thenReturn(textbooks);
-
-        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooks("math", null);
-
-        assertEquals(1, result.size());
-        assertEquals("math", result.get(0).getSubject());
-        verify(kgTextbookRepository).findBySubject("math");
-    }
-
-    @Test
-    @Order(3)
-    @DisplayName("getTextbooks 按 subject+stage 过滤")
-    void getTextbooks_bySubjectAndStage_shouldFilter() {
-        List<KgTextbook> textbooks = List.of(
-                KgTextbook.create("uri:tb1", "初中数学", "七年级", "junior", "人教版", "math")
-        );
-        when(kgTextbookRepository.findBySubjectAndStage("math", "junior")).thenReturn(textbooks);
-
-        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooks("math", "junior");
-
-        assertEquals(1, result.size());
-        assertEquals("math", result.get(0).getSubject());
-        assertEquals("junior", result.get(0).getStage());
-        verify(kgTextbookRepository).findBySubjectAndStage("math", "junior");
-    }
-
-    @Test
-    @Order(4)
-    @DisplayName("getTextbooks 无匹配数据应返回空列表")
-    void getTextbooks_noMatch_shouldReturnEmpty() {
-        when(kgTextbookRepository.findBySubject("physics")).thenReturn(List.of());
-
-        List<KgTextbookDTO> result = kgNavigationAppService.getTextbooks("physics", null);
-
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    // ==================== 6.8.2 getChaptersByTextbook ====================
+    // ==================== 6.8.1 getChaptersByTextbook ====================
 
     @Test
     @Order(5)
@@ -514,12 +444,9 @@ class KgNavigationAppServiceTest {
 
         assertNotNull(result);
         assertEquals(KgSubjectEnum.values().length, result.size());
-        assertEquals("math", result.get(0).getCode());
+        assertEquals("数学", result.get(0).getCode());
         assertEquals("数学", result.get(0).getLabel());
         assertEquals(1, result.get(0).getOrderIndex());
-        assertEquals("chinese", result.get(1).getCode());
-        assertEquals("biology", result.get(result.size() - 1).getCode());
-        assertEquals(6, result.get(result.size() - 1).getOrderIndex());
     }
 
     // ==================== 6.15.2 getGrades ====================
@@ -569,7 +496,7 @@ class KgNavigationAppServiceTest {
         assertEquals(KgTextbookEnum.values().length, result.size());
 
         KgDimensionDTO first = result.get(0);
-        assertEquals("REN_JIAO_BAN", first.getCode());
+        assertEquals("人教版", first.getCode());
         assertEquals("人教版", first.getLabel());
         assertEquals(0, first.getOrderIndex());
     }

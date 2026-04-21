@@ -33,6 +33,18 @@ public interface KgTextbookRepository {
     List<String> findDistinctGradesBySubject(String subject);
 
     /**
+     * 按版本+学科查询不重复的年级列表
+     * 参数为 null 时表示不限制该维度
+     */
+    List<String> findDistinctGradesByEditionSubject(String edition, String subject);
+
+    /**
+     * 按版本+学科查询教材列表（返回 grade + uri）
+     * 参数为 null 时表示不限制该维度
+     */
+    List<KgTextbook> findByEditionSubject(String edition, String subject);
+
+    /**
      * 批量 UPSERT：按 URI 判断 insert 或 update
      * @return 插入的数量（不包括更新）
      */

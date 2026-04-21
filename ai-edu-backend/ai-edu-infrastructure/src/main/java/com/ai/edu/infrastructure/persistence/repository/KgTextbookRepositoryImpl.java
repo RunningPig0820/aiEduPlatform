@@ -5,6 +5,7 @@ import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgTextbookMapper;
 import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookPo;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 /**
  * 教材仓储实现
  */
+@Slf4j
 @Repository
 public class KgTextbookRepositoryImpl implements KgTextbookRepository {
 
@@ -71,25 +73,44 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     }
 
     @Override
+    public List<String> findDistinctGradesByEditionSubject(String edition, String subject) {
+        return kgTextbookMapper.selectDistinctGradesByEditionSubject(edition, subject);
+    }
+
+    @Override
+    public List<KgTextbook> findByEditionSubject(String edition, String subject) {
+        return KgTextbookPo.toEntityList(kgTextbookMapper.selectByEditionSubject(edition, subject));
+    }
+
+    @Override
     public int upsert(List<KgTextbook> textbooks) {
         if (textbooks == null || textbooks.isEmpty()) {
+            log.warn("upsert: textbooks list is null or empty, returning 0");
             return 0;
         }
+        log.info("upsert: processing {} textbooks from Neo4j", textbooks.size());
+
         int count = 0;
         for (KgTextbook tb : textbooks) {
             KgTextbookPo existingPo = kgTextbookMapper.selectByUri(tb.getUri());
             if (existingPo == null) {
+                log.info("upsert: INSERT new textbook uri={}, edition={}, stage={}",
+                        tb.getUri(), tb.getEdition(), tb.getStage());
                 KgTextbookPo po = KgTextbookPo.from(tb);
                 kgTextbookMapper.insert(po);
                 tb.setId(po.getId());
                 count++;
             } else {
                 KgTextbook existingEntity = existingPo.toEntity();
+                log.info("upsert: UPDATE existing textbook uri={}, old edition={}, new edition={}, old stage={}, new stage={}",
+                        tb.getUri(), existingEntity.getEdition(), tb.getEdition(),
+                        existingEntity.getStage(), tb.getStage());
                 existingEntity.updateFrom(tb);
                 existingPo = KgTextbookPo.from(existingEntity);
                 kgTextbookMapper.updateById(existingPo);
             }
         }
+        log.info("upsert: completed, inserted {} new records", count);
         return count;
     }
 

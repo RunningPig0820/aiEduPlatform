@@ -9,7 +9,7 @@ import lombok.Getter;
 @Getter
 public enum KgTextbookEnum {
 
-    REN_JIAO_BAN("REN_JIAO_BAN", "人教版",0),
+    REN_JIAO_BAN("人教版", "人教版",0),
     ;
 
     private final String code;

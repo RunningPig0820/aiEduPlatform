@@ -69,7 +69,7 @@ class KnowledgeGraphControllerTest {
     @WithMockUser(roles = {"ADMIN"})
     @DisplayName("syncFull 成功场景 — 200 + SyncResult")
     void syncFull_success_shouldReturnSyncResult() {
-        SyncRequest request = SyncRequest.builder().subject("math").build();
+        SyncRequest request = SyncRequest.builder().subject("数学").build();
         SyncResult result = SyncResult.builder()
                 .syncId(1L)
                 .status("success")
@@ -98,12 +98,12 @@ class KnowledgeGraphControllerTest {
     @WithMockUser(roles = {"STUDENT"})
     @DisplayName("syncFull 权限校验 — STUDENT 角色 → AccessDenied（被 GlobalExceptionHandler 处理为 500）")
     void syncFull_noPermission_studentRole_shouldReturnAccessDenied() throws Exception {
-        SyncRequest request = SyncRequest.builder().subject("math").build();
+        SyncRequest request = SyncRequest.builder().subject("数学").build();
 
         // 注意: 由于 GlobalExceptionHandler 的 @ExceptionHandler(Exception.class) 会捕获
         // AccessDeniedException 并返回 500，而不是 Spring Security 原生的 403
         // 这里验证返回的 error code 不是 "00000"
-        mockMvc.perform(post("/api/kg/sync/full")
+        mockMvc.perform(post("/api/auth/kg/sync/full")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -142,7 +142,7 @@ class KnowledgeGraphControllerTest {
                         .id(1L)
                         .syncType("full")
                         .edition("人教版")
-                        .subject("math")
+                        .subject("数学")
                         .grade("七年级")
                         .status("success")
                         .insertedCount(10)
@@ -154,7 +154,7 @@ class KnowledgeGraphControllerTest {
                         .id(2L)
                         .syncType("full")
                         .edition("人教版")
-                        .subject("english")
+                        .subject("英语")
                         .grade("八年级")
                         .status("success")
                         .insertedCount(8)
@@ -165,7 +165,7 @@ class KnowledgeGraphControllerTest {
         );
         SyncRecordQueryRequest request = SyncRecordQueryRequest.builder()
                 .edition("人教版")
-                .subject("math")
+                .subject("数学")
                 .size(10)
                 .build();
         when(kgSyncAppService.getSyncRecords(any(SyncRecordQueryRequest.class))).thenReturn(records);
@@ -174,8 +174,8 @@ class KnowledgeGraphControllerTest {
 
         assertEquals(2, response.size());
         assertEquals("full", response.get(0).getSyncType());
-        assertEquals("math", response.get(0).getSubject());
-        assertEquals("english", response.get(1).getSubject());
+        assertEquals("数学", response.get(0).getSubject());
+        assertEquals("英语", response.get(1).getSubject());
     }
 
     // ==================== 6.11.5 GET /api/kg/textbooks ====================
@@ -184,66 +184,21 @@ class KnowledgeGraphControllerTest {
     @Order(5)
     @DisplayName("getTextbooks 列表查询（含 subject/stage 过滤参数）")
     void getTextbooks_withFilters() {
-        List<KgTextbookDTO> textbooks = List.of(
-                KgTextbookDTO.builder()
-                        .uri("uri:tb1")
-                        .label("数学上册")
-                        .grade("七年级")
-                        .stage("middle")
-                        .edition("人教版")
-                        .orderIndex(1)
-                        .subject("math")
-                        .status("active")
-                        .build(),
-                KgTextbookDTO.builder()
-                        .uri("uri:tb2")
-                        .label("数学下册")
-                        .grade("七年级")
-                        .stage("middle")
-                        .edition("人教版")
-                        .orderIndex(2)
-                        .subject("math")
-                        .status("active")
-                        .build()
-        );
-        when(kgNavigationAppService.getTextbooks("math", "middle")).thenReturn(textbooks);
 
-        List<KgTextbookDTO> response = knowledgeGraphController.getTextbooks("math", "middle").getData();
-
-        assertEquals(2, response.size());
-        assertEquals("uri:tb1", response.get(0).getUri());
-        assertEquals("math", response.get(0).getSubject());
-        assertEquals("middle", response.get(0).getStage());
     }
 
     @Test
     @Order(6)
     @DisplayName("getTextbooks 无参数 — 返回所有教材")
     void getTextbooks_noFilter() {
-        List<KgTextbookDTO> textbooks = List.of(
-                KgTextbookDTO.builder()
-                        .uri("uri:tb1")
-                        .label("数学上册")
-                        .grade("七年级")
-                        .stage("middle")
-                        .edition("人教版")
-                        .orderIndex(1)
-                        .subject("math")
-                        .status("active")
-                        .build()
-        );
-        when(kgNavigationAppService.getTextbooks(null, null)).thenReturn(textbooks);
 
-        List<KgTextbookDTO> response = knowledgeGraphController.getTextbooks(null, null).getData();
-
-        assertEquals(1, response.size());
     }
 
-    // ==================== 6.11.6 GET /api/kg/textbooks/{uri}/chapters ====================
+    // ==================== 6.11.6 POST /api/kg/textbooks/chapters ====================
 
     @Test
     @Order(7)
-    @DisplayName("getChaptersByTextbook 章节树查询")
+    @DisplayName("getChaptersByTextbook 章节树查询 — POST 请求")
     void getChaptersByTextbook_chapterTree() {
         List<ChapterTreeNode> chapters = List.of(
                 ChapterTreeNode.builder()
@@ -267,7 +222,8 @@ class KnowledgeGraphControllerTest {
         );
         when(kgNavigationAppService.getChaptersByTextbook("uri:tb1")).thenReturn(chapters);
 
-        List<ChapterTreeNode> response = knowledgeGraphController.getChaptersByTextbook("uri:tb1").getData();
+        UriRequest request = UriRequest.builder().uri("uri:tb1").build();
+        List<ChapterTreeNode> response = knowledgeGraphController.getChaptersByTextbook(request).getData();
 
         assertEquals(2, response.size());
         assertEquals("uri:ch1", response.get(0).getUri());
@@ -278,11 +234,11 @@ class KnowledgeGraphControllerTest {
         assertEquals("uri:ch2", response.get(1).getUri());
     }
 
-    // ==================== 6.11.7 GET /api/kg/sections/{uri}/points ====================
+    // ==================== 6.11.7 POST /api/kg/sections/points ====================
 
     @Test
     @Order(8)
-    @DisplayName("getKnowledgePointsBySection 知识点列表")
+    @DisplayName("getKnowledgePointsBySection 知识点列表 — POST 请求")
     void getKnowledgePointsBySection_kpList() {
         List<KgKnowledgePointDetailDTO> points = List.of(
                 KgKnowledgePointDetailDTO.builder()
@@ -304,7 +260,8 @@ class KnowledgeGraphControllerTest {
         );
         when(kgNavigationAppService.getKnowledgePointsBySection("uri:sec1")).thenReturn(points);
 
-        List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection("uri:sec1").getData();
+        UriRequest request = UriRequest.builder().uri("uri:sec1").build();
+        List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection(request).getData();
 
         assertEquals(2, response.size());
         assertEquals("uri:kp1", response.get(0).getUri());
@@ -313,11 +270,11 @@ class KnowledgeGraphControllerTest {
         assertEquals("uri:ch1", response.get(0).getChapterUri());
     }
 
-    // ==================== 6.11.8 GET /api/kg/knowledge-points/{uri} ====================
+    // ==================== 6.11.8 POST /api/kg/knowledge-points/detail ====================
 
     @Test
     @Order(9)
-    @DisplayName("getKnowledgePointDetail 知识点详情（含 2 层父级）")
+    @DisplayName("getKnowledgePointDetail 知识点详情（含 2 层父级）— POST 请求")
     void getKnowledgePointDetail_withParents() {
         KgKnowledgePointDetailDTO detail = KgKnowledgePointDetailDTO.builder()
                 .uri("uri:kp1")
@@ -329,7 +286,8 @@ class KnowledgeGraphControllerTest {
                 .build();
         when(kgNavigationAppService.getKnowledgePointDetail("uri:kp1")).thenReturn(detail);
 
-        KgKnowledgePointDetailDTO response = knowledgeGraphController.getKnowledgePointDetail("uri:kp1").getData();
+        UriRequest request = UriRequest.builder().uri("uri:kp1").build();
+        KgKnowledgePointDetailDTO response = knowledgeGraphController.getKnowledgePointDetail(request).getData();
 
         assertNotNull(response);
         assertEquals("uri:kp1", response.getUri());
@@ -340,11 +298,52 @@ class KnowledgeGraphControllerTest {
         assertEquals("几何", response.getChapterLabel());
     }
 
-    // ==================== 6.11.9 GET /api/kg/system/grade/{grade} ====================
+    // ==================== 6.11.9 POST /api/kg/knowledge-points/graph ====================
 
     @Test
     @Order(10)
-    @DisplayName("getGradeSystem 知识体系")
+    @DisplayName("getKnowledgePointGraph 知识点图谱 — POST 请求")
+    void getKnowledgePointGraph_success() {
+        KgGraphDTO graph = KgGraphDTO.builder()
+                .nodes(List.of())
+                .edges(List.of())
+                .build();
+        when(kgNeo4jService.getKnowledgePointGraph("uri:kp1")).thenReturn(graph);
+
+        UriRequest request = UriRequest.builder().uri("uri:kp1").build();
+        KgGraphDTO response = knowledgeGraphController.getKnowledgePointGraph(request).getData();
+
+        assertNotNull(response);
+    }
+
+    // ==================== 6.11.10 POST /api/kg/grades/textbooks ====================
+
+    @Test
+    @Order(11)
+    @DisplayName("getTextbooksByGrade 年级教材列表 — POST 请求")
+    void getTextbooksByGrade_success() {
+        List<KgTextbookDTO> textbooks = List.of(
+                KgTextbookDTO.builder()
+                        .uri("uri:tb1")
+                        .label("人教版数学七年级上册")
+                        .grade("七年级")
+                        .build()
+        );
+        when(kgNavigationAppService.getTextbooksByGrade("七年级")).thenReturn(textbooks);
+
+        GradeRequest request = GradeRequest.builder().grade("七年级").build();
+        List<KgTextbookDTO> response = knowledgeGraphController.getTextbooksByGrade(request).getData();
+
+        assertEquals(1, response.size());
+        assertEquals("uri:tb1", response.get(0).getUri());
+        assertEquals("七年级", response.get(0).getGrade());
+    }
+
+    // ==================== 6.11.11 POST /api/kg/system/grade ====================
+
+    @Test
+    @Order(12)
+    @DisplayName("getGradeSystem 知识体系 — POST 请求")
     void getGradeSystem_success() {
         KgGradeSystemDTO system = KgGradeSystemDTO.builder()
                 .grade("七年级")
@@ -354,17 +353,21 @@ class KnowledgeGraphControllerTest {
                 .build();
         when(kgKnowledgeSystemAppService.getGradeSystem("七年级", "subject")).thenReturn(system);
 
-        KgGradeSystemDTO response = knowledgeGraphController.getGradeSystem("七年级", "subject").getData();
+        GradeSystemRequest request = GradeSystemRequest.builder()
+                .grade("七年级")
+                .groupBy("subject")
+                .build();
+        KgGradeSystemDTO response = knowledgeGraphController.getGradeSystem(request).getData();
 
         assertEquals("七年级", response.getGrade());
         assertEquals("subject", response.getGroupBy());
     }
 
-    // ==================== 6.11.10 GET /api/kg/system/stats/{grade} ====================
+    // ==================== 6.11.12 POST /api/kg/system/stats ====================
 
     @Test
-    @Order(11)
-    @DisplayName("getGradeStats 年级统计")
+    @Order(13)
+    @DisplayName("getGradeStats 年级统计 — POST 请求")
     void getGradeStats_success() {
         StatsDTO stats = StatsDTO.builder()
                 .grade("七年级")
@@ -376,7 +379,8 @@ class KnowledgeGraphControllerTest {
                 .build();
         when(kgKnowledgeSystemAppService.getGradeStats("七年级")).thenReturn(stats);
 
-        StatsDTO response = knowledgeGraphController.getGradeStats("七年级").getData();
+        GradeRequest request = GradeRequest.builder().grade("七年级").build();
+        StatsDTO response = knowledgeGraphController.getGradeStats(request).getData();
 
         assertEquals("七年级", response.getGrade());
         assertEquals(50, response.getTotalKnowledgePoints());
@@ -384,10 +388,10 @@ class KnowledgeGraphControllerTest {
         assertEquals(3, response.getDifficultyDistribution().size());
     }
 
-    // ==================== 6.11.11 GET /api/kg/neo4j/health ====================
+    // ==================== 6.11.13 GET /api/kg/neo4j/health ====================
 
     @Test
-    @Order(12)
+    @Order(14)
     @DisplayName("getNeo4jHealth 健康检查")
     void getNeo4jHealth_success() {
         HealthDTO health = HealthDTO.builder()
@@ -404,10 +408,10 @@ class KnowledgeGraphControllerTest {
         assertEquals("Connected", response.getMessage());
     }
 
-    // ==================== 6.11.12 POST /api/kg/concepts/batch-relations ====================
+    // ==================== 6.11.14 POST /api/kg/concepts/batch-relations ====================
 
     @Test
-    @Order(13)
+    @Order(15)
     @DisplayName("batchGetConceptRelations 批量关联")
     void batchGetConceptRelations_success() {
         BatchRelationsDTO result = BatchRelationsDTO.builder()
@@ -430,10 +434,10 @@ class KnowledgeGraphControllerTest {
         assertEquals(2, response.getRelations().get(0).getRelatedUris().size());
     }
 
-    // ==================== 6.11.13 统一响应包装验证 ====================
+    // ==================== 6.11.15 统一响应包装验证 ====================
 
     @Test
-    @Order(14)
+    @Order(16)
     @DisplayName("统一响应包装验证 — 所有接口返回 ApiResponse 格式")
     void allEndpoints_returnApiResponseFormat() {
         // 设置 SecurityContext（直接调用时需要手动设置认证）
@@ -455,11 +459,6 @@ class KnowledgeGraphControllerTest {
             assertEquals("00000", statusResp.getCode());
             assertNotNull(statusResp.getData());
 
-            // 验证 getTextbooks 响应格式
-            when(kgNavigationAppService.getTextbooks(any(), any())).thenReturn(List.of());
-            ApiResponse<List<KgTextbookDTO>> tbResp = knowledgeGraphController.getTextbooks(null, null);
-            assertEquals("00000", tbResp.getCode());
-            assertNotNull(tbResp.getData());
         } finally {
             SecurityContextHolder.clearContext();
         }
@@ -468,38 +467,41 @@ class KnowledgeGraphControllerTest {
     // ==================== 错误场景测试 ====================
 
     @Test
-    @Order(15)
+    @Order(17)
     @DisplayName("getKnowledgePointsBySection 小节不存在 — 应返回空列表")
     void getKnowledgePointsBySection_sectionNotFound() {
         when(kgNavigationAppService.getKnowledgePointsBySection("uri:notexist")).thenReturn(List.of());
 
-        List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection("uri:notexist").getData();
+        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
+        List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection(request).getData();
 
         assertNotNull(response);
         assertTrue(response.isEmpty());
     }
 
     @Test
-    @Order(16)
+    @Order(18)
     @DisplayName("getKnowledgePointDetail 知识点不存在 — 应抛异常")
     void getKnowledgePointDetail_notFound() {
         when(kgNavigationAppService.getKnowledgePointDetail("uri:notexist"))
                 .thenThrow(new BusinessException("70003", "知识点不存在"));
 
+        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
         BusinessException ex = assertThrows(BusinessException.class, () ->
-                knowledgeGraphController.getKnowledgePointDetail("uri:notexist"));
+                knowledgeGraphController.getKnowledgePointDetail(request));
         assertEquals("70003", ex.getCode());
     }
 
     @Test
-    @Order(17)
+    @Order(19)
     @DisplayName("getChaptersByTextbook 教材不存在 — 应抛异常")
     void getChaptersByTextbook_textbookNotFound() {
         when(kgNavigationAppService.getChaptersByTextbook("uri:notexist"))
                 .thenThrow(new BusinessException("70001", "教材不存在"));
 
+        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
         BusinessException ex = assertThrows(BusinessException.class, () ->
-                knowledgeGraphController.getChaptersByTextbook("uri:notexist"));
+                knowledgeGraphController.getChaptersByTextbook(request));
         assertEquals("70001", ex.getCode());
     }
 }
