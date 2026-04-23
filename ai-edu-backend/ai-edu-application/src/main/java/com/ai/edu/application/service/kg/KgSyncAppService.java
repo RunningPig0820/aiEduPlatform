@@ -413,15 +413,15 @@ public class KgSyncAppService {
             log.warn("URI validation warnings: {}", uriValidation.errors);
         }
 
-        // 6. 同步层级关联
+        // 6. 同步层级关联（传入同步范围的 textbookUris，避免误删其他年级数据）
         List<KgTextbookChapter> tbChRelations = neo4jRelationRepository.findTextbookChapterRelations(new ArrayList<>(textbookUris));
-        totalInserted += rebuildTextbookChapterRelations(tbChRelations);
+        totalInserted += rebuildTextbookChapterRelations(tbChRelations, textbookUris);
 
         List<KgChapterSection> chSecRelations = neo4jRelationRepository.findChapterSectionRelations(new ArrayList<>(chapterUris));
-        totalInserted += rebuildChapterSectionRelations(chSecRelations);
+        totalInserted += rebuildChapterSectionRelations(chSecRelations, chapterUris);
 
         List<KgSectionKP> secKpRelations = neo4jRelationRepository.findSectionKPRelations(new ArrayList<>(sectionUris));
-        totalInserted += rebuildSectionKPRelations(secKpRelations);
+        totalInserted += rebuildSectionKPRelations(secKpRelations, sectionUris);
 
         return new SyncExecutionResult(totalInserted, totalUpdated);
     }
@@ -551,19 +551,20 @@ public class KgSyncAppService {
                     mysqlKpCount, neo4jKpUris.size()));
         }
 
-        int mysqlTbChCount = kgTextbookChapterRepository.findAllActive().size();
+        // 关联表对账 — 仅对比同步范围内的关联
+        int mysqlTbChCount = kgTextbookChapterRepository.findByTextbookUris(new ArrayList<>(neo4jTextbookUris)).size();
         if (mysqlTbChCount != tbChRelations.size()) {
             differences.add(String.format("Textbook-Chapter relation count: MySQL=%d, Neo4j=%d",
                     mysqlTbChCount, tbChRelations.size()));
         }
 
-        int mysqlChSecCount = kgChapterSectionRepository.findAllActive().size();
+        int mysqlChSecCount = kgChapterSectionRepository.findByChapterUris(new ArrayList<>(neo4jChapterUris)).size();
         if (mysqlChSecCount != chSecRelations.size()) {
             differences.add(String.format("Chapter-Section relation count: MySQL=%d, Neo4j=%d",
                     mysqlChSecCount, chSecRelations.size()));
         }
 
-        int mysqlSecKpCount = kgSectionKPRepository.findAllActive().size();
+        int mysqlSecKpCount = kgSectionKPRepository.findBySectionUris(new ArrayList<>(neo4jSectionUris)).size();
         if (mysqlSecKpCount != secKpRelations.size()) {
             differences.add(String.format("Section-KP relation count: MySQL=%d, Neo4j=%d",
                     mysqlSecKpCount, secKpRelations.size()));
@@ -587,9 +588,12 @@ public class KgSyncAppService {
 
     // ==================== 关联表 rebuild 私有方法 ====================
 
-    private int rebuildTextbookChapterRelations(List<KgTextbookChapter> neo4jRelations) {
+    private int rebuildTextbookChapterRelations(List<KgTextbookChapter> neo4jRelations, Set<String> scopeTextbookUris) {
         if (neo4jRelations == null || neo4jRelations.isEmpty()) {
-            kgTextbookChapterRepository.deleteByTextbookUri("__ALL__");
+            // 只删除同步范围内的关联，不影响其他年级
+            for (String textbookUri : scopeTextbookUris) {
+                kgTextbookChapterRepository.deleteByTextbookUri(textbookUri);
+            }
             return 0;
         }
 
@@ -632,9 +636,10 @@ public class KgSyncAppService {
             }
         }
 
-        for (KgTextbookChapter mysqlRel : kgTextbookChapterRepository.findAllActive()) {
-            if (!neo4jParentUris.contains(mysqlRel.getTextbookUri())) {
-                kgTextbookChapterRepository.deleteByTextbookUri(mysqlRel.getTextbookUri());
+        // 只检查同步范围内的 MySQL 记录，删除 Neo4j 中不存在的教材关联
+        for (String textbookUri : scopeTextbookUris) {
+            if (!neo4jParentUris.contains(textbookUri)) {
+                kgTextbookChapterRepository.deleteByTextbookUri(textbookUri);
                 totalOps++;
             }
         }
@@ -643,9 +648,12 @@ public class KgSyncAppService {
         return totalOps;
     }
 
-    private int rebuildChapterSectionRelations(List<KgChapterSection> neo4jRelations) {
+    private int rebuildChapterSectionRelations(List<KgChapterSection> neo4jRelations, Set<String> scopeChapterUris) {
         if (neo4jRelations == null || neo4jRelations.isEmpty()) {
-            kgChapterSectionRepository.deleteByChapterUri("__ALL__");
+            // 只删除同步范围内的关联，不影响其他年级
+            for (String chapterUri : scopeChapterUris) {
+                kgChapterSectionRepository.deleteByChapterUri(chapterUri);
+            }
             return 0;
         }
 
@@ -688,9 +696,10 @@ public class KgSyncAppService {
             }
         }
 
-        for (KgChapterSection mysqlRel : kgChapterSectionRepository.findAllActive()) {
-            if (!neo4jParentUris.contains(mysqlRel.getChapterUri())) {
-                kgChapterSectionRepository.deleteByChapterUri(mysqlRel.getChapterUri());
+        // 只检查同步范围内的 MySQL 记录，删除 Neo4j 中不存在的章节关联
+        for (String chapterUri : scopeChapterUris) {
+            if (!neo4jParentUris.contains(chapterUri)) {
+                kgChapterSectionRepository.deleteByChapterUri(chapterUri);
                 totalOps++;
             }
         }
@@ -699,9 +708,12 @@ public class KgSyncAppService {
         return totalOps;
     }
 
-    private int rebuildSectionKPRelations(List<KgSectionKP> neo4jRelations) {
+    private int rebuildSectionKPRelations(List<KgSectionKP> neo4jRelations, Set<String> scopeSectionUris) {
         if (neo4jRelations == null || neo4jRelations.isEmpty()) {
-            kgSectionKPRepository.deleteBySectionUri("__ALL__");
+            // 只删除同步范围内的关联，不影响其他年级
+            for (String sectionUri : scopeSectionUris) {
+                kgSectionKPRepository.deleteBySectionUri(sectionUri);
+            }
             return 0;
         }
 
@@ -744,9 +756,10 @@ public class KgSyncAppService {
             }
         }
 
-        for (KgSectionKP mysqlRel : kgSectionKPRepository.findAllActive()) {
-            if (!neo4jParentUris.contains(mysqlRel.getSectionUri())) {
-                kgSectionKPRepository.deleteBySectionUri(mysqlRel.getSectionUri());
+        // 只检查同步范围内的 MySQL 记录，删除 Neo4j 中不存在的小节关联
+        for (String sectionUri : scopeSectionUris) {
+            if (!neo4jParentUris.contains(sectionUri)) {
+                kgSectionKPRepository.deleteBySectionUri(sectionUri);
                 totalOps++;
             }
         }

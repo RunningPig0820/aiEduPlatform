@@ -43,7 +43,8 @@ class KgTextbookChapterRepositoryImplTest {
     /** 每个测试前清理关联表数据，保证测试隔离 */
     @BeforeEach
     void setUp() {
-        mapper.selectAllActiveRelations().forEach(r -> mapper.deleteById(r.getId()));
+        // 使用 MyBatis-Plus 的 delete 方法清空表（物理删除测试数据）
+        mapper.delete(null);
     }
 
     // ==================== 6.6.5 save — insert new relation ====================
@@ -127,49 +128,10 @@ class KgTextbookChapterRepositoryImplTest {
         assertTrue(results.stream().allMatch(r -> r.getChapterUri().equals(CHAPTER_URI_1)));
     }
 
-    // ==================== findAllActive ====================
-
-    @Test
-    @Order(5)
-    @DisplayName("findAllActive — 仅返回未删除的关联")
-    void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2)));
-
-        List<KgTextbookChapter> results = repository.findAllActive();
-
-        // 至少包含刚插入的两条（可能有其他测试残留，但我们的两条一定在）
-        assertTrue(results.size() >= 2);
-        assertTrue(results.stream().anyMatch(r ->
-                r.getTextbookUri().equals(TEXTBOOK_URI) && r.getChapterUri().equals(CHAPTER_URI_1)));
-        assertTrue(results.stream().anyMatch(r ->
-                r.getTextbookUri().equals(TEXTBOOK_URI) && r.getChapterUri().equals(CHAPTER_URI_2)));
-    }
-
     // ==================== deleteByTextbookUri — soft delete ====================
 
     @Test
     @Order(6)
-    @DisplayName("deleteByTextbookUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteByTextbookUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 2)));
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_3, 1)));
-
-        int beforeCount = repository.findAllActive().size();
-
-        repository.deleteByTextbookUri(TEXTBOOK_URI);
-
-        List<KgTextbookChapter> afterResults = repository.findAllActive();
-        // 被删除的教材关联不再出现
-        assertFalse(afterResults.stream().anyMatch(r -> r.getTextbookUri().equals(TEXTBOOK_URI)));
-        // 其他教材关联仍存在
-        assertTrue(afterResults.stream().anyMatch(r -> r.getTextbookUri().equals("other_textbook")));
-        assertEquals(beforeCount - 2, afterResults.size());
-    }
-
-    @Test
-    @Order(7)
     @DisplayName("deleteByTextbookUri 软删除 — 删除后 findByTextbookUri 不再返回")
     void deleteByTextbookUri_softDeleteRemovesFromFindByTextbookUri() {
         mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
@@ -184,23 +146,6 @@ class KgTextbookChapterRepositoryImplTest {
 
     @Test
     @Order(8)
-    @DisplayName("deleteByChapterUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteByChapterUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create("other_textbook", CHAPTER_URI_1, 2)));
-        mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_2, 1)));
-
-        repository.deleteByChapterUri(CHAPTER_URI_1);
-
-        List<KgTextbookChapter> results = repository.findAllActive();
-        // 被删除的章节关联不再出现
-        assertFalse(results.stream().anyMatch(r -> r.getChapterUri().equals(CHAPTER_URI_1)));
-        // 其他章节关联仍存在
-        assertTrue(results.stream().anyMatch(r -> r.getChapterUri().equals(CHAPTER_URI_2)));
-    }
-
-    @Test
-    @Order(9)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findByChapterUri 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindByChapterUri() {
         mapper.insert(KgTextbookChapterPo.from(KgTextbookChapter.create(TEXTBOOK_URI, CHAPTER_URI_1, 1)));
@@ -237,7 +182,8 @@ class KgTextbookChapterRepositoryImplTest {
     @DisplayName("saveBatch 空列表应无操作")
     void saveBatch_emptyList() {
         assertDoesNotThrow(() -> repository.saveBatch(List.of()));
-        assertEquals(0, repository.findAllActive().size());
+        // 验证没有新数据插入
+        assertTrue(repository.findByTextbookUri(TEXTBOOK_URI).isEmpty());
     }
 
     @Test

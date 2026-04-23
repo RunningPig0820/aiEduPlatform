@@ -38,8 +38,15 @@ public interface KgChapterSectionMapper extends BaseMapper<KgChapterSectionPo> {
     @Update("UPDATE t_kg_chapter_section SET is_deleted = 1, modified_by = #{modifiedBy} WHERE chapter_uri = #{chapterUri} AND is_deleted = false")
     int softDeleteByChapterUri(@Param("chapterUri") String chapterUri, @Param("modifiedBy") Long modifiedBy);
 
-    @Select("SELECT * FROM t_kg_chapter_section WHERE is_deleted = false")
-    List<KgChapterSectionPo> selectAllActiveRelations();
+    /**
+     * 批量查询：按多个 chapter_uri 查询完整关联记录（用于导航树构建）
+     */
+    @Select("<script>" +
+            "SELECT * FROM t_kg_chapter_section WHERE chapter_uri IN " +
+            "<foreach item='uri' collection='chapterUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false ORDER BY chapter_uri, order_index" +
+            "</script>")
+    List<KgChapterSectionPo> selectByChapterUris(@Param("chapterUris") List<String> chapterUris);
 
     /**
      * 批量查询：按多个 chapter_uri 查询所有 section_uri（用于 Repository 组装）

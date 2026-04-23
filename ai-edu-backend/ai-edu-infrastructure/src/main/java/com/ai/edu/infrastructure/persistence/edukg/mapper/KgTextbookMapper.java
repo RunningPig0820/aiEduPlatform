@@ -26,7 +26,7 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
     @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND stage = #{stage} AND is_deleted = false ORDER BY grade")
     List<KgTextbookPo> selectBySubjectAndStage(@Param("subject") String subject, @Param("stage") String stage);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, order")
+    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY grade, sort")
     List<KgTextbookPo> selectAllActive();
 
     @Update("UPDATE t_kg_textbook SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")
@@ -70,4 +70,7 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
             @Param("edition") String edition,
             @Param("subject") String subject,
             @Param("grade") String grade);
+
+    @Select("SELECT * FROM t_kg_textbook WHERE grade = #{grade} AND is_deleted = false ORDER BY sort")
+    List<KgTextbookPo> selectAllActiveByGrade(@Param("grade") String grade);
 }

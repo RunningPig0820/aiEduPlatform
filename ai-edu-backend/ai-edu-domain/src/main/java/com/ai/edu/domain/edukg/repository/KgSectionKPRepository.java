@@ -21,7 +21,10 @@ public interface KgSectionKPRepository {
 
     List<KgSectionKP> findByKpUri(String kpUri);
 
-    List<KgSectionKP> findAllActive();
+    /**
+     * 按小节 URI 列表批量查询关联
+     */
+    List<KgSectionKP> findBySectionUris(List<String> sectionUris);
 
     /**
      * 删除单条关联记录

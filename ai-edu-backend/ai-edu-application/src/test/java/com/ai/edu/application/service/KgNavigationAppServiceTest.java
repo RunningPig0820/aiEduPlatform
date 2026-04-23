@@ -84,7 +84,7 @@ class KgNavigationAppServiceTest {
                 KgChapterSection.create("uri:ch1", "uri:sec2", 2),
                 KgChapterSection.create("uri:ch2", "uri:sec3", 1)
         );
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(chSecRels);
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(chSecRels);
 
         // 小节实体
         List<KgSection> sections = List.of(
@@ -103,7 +103,7 @@ class KgNavigationAppServiceTest {
                 KgSectionKP.create("uri:sec3", "uri:kp5", 2),
                 KgSectionKP.create("uri:sec3", "uri:kp6", 3)
         );
-        when(kgSectionKPRepository.findAllActive()).thenReturn(secKpRels);
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(secKpRels);
 
         List<ChapterTreeNode> result = kgNavigationAppService.getChaptersByTextbook(tbUri);
 
@@ -176,13 +176,13 @@ class KgNavigationAppServiceTest {
         ));
 
         // 只有 ch1 有小节
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of(
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of(
                 KgChapterSection.create("uri:ch1", "uri:sec1", 1)
         ));
         when(kgSectionRepository.findByUris(anyList())).thenReturn(List.of(
                 KgSection.create("uri:sec1", "第一节")
         ));
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
 
         List<ChapterTreeNode> result = kgNavigationAppService.getChaptersByTextbook(tbUri);
 
@@ -527,14 +527,14 @@ class KgNavigationAppServiceTest {
                 KgTextbook.create("uri:tb1", "人教版一年级", "一年级", "primary", "人教版", "math"),
                 KgTextbook.create("uri:tb2", "北师大版一年级", "一年级", "primary", "北师大版", "math")
         );
-        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+        when(kgTextbookRepository.findAllActiveByGrade("一年级")).thenReturn(textbooks);
 
         List<KgTextbookDTO> result = kgNavigationAppService.getTextbooksByGrade("一年级");
 
         assertEquals(2, result.size());
         assertEquals("人教版一年级", result.get(0).getLabel());
         assertEquals("一年级", result.get(0).getGrade());
-        verify(kgTextbookRepository).findAllActive();
+        verify(kgTextbookRepository).findAllActiveByGrade("一年级");
     }
 
     // ==================== 6.15.6 空数据场景 ====================
@@ -567,9 +567,7 @@ class KgNavigationAppServiceTest {
     @Order(109)
     @DisplayName("getTextbooksByGrade 无匹配年级 — 应返回空数组")
     void getTextbooksByGrade_noMatch_shouldReturnEmpty() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
-                KgTextbook.create("uri:tb1", "七年级教材", "七年级", "middle", "人教版", "math")
-        ));
+        when(kgTextbookRepository.findAllActiveByGrade("一年级")).thenReturn(List.of());
 
         List<KgTextbookDTO> result = kgNavigationAppService.getTextbooksByGrade("一年级");
 

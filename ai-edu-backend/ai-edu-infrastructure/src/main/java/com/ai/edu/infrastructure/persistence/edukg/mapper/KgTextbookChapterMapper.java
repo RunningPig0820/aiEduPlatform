@@ -38,8 +38,15 @@ public interface KgTextbookChapterMapper extends BaseMapper<KgTextbookChapterPo>
     @Update("UPDATE t_kg_textbook_chapter SET is_deleted = 1, modified_by = #{modifiedBy} WHERE textbook_uri = #{textbookUri} AND is_deleted = false")
     int softDeleteByTextbookUri(@Param("textbookUri") String textbookUri, @Param("modifiedBy") Long modifiedBy);
 
-    @Select("SELECT * FROM t_kg_textbook_chapter WHERE is_deleted = false")
-    List<KgTextbookChapterPo> selectAllActiveRelations();
+    /**
+     * 批量查询：按多个 textbook_uri 查询完整关联记录（用于导航树构建）
+     */
+    @Select("<script>" +
+            "SELECT * FROM t_kg_textbook_chapter WHERE textbook_uri IN " +
+            "<foreach item='uri' collection='textbookUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false ORDER BY textbook_uri, order_index" +
+            "</script>")
+    List<KgTextbookChapterPo> selectByTextbookUris(@Param("textbookUris") List<String> textbookUris);
 
     /**
      * 批量查询：按多个 textbook_uri 查询所有 chapter_uri（用于 Repository 组装）

@@ -43,7 +43,8 @@ class KgChapterSectionRepositoryImplTest {
     /** 每个测试前清理关联表数据，保证测试隔离 */
     @BeforeEach
     void setUp() {
-        mapper.selectAllActiveRelations().forEach(r -> mapper.deleteById(r.getId()));
+        // 使用 MyBatis-Plus 的 delete 方法清空表（物理删除测试数据）
+        mapper.delete(null);
     }
 
     // ==================== 6.6.6 save — insert new relation ====================
@@ -127,48 +128,10 @@ class KgChapterSectionRepositoryImplTest {
         assertTrue(results.stream().allMatch(r -> r.getSectionUri().equals(SECTION_URI_1)));
     }
 
-    // ==================== findAllActive ====================
-
-    @Test
-    @Order(5)
-    @DisplayName("findAllActive — 仅返回未删除的关联")
-    void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2)));
-
-        List<KgChapterSection> results = repository.findAllActive();
-
-        assertTrue(results.size() >= 2);
-        assertTrue(results.stream().anyMatch(r ->
-                r.getChapterUri().equals(CHAPTER_URI) && r.getSectionUri().equals(SECTION_URI_1)));
-        assertTrue(results.stream().anyMatch(r ->
-                r.getChapterUri().equals(CHAPTER_URI) && r.getSectionUri().equals(SECTION_URI_2)));
-    }
-
     // ==================== deleteByChapterUri — soft delete ====================
 
     @Test
     @Order(6)
-    @DisplayName("deleteByChapterUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteByChapterUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 2)));
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_3, 1)));
-
-        int beforeCount = repository.findAllActive().size();
-
-        repository.deleteByChapterUri(CHAPTER_URI);
-
-        List<KgChapterSection> afterResults = repository.findAllActive();
-        // 被删除的章节关联不再出现
-        assertFalse(afterResults.stream().anyMatch(r -> r.getChapterUri().equals(CHAPTER_URI)));
-        // 其他章节关联仍存在
-        assertTrue(afterResults.stream().anyMatch(r -> r.getChapterUri().equals("other_chapter")));
-        assertEquals(beforeCount - 2, afterResults.size());
-    }
-
-    @Test
-    @Order(7)
     @DisplayName("deleteByChapterUri 软删除 — 删除后 findByChapterUri 不再返回")
     void deleteByChapterUri_softDeleteRemovesFromFindByChapterUri() {
         mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
@@ -183,23 +146,6 @@ class KgChapterSectionRepositoryImplTest {
 
     @Test
     @Order(8)
-    @DisplayName("deleteBySectionUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteBySectionUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create("other_chapter", SECTION_URI_1, 2)));
-        mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_2, 1)));
-
-        repository.deleteBySectionUri(SECTION_URI_1);
-
-        List<KgChapterSection> results = repository.findAllActive();
-        // 被删除的小节关联不再出现
-        assertFalse(results.stream().anyMatch(r -> r.getSectionUri().equals(SECTION_URI_1)));
-        // 其他小节关联仍存在
-        assertTrue(results.stream().anyMatch(r -> r.getSectionUri().equals(SECTION_URI_2)));
-    }
-
-    @Test
-    @Order(9)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findBySectionUri 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindBySectionUri() {
         mapper.insert(KgChapterSectionPo.from(KgChapterSection.create(CHAPTER_URI, SECTION_URI_1, 1)));
@@ -236,7 +182,7 @@ class KgChapterSectionRepositoryImplTest {
     @DisplayName("saveBatch 空列表应无操作")
     void saveBatch_emptyList() {
         assertDoesNotThrow(() -> repository.saveBatch(List.of()));
-        assertEquals(0, repository.findAllActive().size());
+        assertTrue(repository.findByChapterUri(CHAPTER_URI).isEmpty());
     }
 
     @Test

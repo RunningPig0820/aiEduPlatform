@@ -21,7 +21,10 @@ public interface KgTextbookChapterRepository {
 
     List<KgTextbookChapter> findByChapterUri(String chapterUri);
 
-    List<KgTextbookChapter> findAllActive();
+    /**
+     * 按教材 URI 列表批量查询关联
+     */
+    List<KgTextbookChapter> findByTextbookUris(List<String> textbookUris);
 
     /**
      * 删除单条关联记录

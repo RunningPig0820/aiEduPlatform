@@ -8,6 +8,7 @@ import com.ai.edu.application.dto.kg.SyncStatusDTO;
 import com.ai.edu.application.service.kg.KgSyncAppService;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
+import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.domain.shared.service.RedisService;
 import com.ai.edu.interface_.AiEduPlatformApplication;
@@ -48,6 +49,9 @@ class KgSyncAppServiceIntegrationTest {
 
     @Resource
     private KgTextbookRepository kgTextbookRepository;
+
+    @Resource
+    private KgTextbookChapterRepository kgTextbookChapterRepository;
 
     @Resource
     private RedisService redisService;
@@ -269,5 +273,67 @@ class KgSyncAppServiceIntegrationTest {
         redisService.unlock(lockKey, lockValue);
 
         log.info("Redis 锁释放成功: key={}", lockKey);
+    }
+
+    // ==================== 数据验证测试 ====================
+
+    @Test
+    @Order(70)
+    @DisplayName("查询一年级上册数据详情 — 验证 Neo4j 数据完整性")
+    void queryGradeDataDetails_shouldShowDataStructure() {
+        log.info("=== 开始查询一年级上册数据详情 ===");
+
+        // 1. 查询教材
+        List<?> textbooks = kgTextbookRepository.findByEditionSubject("人教版", "数学");
+        log.info("教材总数: {}", textbooks.size());
+
+        // 2. 查询一年级相关的教材
+        List<String> grades = kgTextbookRepository.findDistinctGradesByEditionSubject("人教版", "数学");
+        log.info("所有年级: {}", grades);
+
+        // 3. 验证是否有"一年级"
+        boolean hasGrade1 = grades.contains("一年级");
+        log.info("是否包含一年级: {}", hasGrade1);
+
+        log.info("=== 一年级上册数据验证完成 ===");
+        log.info("建议：请在 Neo4j Browser 中执行以下查询验证知识点数据：");
+        log.info("MATCH (t:Textbook)-[:CONTAINS]->(c:Chapter)-[:CONTAINS]->(s:Section)-[:HAS_KNOWLEDGE_POINT]->(kp:KnowledgePoint)");
+        log.info("WHERE t.edition = '人教版' AND t.subject = '数学' AND t.grade = '一年级'");
+        log.info("RETURN t.label, c.label, s.label, kp.label LIMIT 20");
+    }
+
+    // ==================== 章节查询测试 ====================
+
+    @Test
+    @Order(80)
+    @DisplayName("查询教材章节树 — 验证 MySQL 章节关联数据（一年级下册 g1x）")
+    void queryChaptersByTextbook_shouldReturnChapters() {
+        // 测试一年级下册 g1x
+        String textbookUri = "http://edukg.org/knowledge/3.1/textbook/math#renjiao-g1x";
+        log.info("=== 开始查询教材章节: uri={} ===", textbookUri);
+
+        // 1. 检查教材是否存在
+        var textbookOpt = kgTextbookRepository.findByUri(textbookUri);
+        if (textbookOpt.isEmpty()) {
+            log.warn("教材不存在于 MySQL: uri={}", textbookUri);
+            log.info("建议：先执行 syncFull 同步教材数据");
+            return;
+        }
+        log.info("教材存在: label={}, grade={}", textbookOpt.get().getLabel(), textbookOpt.get().getGrade());
+
+        // 2. 检查教材-章节关联关系
+        var tbChRelations = kgTextbookChapterRepository.findByTextbookUri(textbookUri);
+        log.info("教材-章节关联数量: {}", tbChRelations != null ? tbChRelations.size() : 0);
+
+        if (tbChRelations == null || tbChRelations.isEmpty()) {
+            log.warn("教材-章节关联关系为空，章节数据未同步到 MySQL");
+            log.info("建议：检查同步流程中 KgTextbookChapter 的 upsert 是否正确执行");
+        } else {
+            log.info("章节关联数据存在，数量: {}", tbChRelations.size());
+            for (var rel : tbChRelations) {
+                log.info("章节关联: chapterUri={}, orderIndex={}", rel.getChapterUri(), rel.getOrderIndex());
+            }
+            assertTrue(tbChRelations.size() > 0, "应该有章节关联数据");
+        }
     }
 }

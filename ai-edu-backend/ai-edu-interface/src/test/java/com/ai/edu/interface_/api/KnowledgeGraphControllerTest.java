@@ -222,7 +222,7 @@ class KnowledgeGraphControllerTest {
         );
         when(kgNavigationAppService.getChaptersByTextbook("uri:tb1")).thenReturn(chapters);
 
-        UriRequest request = UriRequest.builder().uri("uri:tb1").build();
+        TextbookUriRequest request = TextbookUriRequest.builder().textbookUri("uri:tb1").build();
         List<ChapterTreeNode> response = knowledgeGraphController.getChaptersByTextbook(request).getData();
 
         assertEquals(2, response.size());
@@ -260,7 +260,7 @@ class KnowledgeGraphControllerTest {
         );
         when(kgNavigationAppService.getKnowledgePointsBySection("uri:sec1")).thenReturn(points);
 
-        UriRequest request = UriRequest.builder().uri("uri:sec1").build();
+        SectionUriRequest request = SectionUriRequest.builder().sectionUri("uri:sec1").build();
         List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection(request).getData();
 
         assertEquals(2, response.size());
@@ -286,7 +286,7 @@ class KnowledgeGraphControllerTest {
                 .build();
         when(kgNavigationAppService.getKnowledgePointDetail("uri:kp1")).thenReturn(detail);
 
-        UriRequest request = UriRequest.builder().uri("uri:kp1").build();
+        KnowledgePointUriRequest request = KnowledgePointUriRequest.builder().kpUri("uri:kp1").build();
         KgKnowledgePointDetailDTO response = knowledgeGraphController.getKnowledgePointDetail(request).getData();
 
         assertNotNull(response);
@@ -310,7 +310,7 @@ class KnowledgeGraphControllerTest {
                 .build();
         when(kgNeo4jService.getKnowledgePointGraph("uri:kp1")).thenReturn(graph);
 
-        UriRequest request = UriRequest.builder().uri("uri:kp1").build();
+        KnowledgePointUriRequest request = KnowledgePointUriRequest.builder().kpUri("uri:kp1").build();
         KgGraphDTO response = knowledgeGraphController.getKnowledgePointGraph(request).getData();
 
         assertNotNull(response);
@@ -472,7 +472,7 @@ class KnowledgeGraphControllerTest {
     void getKnowledgePointsBySection_sectionNotFound() {
         when(kgNavigationAppService.getKnowledgePointsBySection("uri:notexist")).thenReturn(List.of());
 
-        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
+        SectionUriRequest request = SectionUriRequest.builder().sectionUri("uri:notexist").build();
         List<KgKnowledgePointDetailDTO> response = knowledgeGraphController.getKnowledgePointsBySection(request).getData();
 
         assertNotNull(response);
@@ -486,7 +486,7 @@ class KnowledgeGraphControllerTest {
         when(kgNavigationAppService.getKnowledgePointDetail("uri:notexist"))
                 .thenThrow(new BusinessException("70003", "知识点不存在"));
 
-        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
+        KnowledgePointUriRequest request = KnowledgePointUriRequest.builder().kpUri("uri:notexist").build();
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 knowledgeGraphController.getKnowledgePointDetail(request));
         assertEquals("70003", ex.getCode());
@@ -499,7 +499,7 @@ class KnowledgeGraphControllerTest {
         when(kgNavigationAppService.getChaptersByTextbook("uri:notexist"))
                 .thenThrow(new BusinessException("70001", "教材不存在"));
 
-        UriRequest request = UriRequest.builder().uri("uri:notexist").build();
+        TextbookUriRequest request = TextbookUriRequest.builder().textbookUri("uri:notexist").build();
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 knowledgeGraphController.getChaptersByTextbook(request));
         assertEquals("70001", ex.getCode());

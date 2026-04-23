@@ -56,4 +56,9 @@ public interface KgTextbookRepository {
      * 按版本+学科+年级查询所有活跃教材
      */
     List<KgTextbook> findAllActiveByEditionSubjectGrade(String edition, String subject, String grade);
+
+    /**
+     * 按年级查询所有活跃教材
+     */
+    List<KgTextbook> findAllActiveByGrade(String grade);
 }

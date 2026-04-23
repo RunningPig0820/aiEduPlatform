@@ -115,7 +115,7 @@ class KgDomainServiceInterfaceTest {
         assertNotNull(clazz.getMethod("deleteByChapterUri", String.class));
         assertNotNull(clazz.getMethod("findByTextbookUri", String.class));
         assertNotNull(clazz.getMethod("findByChapterUri", String.class));
-        assertNotNull(clazz.getMethod("findAllActive"));
+        assertNotNull(clazz.getMethod("findByTextbookUris", List.class));
     }
 
     @Test
@@ -130,7 +130,7 @@ class KgDomainServiceInterfaceTest {
         assertNotNull(clazz.getMethod("deleteBySectionUri", String.class));
         assertNotNull(clazz.getMethod("findByChapterUri", String.class));
         assertNotNull(clazz.getMethod("findBySectionUri", String.class));
-        assertNotNull(clazz.getMethod("findAllActive"));
+        assertNotNull(clazz.getMethod("findByChapterUris", List.class));
     }
 
     @Test
@@ -145,6 +145,6 @@ class KgDomainServiceInterfaceTest {
         assertNotNull(clazz.getMethod("deleteByKpUri", String.class));
         assertNotNull(clazz.getMethod("findBySectionUri", String.class));
         assertNotNull(clazz.getMethod("findByKpUri", String.class));
-        assertNotNull(clazz.getMethod("findAllActive"));
+        assertNotNull(clazz.getMethod("findBySectionUris", List.class));
     }
 }

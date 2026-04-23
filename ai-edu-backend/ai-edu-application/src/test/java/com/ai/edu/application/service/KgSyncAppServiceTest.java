@@ -120,9 +120,10 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.findAllActiveByTextbookUris(anyList())).thenReturn(chapters);
         when(kgSectionRepository.findAllActiveByChapterUris(anyList())).thenReturn(sections);
         when(kgKnowledgePointRepository.findAllActiveBySectionUris(anyList())).thenReturn(kps);
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        // 关联表 scoped mock（替代原来的 findAllActive）
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
     }
 
     private KgSyncRecord createSyncRecord(Long id) {
@@ -194,9 +195,9 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.findAllActiveByTextbookUris(anyList())).thenReturn(List.of());
         when(kgSectionRepository.findAllActiveByChapterUris(anyList())).thenReturn(List.of());
         when(kgKnowledgePointRepository.findAllActiveBySectionUris(anyList())).thenReturn(List.of());
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
         when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
                 .thenReturn(Optional.empty());
 
@@ -237,9 +238,9 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.findAllActiveByTextbookUris(anyList())).thenReturn(List.of());
         when(kgSectionRepository.findAllActiveByChapterUris(anyList())).thenReturn(List.of());
         when(kgKnowledgePointRepository.findAllActiveBySectionUris(anyList())).thenReturn(List.of());
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
         when(kgSyncRecordRepository.findLatestRunningByScope(any(), any(), any(), any()))
                 .thenReturn(Optional.empty());
 
@@ -503,9 +504,9 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.findAllActiveByTextbookUris(anyList())).thenReturn(List.of());
         when(kgSectionRepository.findAllActiveByChapterUris(anyList())).thenReturn(List.of());
         when(kgKnowledgePointRepository.findAllActiveBySectionUris(anyList())).thenReturn(List.of());
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(100L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class)))
@@ -554,9 +555,9 @@ class KgSyncAppServiceTest {
         when(kgChapterRepository.findAllActiveByTextbookUris(anyList())).thenReturn(List.of());
         when(kgSectionRepository.findAllActiveByChapterUris(anyList())).thenReturn(List.of());
         when(kgKnowledgePointRepository.findAllActiveBySectionUris(anyList())).thenReturn(List.of());
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
 
         KgSyncRecord syncRecord = createSyncRecord(200L);
         when(kgSyncRecordRepository.save(any(KgSyncRecord.class))).thenReturn(syncRecord);

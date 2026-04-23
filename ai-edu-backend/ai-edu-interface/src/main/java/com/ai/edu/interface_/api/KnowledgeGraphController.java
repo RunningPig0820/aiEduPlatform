@@ -90,47 +90,61 @@ public class KnowledgeGraphController {
     /**
      * 5.6 教材章节树
      * POST /api/kg/textbooks/chapters
+     *
+     * @param request 教材 URI，格式示例：
+     *   {"textbookUri": "http://edukg.org/knowledge/3.1/textbook/math#renjiao-g1s"}
+     *   其中 renjiao-g1s 表示人教版一年级上册
      */
     @PostMapping("/textbooks/chapters")
     public ApiResponse<List<ChapterTreeNode>> getChaptersByTextbook(
-            @RequestBody UriRequest request) {
-        log.info("获取教材章节树: textbookUri={}", request.getUri());
-        List<ChapterTreeNode> chapters = kgNavigationAppService.getChaptersByTextbook(request.getUri());
+            @RequestBody TextbookUriRequest request) {
+        log.info("获取教材章节树: textbookUri={}", request.getTextbookUri());
+        List<ChapterTreeNode> chapters = kgNavigationAppService.getChaptersByTextbook(request.getTextbookUri());
         return ApiResponse.success(chapters);
     }
 
     /**
      * 5.7 小节知识点列表
      * POST /api/kg/sections/points
+     *
+     * @param request 小节 URI，格式示例：
+     *   {"sectionUri": "http://edukg.org/knowledge/3.1/section/math#renjiao-g1s-2-2"}
+     *   其中 renjiao-g1s-2-2 表示人教版一年级上册第2章第2小节
      */
     @PostMapping("/sections/points")
     public ApiResponse<List<KgKnowledgePointDetailDTO>> getKnowledgePointsBySection(
-            @RequestBody UriRequest request) {
-        log.info("获取小节知识点: sectionUri={}", request.getUri());
-        List<KgKnowledgePointDetailDTO> points = kgNavigationAppService.getKnowledgePointsBySection(request.getUri());
+            @RequestBody SectionUriRequest request) {
+        log.info("获取小节知识点: sectionUri={}", request.getSectionUri());
+        List<KgKnowledgePointDetailDTO> points = kgNavigationAppService.getKnowledgePointsBySection(request.getSectionUri());
         return ApiResponse.success(points);
     }
 
     /**
      * 5.8 知识点详情（含 2 层父级）
      * POST /api/kg/knowledge-points/detail
+     *
+     * @param request 知识点 URI，格式示例：
+     *   {"kpUri": "http://edukg.org/knowledge/3.1/kp/math#..."}
      */
     @PostMapping("/knowledge-points/detail")
     public ApiResponse<KgKnowledgePointDetailDTO> getKnowledgePointDetail(
-            @RequestBody UriRequest request) {
-        log.info("获取知识点详情: kpUri={}", request.getUri());
-        KgKnowledgePointDetailDTO detail = kgNavigationAppService.getKnowledgePointDetail(request.getUri());
+            @RequestBody KnowledgePointUriRequest request) {
+        log.info("获取知识点详情: kpUri={}", request.getKpUri());
+        KgKnowledgePointDetailDTO detail = kgNavigationAppService.getKnowledgePointDetail(request.getKpUri());
         return ApiResponse.success(detail);
     }
 
     /**
      * 知识点图谱（用于前端图谱可视化）
      * POST /api/kg/knowledge-points/graph
+     *
+     * @param request 知识点 URI，格式示例：
+     *   {"kpUri": "http://edukg.org/knowledge/3.1/kp/math#..."}
      */
     @PostMapping("/knowledge-points/graph")
-    public ApiResponse<KgGraphDTO> getKnowledgePointGraph(@RequestBody UriRequest request) {
-        log.info("获取知识点图谱: kpUri={}", request.getUri());
-        KgGraphDTO graph = kgNeo4jService.getKnowledgePointGraph(request.getUri());
+    public ApiResponse<KgGraphDTO> getKnowledgePointGraph(@RequestBody KnowledgePointUriRequest request) {
+        log.info("获取知识点图谱: kpUri={}", request.getKpUri());
+        KgGraphDTO graph = kgNeo4jService.getKnowledgePointGraph(request.getKpUri());
         return ApiResponse.success(graph);
     }
 

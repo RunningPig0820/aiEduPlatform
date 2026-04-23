@@ -58,8 +58,11 @@ public class KgChapterSectionRepositoryImpl implements KgChapterSectionRepositor
     }
 
     @Override
-    public List<KgChapterSection> findAllActive() {
-        return KgChapterSectionPo.toEntityList(kgChapterSectionMapper.selectAllActiveRelations());
+    public List<KgChapterSection> findByChapterUris(List<String> chapterUris) {
+        if (chapterUris == null || chapterUris.isEmpty()) {
+            return List.of();
+        }
+        return KgChapterSectionPo.toEntityList(kgChapterSectionMapper.selectByChapterUris(chapterUris));
     }
 
     @Override

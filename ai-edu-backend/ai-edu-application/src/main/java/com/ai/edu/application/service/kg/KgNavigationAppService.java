@@ -75,24 +75,21 @@ public class KgNavigationAppService {
         Map<String, KgChapter> chapterMap = chapters.stream()
                 .collect(Collectors.toMap(KgChapter::getUri, ch -> ch, (existing, replacement) -> existing));
 
-        // 查询所有章节-小节关联（通过章节 URI 过滤）
-        List<KgChapterSection> allChSec = kgChapterSectionRepository.findAllActive();
-        Map<String, List<KgChapterSection>> chSecGrouped = allChSec.stream()
-                .filter(r -> chapterUris.contains(r.getChapterUri()))
+        // 按章节 URI 列表批量查询章节-小节关联（避免全量查询）
+        List<KgChapterSection> chSecRelations = kgChapterSectionRepository.findByChapterUris(new ArrayList<>(chapterUris));
+        Map<String, List<KgChapterSection>> chSecGrouped = chSecRelations.stream()
                 .collect(Collectors.groupingBy(KgChapterSection::getChapterUri));
 
-        Set<String> sectionUris = chSecGrouped.values().stream()
-                .flatMap(List::stream)
+        Set<String> sectionUris = chSecRelations.stream()
                 .map(KgChapterSection::getSectionUri)
                 .collect(Collectors.toSet());
         List<KgSection> sections = kgSectionRepository.findByUris(new ArrayList<>(sectionUris));
         Map<String, KgSection> sectionMap = sections.stream()
                 .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
 
-        // 统计每个小节的知识点数
-        List<KgSectionKP> allSecKp = kgSectionKPRepository.findAllActive();
-        Map<String, Long> sectionKpCount = allSecKp.stream()
-                .filter(r -> sectionUris.contains(r.getSectionUri()))
+        // 按小节 URI 列表批量查询小节-知识点关联（避免全量查询）
+        List<KgSectionKP> secKpRelations = kgSectionKPRepository.findBySectionUris(new ArrayList<>(sectionUris));
+        Map<String, Long> sectionKpCount = secKpRelations.stream()
                 .collect(Collectors.groupingBy(KgSectionKP::getSectionUri, Collectors.counting()));
 
         // 构建树
@@ -263,9 +260,7 @@ public class KgNavigationAppService {
      * 获取年级下的教材列表（从 MySQL 查询）
      */
     public List<KgTextbookDTO> getTextbooksByGrade(String grade) {
-        List<KgTextbook> textbooks = kgTextbookRepository.findAllActive().stream()
-                .filter(tb -> grade.equals(tb.getGrade()))
-                .toList();
+        List<KgTextbook> textbooks = kgTextbookRepository.findAllActiveByGrade(grade);
         return KgConvert.toTextbookDTOs(textbooks);
     }
 }

@@ -43,7 +43,8 @@ class KgSectionKPRepositoryImplTest {
     /** 每个测试前清理关联表数据，保证测试隔离 */
     @BeforeEach
     void setUp() {
-        mapper.selectAllActiveRelations().forEach(r -> mapper.deleteById(r.getId()));
+        // 使用 MyBatis-Plus 的 delete 方法清空表（物理删除测试数据）
+        mapper.delete(null);
     }
 
     // ==================== 6.6.7 save — insert new relation ====================
@@ -127,48 +128,10 @@ class KgSectionKPRepositoryImplTest {
         assertTrue(results.stream().allMatch(r -> r.getKpUri().equals(KP_URI_1)));
     }
 
-    // ==================== findAllActive ====================
-
-    @Test
-    @Order(5)
-    @DisplayName("findAllActive — 仅返回未删除的关联")
-    void findAllActive_returnsOnlyActiveRelations() {
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 2)));
-
-        List<KgSectionKP> results = repository.findAllActive();
-
-        assertTrue(results.size() >= 2);
-        assertTrue(results.stream().anyMatch(r ->
-                r.getSectionUri().equals(SECTION_URI) && r.getKpUri().equals(KP_URI_1)));
-        assertTrue(results.stream().anyMatch(r ->
-                r.getSectionUri().equals(SECTION_URI) && r.getKpUri().equals(KP_URI_2)));
-    }
-
     // ==================== deleteBySectionUri — soft delete ====================
 
     @Test
     @Order(6)
-    @DisplayName("deleteBySectionUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteBySectionUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 2)));
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_3, 1)));
-
-        int beforeCount = repository.findAllActive().size();
-
-        repository.deleteBySectionUri(SECTION_URI);
-
-        List<KgSectionKP> afterResults = repository.findAllActive();
-        // 被删除的小节关联不再出现
-        assertFalse(afterResults.stream().anyMatch(r -> r.getSectionUri().equals(SECTION_URI)));
-        // 其他小节关联仍存在
-        assertTrue(afterResults.stream().anyMatch(r -> r.getSectionUri().equals("other_section")));
-        assertEquals(beforeCount - 2, afterResults.size());
-    }
-
-    @Test
-    @Order(7)
     @DisplayName("deleteBySectionUri 软删除 — 删除后 findBySectionUri 不再返回")
     void deleteBySectionUri_softDeleteRemovesFromFindBySectionUri() {
         mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
@@ -183,23 +146,6 @@ class KgSectionKPRepositoryImplTest {
 
     @Test
     @Order(8)
-    @DisplayName("deleteByKpUri 软删除 — 删除后 findAllActive 不再返回")
-    void deleteByKpUri_softDeleteRemovesFromFindAllActive() {
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create("other_section", KP_URI_1, 2)));
-        mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_2, 1)));
-
-        repository.deleteByKpUri(KP_URI_1);
-
-        List<KgSectionKP> results = repository.findAllActive();
-        // 被删除的知识点关联不再出现
-        assertFalse(results.stream().anyMatch(r -> r.getKpUri().equals(KP_URI_1)));
-        // 其他知识点关联仍存在
-        assertTrue(results.stream().anyMatch(r -> r.getKpUri().equals(KP_URI_2)));
-    }
-
-    @Test
-    @Order(9)
     @DisplayName("deleteByKpUri 软删除 — 删除后 findByKpUri 不再返回")
     void deleteByKpUri_softDeleteRemovesFromFindByKpUri() {
         mapper.insert(KgSectionKPPo.from(KgSectionKP.create(SECTION_URI, KP_URI_1, 1)));
@@ -236,7 +182,7 @@ class KgSectionKPRepositoryImplTest {
     @DisplayName("saveBatch 空列表应无操作")
     void saveBatch_emptyList() {
         assertDoesNotThrow(() -> repository.saveBatch(List.of()));
-        assertEquals(0, repository.findAllActive().size());
+        assertTrue(repository.findBySectionUri(SECTION_URI).isEmpty());
     }
 
     @Test

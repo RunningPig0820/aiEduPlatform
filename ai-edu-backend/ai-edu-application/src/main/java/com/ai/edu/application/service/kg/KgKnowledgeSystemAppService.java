@@ -41,9 +41,7 @@ public class KgKnowledgeSystemAppService {
      * 获取某年级完整知识体系
      */
     public KgGradeSystemDTO getGradeSystem(String grade, String groupBy) {
-        List<KgTextbook> textbooks = kgTextbookRepository.findAllActive().stream()
-                .filter(tb -> grade.equals(tb.getGrade()))
-                .toList();
+        List<KgTextbook> textbooks = kgTextbookRepository.findAllActiveByGrade(grade);
 
         if (textbooks.isEmpty()) {
             return KgConvert.toGradeSystemDTO(grade, groupBy != null ? groupBy : "subject", List.of(), 0);
@@ -56,8 +54,40 @@ public class KgKnowledgeSystemAppService {
                         "stage".equals(effectiveGroupBy) ? tb.getStage() : tb.getSubject()
                 ));
 
-        List<KgChapterSection> allChSec = kgChapterSectionRepository.findAllActive();
-        List<KgSectionKP> allSecKp = kgSectionKPRepository.findAllActive();
+        // 收集所有教材 URI，用于批量查询章节关联
+        Set<String> allTextbookUris = textbooks.stream()
+                .map(KgTextbook::getUri)
+                .collect(Collectors.toSet());
+        List<KgTextbookChapter> allTbCh = kgTextbookChapterRepository.findByTextbookUris(new ArrayList<>(allTextbookUris));
+
+        // 收集所有章节 URI，用于批量查询章节-小节关联
+        Set<String> allChapterUris = allTbCh.stream()
+                .map(KgTextbookChapter::getChapterUri)
+                .collect(Collectors.toSet());
+        List<KgChapterSection> allChSec = kgChapterSectionRepository.findByChapterUris(new ArrayList<>(allChapterUris));
+
+        // 收集所有小节 URI，用于批量查询小节-知识点关联
+        Set<String> allSectionUris = allChSec.stream()
+                .map(KgChapterSection::getSectionUri)
+                .collect(Collectors.toSet());
+        List<KgSectionKP> allSecKp = kgSectionKPRepository.findBySectionUris(new ArrayList<>(allSectionUris));
+
+        // 预构建 Map，避免循环内重复查询
+        Map<String, List<KgTextbookChapter>> tbChByTextbook = allTbCh.stream()
+                .collect(Collectors.groupingBy(KgTextbookChapter::getTextbookUri));
+        Map<String, List<KgChapterSection>> chSecByChapter = allChSec.stream()
+                .collect(Collectors.groupingBy(KgChapterSection::getChapterUri));
+        Map<String, List<KgSectionKP>> secKpBySection = allSecKp.stream()
+                .collect(Collectors.groupingBy(KgSectionKP::getSectionUri));
+        Map<String, KgChapter> chapterMap = kgChapterRepository.findByUris(new ArrayList<>(allChapterUris)).stream()
+                .collect(Collectors.toMap(KgChapter::getUri, ch -> ch, (existing, replacement) -> existing));
+        Map<String, KgSection> sectionMap = kgSectionRepository.findByUris(new ArrayList<>(allSectionUris)).stream()
+                .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
+        Set<String> allKpUris = allSecKp.stream()
+                .map(KgSectionKP::getKpUri)
+                .collect(Collectors.toSet());
+        Map<String, KgKnowledgePoint> kpMap = kgKnowledgePointRepository.findByUris(new ArrayList<>(allKpUris)).stream()
+                .collect(Collectors.toMap(KgKnowledgePoint::getUri, kp -> kp, (existing, replacement) -> existing));
 
         List<KgGradeSystemDTO.GroupDTO> groups = new ArrayList<>();
         int totalKp = 0;
@@ -66,22 +96,19 @@ public class KgKnowledgeSystemAppService {
             String groupKey = entry.getKey();
             List<KgTextbook> groupTextbooks = entry.getValue();
 
-            Set<String> allChapterUris = new HashSet<>();
+            Set<String> groupChapterUris = new HashSet<>();
             for (KgTextbook tb : groupTextbooks) {
-                List<KgTextbookChapter> tbChRels = kgTextbookChapterRepository.findByTextbookUri(tb.getUri());
+                List<KgTextbookChapter> tbChRels = tbChByTextbook.getOrDefault(tb.getUri(), List.of());
                 for (KgTextbookChapter rel : tbChRels) {
-                    allChapterUris.add(rel.getChapterUri());
+                    groupChapterUris.add(rel.getChapterUri());
                 }
             }
 
-            if (allChapterUris.isEmpty()) continue;
-
-            Map<String, KgChapter> chapterMap = kgChapterRepository.findByUris(new ArrayList<>(allChapterUris)).stream()
-                    .collect(Collectors.toMap(KgChapter::getUri, ch -> ch, (existing, replacement) -> existing));
+            if (groupChapterUris.isEmpty()) continue;
 
             List<KgGradeSystemDTO.GroupDTO.ChapterNode> chapterNodes = new ArrayList<>();
 
-            for (String chapterUri : allChapterUris) {
+            for (String chapterUri : groupChapterUris) {
                 KgChapter chapter = chapterMap.get(chapterUri);
                 if (chapter == null) continue;
 
@@ -91,29 +118,19 @@ public class KgKnowledgeSystemAppService {
                         .topic(chapter.getTopic())
                         .build();
 
-                List<KgChapterSection> chSecRels = allChSec.stream()
-                        .filter(r -> chapterUri.equals(r.getChapterUri()))
-                        .toList();
+                List<KgChapterSection> chSecRels = chSecByChapter.getOrDefault(chapterUri, List.of());
 
                 List<KgGradeSystemDTO.GroupDTO.SectionNode> sectionNodes = new ArrayList<>();
-                Set<String> sectionUris = chSecRels.stream()
-                        .map(KgChapterSection::getSectionUri)
-                        .collect(Collectors.toSet());
-
-                Map<String, KgSection> sectionMap = kgSectionRepository.findByUris(new ArrayList<>(sectionUris)).stream()
-                        .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
 
                 for (KgChapterSection secRel : chSecRels) {
                     KgSection section = sectionMap.get(secRel.getSectionUri());
                     if (section == null) continue;
 
-                    List<KgSectionKP> secKpRels = allSecKp.stream()
-                            .filter(r -> secRel.getSectionUri().equals(r.getSectionUri()))
-                            .toList();
+                    List<KgSectionKP> secKpRels = secKpBySection.getOrDefault(secRel.getSectionUri(), List.of());
 
                     List<KgKnowledgePointDTO> kpDTOs = new ArrayList<>();
                     for (KgSectionKP kpRel : secKpRels) {
-                        KgKnowledgePoint kp = kgKnowledgePointRepository.findByUri(kpRel.getKpUri()).orElse(null);
+                        KgKnowledgePoint kp = kpMap.get(kpRel.getKpUri());
                         if (kp != null) {
                             kpDTOs.add(KgConvert.toKpDTO(kp));
                         }
@@ -153,9 +170,7 @@ public class KgKnowledgeSystemAppService {
      * 获取年级知识点统计
      */
     public StatsDTO getGradeStats(String grade) {
-        List<KgTextbook> textbooks = kgTextbookRepository.findAllActive().stream()
-                .filter(tb -> grade.equals(tb.getGrade()))
-                .toList();
+        List<KgTextbook> textbooks = kgTextbookRepository.findAllActiveByGrade(grade);
 
         if (textbooks.isEmpty()) {
             return KgConvert.toStatsDTO(grade, 0, 0, 0, 0, Map.of());
@@ -163,19 +178,13 @@ public class KgKnowledgeSystemAppService {
 
         Set<String> textbookUris = textbooks.stream().map(KgTextbook::getUri).collect(Collectors.toSet());
 
-        List<KgTextbookChapter> tbChRels = kgTextbookChapterRepository.findAllActive().stream()
-                .filter(r -> textbookUris.contains(r.getTextbookUri()))
-                .toList();
+        List<KgTextbookChapter> tbChRels = kgTextbookChapterRepository.findByTextbookUris(new ArrayList<>(textbookUris));
         Set<String> chapterUris = tbChRels.stream().map(KgTextbookChapter::getChapterUri).collect(Collectors.toSet());
 
-        List<KgChapterSection> chSecRels = kgChapterSectionRepository.findAllActive().stream()
-                .filter(r -> chapterUris.contains(r.getChapterUri()))
-                .toList();
+        List<KgChapterSection> chSecRels = kgChapterSectionRepository.findByChapterUris(new ArrayList<>(chapterUris));
         Set<String> sectionUris = chSecRels.stream().map(KgChapterSection::getSectionUri).collect(Collectors.toSet());
 
-        List<KgSectionKP> secKpRels = kgSectionKPRepository.findAllActive().stream()
-                .filter(r -> sectionUris.contains(r.getSectionUri()))
-                .toList();
+        List<KgSectionKP> secKpRels = kgSectionKPRepository.findBySectionUris(new ArrayList<>(sectionUris));
         Set<String> kpUris = secKpRels.stream().map(KgSectionKP::getKpUri).collect(Collectors.toSet());
 
         List<KgKnowledgePoint> kps = kgKnowledgePointRepository.findByUris(new ArrayList<>(kpUris));

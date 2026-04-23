@@ -58,8 +58,11 @@ public class KgSectionKPRepositoryImpl implements KgSectionKPRepository {
     }
 
     @Override
-    public List<KgSectionKP> findAllActive() {
-        return KgSectionKPPo.toEntityList(kgSectionKPMapper.selectAllActiveRelations());
+    public List<KgSectionKP> findBySectionUris(List<String> sectionUris) {
+        if (sectionUris == null || sectionUris.isEmpty()) {
+            return List.of();
+        }
+        return KgSectionKPPo.toEntityList(kgSectionKPMapper.selectBySectionUris(sectionUris));
     }
 
     @Override

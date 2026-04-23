@@ -38,8 +38,15 @@ public interface KgSectionKPMapper extends BaseMapper<KgSectionKPPo> {
     @Update("UPDATE t_kg_section_kp SET is_deleted = 1, modified_by = #{modifiedBy} WHERE section_uri = #{sectionUri} AND is_deleted = false")
     int softDeleteBySectionUri(@Param("sectionUri") String sectionUri, @Param("modifiedBy") Long modifiedBy);
 
-    @Select("SELECT * FROM t_kg_section_kp WHERE is_deleted = false")
-    List<KgSectionKPPo> selectAllActiveRelations();
+    /**
+     * 批量查询：按多个 section_uri 查询完整关联记录（用于导航树构建）
+     */
+    @Select("<script>" +
+            "SELECT * FROM t_kg_section_kp WHERE section_uri IN " +
+            "<foreach item='uri' collection='sectionUris' open='(' separator=',' close=')'>#{uri}</foreach>" +
+            " AND is_deleted = false ORDER BY section_uri, order_index" +
+            "</script>")
+    List<KgSectionKPPo> selectBySectionUris(@Param("sectionUris") List<String> sectionUris);
 
     /**
      * 批量查询：按多个 section_uri 查询所有 kp_uri（用于 Repository 组装）

@@ -58,8 +58,11 @@ public class KgTextbookChapterRepositoryImpl implements KgTextbookChapterReposit
     }
 
     @Override
-    public List<KgTextbookChapter> findAllActive() {
-        return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectAllActiveRelations());
+    public List<KgTextbookChapter> findByTextbookUris(List<String> textbookUris) {
+        if (textbookUris == null || textbookUris.isEmpty()) {
+            return List.of();
+        }
+        return KgTextbookChapterPo.toEntityList(kgTextbookChapterMapper.selectByTextbookUris(textbookUris));
     }
 
     @Override

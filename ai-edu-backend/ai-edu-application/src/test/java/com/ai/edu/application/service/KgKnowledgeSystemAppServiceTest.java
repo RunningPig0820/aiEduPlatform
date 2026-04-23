@@ -61,13 +61,11 @@ class KgKnowledgeSystemAppServiceTest {
                 KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "人教版", "math"),
                 KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "人教版", "math")
         );
-        when(kgTextbookRepository.findAllActive()).thenReturn(allTextbooks);
+        when(kgTextbookRepository.findAllActiveByGrade(grade)).thenReturn(allTextbooks);
 
-        // 教材-章节关系
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of(
-                KgTextbookChapter.create("uri:tb1", "uri:ch1", 1)
-        ));
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb2")).thenReturn(List.of(
+        // 教材-章节关系（scoped 查询）
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of(
+                KgTextbookChapter.create("uri:tb1", "uri:ch1", 1),
                 KgTextbookChapter.create("uri:tb2", "uri:ch2", 1)
         ));
 
@@ -77,8 +75,8 @@ class KgKnowledgeSystemAppServiceTest {
                 KgChapter.create("uri:ch2", "第二章")
         ));
 
-        // 章节-小节关系
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of(
+        // 章节-小节关系（scoped 查询）
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of(
                 KgChapterSection.create("uri:ch1", "uri:sec1", 1),
                 KgChapterSection.create("uri:ch2", "uri:sec2", 1)
         ));
@@ -89,15 +87,14 @@ class KgKnowledgeSystemAppServiceTest {
                 KgSection.create("uri:sec2", "第二节")
         ));
 
-        // 小节-知识点关系
+        // 小节-知识点关系（scoped 查询）
         KgKnowledgePoint kp1 = KgKnowledgePoint.create("uri:kp1", "知识点1");
         KgKnowledgePoint kp2 = KgKnowledgePoint.create("uri:kp2", "知识点2");
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of(
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of(
                 KgSectionKP.create("uri:sec1", "uri:kp1", 1),
                 KgSectionKP.create("uri:sec2", "uri:kp2", 1)
         ));
-        when(kgKnowledgePointRepository.findByUri("uri:kp1")).thenReturn(Optional.of(kp1));
-        when(kgKnowledgePointRepository.findByUri("uri:kp2")).thenReturn(Optional.of(kp2));
+        when(kgKnowledgePointRepository.findByUris(anyList())).thenReturn(List.of(kp1, kp2));
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "subject");
 
@@ -122,21 +119,19 @@ class KgKnowledgeSystemAppServiceTest {
                 KgTextbook.create("uri:tb1", "数学教材", grade, "middle", "人教版", "math"),
                 KgTextbook.create("uri:tb2", "英语教材", grade, "middle", "人教版", "english")
         );
-        when(kgTextbookRepository.findAllActive()).thenReturn(allTextbooks);
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(allTextbooks);
 
-        // 教材-章节关系（必须有章节，否则 group 会被 continue 跳过）
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of(
-                KgTextbookChapter.create("uri:tb1", "uri:ch1", 1)
-        ));
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb2")).thenReturn(List.of(
+        // 教材-章节关系（scoped 查询）
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of(
+                KgTextbookChapter.create("uri:tb1", "uri:ch1", 1),
                 KgTextbookChapter.create("uri:tb2", "uri:ch2", 1)
         ));
         when(kgChapterRepository.findByUris(anyList())).thenReturn(List.of(
                 KgChapter.create("uri:ch1", "第一章"),
                 KgChapter.create("uri:ch2", "第二章")
         ));
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "stage");
 
@@ -152,7 +147,7 @@ class KgKnowledgeSystemAppServiceTest {
     @Order(3)
     @DisplayName("getGradeSystem 年级不存在 — 应返回空结构")
     void getGradeSystem_gradeNotFound_shouldReturnEmptyStructure() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem("九年级", null);
 
@@ -168,7 +163,7 @@ class KgKnowledgeSystemAppServiceTest {
     @Order(4)
     @DisplayName("getGradeSystem groupBy 为空 — 应默认 subject")
     void getGradeSystem_nullGroupBy_shouldDefaultToSubject() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem("七年级", null);
 
@@ -181,12 +176,12 @@ class KgKnowledgeSystemAppServiceTest {
     void getGradeSystem_blankGroupBy_shouldDefaultToSubject() {
         String grade = "七年级";
         // 需要提供非空教材列表，使代码走到 effectiveGroupBy 的逻辑（而非早期返回）
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of(
                 KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "  ");
 
@@ -198,12 +193,11 @@ class KgKnowledgeSystemAppServiceTest {
     @DisplayName("getGradeSystem 教材无章节 — 分组被跳过，返回 0 groups")
     void getGradeSystem_textbooksWithoutChapters_shouldHaveZeroKpCount() {
         String grade = "七年级";
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of(
                 KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
-        when(kgTextbookChapterRepository.findByTextbookUri("uri:tb1")).thenReturn(List.of());
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of());
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of());
+        // 教材-章节关联为空，后续查询不会被调用
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem(grade, "subject");
 
@@ -226,22 +220,22 @@ class KgKnowledgeSystemAppServiceTest {
                 KgTextbook.create("uri:tb1", "数学上册", grade, "junior", "人教版", "math"),
                 KgTextbook.create("uri:tb2", "数学下册", grade, "junior", "人教版", "math")
         );
-        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(textbooks);
 
-        // 教材-章节: 2 个章节
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of(
+        // 教材-章节: 2 个章节（scoped 查询）
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of(
                 KgTextbookChapter.create("uri:tb1", "uri:ch1", 1),
                 KgTextbookChapter.create("uri:tb2", "uri:ch2", 1)
         ));
 
-        // 章节-小节: 2 个小节
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of(
+        // 章节-小节: 2 个小节（scoped 查询）
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of(
                 KgChapterSection.create("uri:ch1", "uri:sec1", 1),
                 KgChapterSection.create("uri:ch2", "uri:sec2", 1)
         ));
 
-        // 小节-知识点: 3 个知识点
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of(
+        // 小节-知识点: 3 个知识点（scoped 查询）
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of(
                 KgSectionKP.create("uri:sec1", "uri:kp1", 1),
                 KgSectionKP.create("uri:sec1", "uri:kp2", 2),
                 KgSectionKP.create("uri:sec2", "uri:kp3", 1)
@@ -276,7 +270,7 @@ class KgKnowledgeSystemAppServiceTest {
     @Order(8)
     @DisplayName("getGradeStats 年级不存在 — 应返回空结构")
     void getGradeStats_gradeNotFound_shouldReturnEmptyStructure() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of());
 
         StatsDTO result = kgKnowledgeSystemAppService.getGradeStats("九年级");
 
@@ -295,20 +289,20 @@ class KgKnowledgeSystemAppServiceTest {
     @DisplayName("getGradeStats 难度为 null — 应归类为 unknown")
     void getGradeStats_nullDifficulty_shouldBeUnknown() {
         String grade = "七年级";
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of(
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of(
                 KgTextbook.create("uri:tb1", "教材", grade, "junior", "人教版", "math")
         ));
-        when(kgTextbookChapterRepository.findAllActive()).thenReturn(List.of(
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of(
                 KgTextbookChapter.create("uri:tb1", "uri:ch1", 1)
         ));
-        when(kgChapterSectionRepository.findAllActive()).thenReturn(List.of(
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of(
                 KgChapterSection.create("uri:ch1", "uri:sec1", 1)
         ));
 
         // 难度为 null 的知识点
         KgKnowledgePoint kp = KgKnowledgePoint.create("uri:kp1", "知识点1");
         // difficulty 默认为 null
-        when(kgSectionKPRepository.findAllActive()).thenReturn(List.of(
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of(
                 KgSectionKP.create("uri:sec1", "uri:kp1", 1)
         ));
         when(kgKnowledgePointRepository.findByUris(anyList())).thenReturn(List.of(kp));
@@ -325,7 +319,7 @@ class KgKnowledgeSystemAppServiceTest {
     @Order(10)
     @DisplayName("getGradeSystem 无数据 — total=0, groups 空列表")
     void getGradeSystem_emptyData_shouldReturnEmptyStructure() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of());
 
         KgGradeSystemDTO result = kgKnowledgeSystemAppService.getGradeSystem("七年级", "subject");
 
@@ -337,7 +331,7 @@ class KgKnowledgeSystemAppServiceTest {
     @Order(11)
     @DisplayName("getGradeStats 无数据 — total=0, 空列表")
     void getGradeStats_emptyData_shouldReturnEmptyStructure() {
-        when(kgTextbookRepository.findAllActive()).thenReturn(List.of());
+        when(kgTextbookRepository.findAllActiveByGrade(any())).thenReturn(List.of());
 
         StatsDTO result = kgKnowledgeSystemAppService.getGradeStats("七年级");
 

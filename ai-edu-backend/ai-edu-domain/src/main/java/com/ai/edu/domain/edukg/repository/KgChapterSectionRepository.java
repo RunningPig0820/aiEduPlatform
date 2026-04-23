@@ -21,7 +21,10 @@ public interface KgChapterSectionRepository {
 
     List<KgChapterSection> findBySectionUri(String sectionUri);
 
-    List<KgChapterSection> findAllActive();
+    /**
+     * 按章节 URI 列表批量查询关联
+     */
+    List<KgChapterSection> findByChapterUris(List<String> chapterUris);
 
     /**
      * 删除单条关联记录
