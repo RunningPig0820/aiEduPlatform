@@ -27,11 +27,6 @@ public interface KgChapterRepository {
     void updateStatus(String uri, String status);
 
     /**
-     * 查询所有活跃的章节
-     */
-    List<KgChapter> findAllActive();
-
-    /**
      * 查询与指定教材 URI 列表关联的活跃章节（用于按 grade 范围隔离）
      */
     List<KgChapter> findAllActiveByTextbookUris(List<String> textbookUris);

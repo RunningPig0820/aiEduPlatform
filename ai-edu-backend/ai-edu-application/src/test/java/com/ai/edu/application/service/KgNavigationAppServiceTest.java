@@ -1,9 +1,6 @@
 package com.ai.edu.application.service;
 
-import com.ai.edu.application.dto.kg.ChapterTreeNode;
-import com.ai.edu.application.dto.kg.KgDimensionDTO;
-import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
-import com.ai.edu.application.dto.kg.KgTextbookDTO;
+import com.ai.edu.application.dto.kg.*;
 import com.ai.edu.application.service.kg.KgNavigationAppService;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.*;
@@ -432,6 +429,85 @@ class KgNavigationAppServiceTest {
         assertNull(result.get(0).getChapterLabel());
     }
 
+    // ==================== 6.8.4 getSectionsByChapter ====================
+
+    @Test
+    @Order(19)
+    @DisplayName("getSectionsByChapter 章节存在 — 应返回小节列表含知识点数量")
+    void getSectionsByChapter_chapterExists_shouldReturnSectionList() {
+        String chUri = "uri:ch1";
+
+        when(kgChapterRepository.findByUri(chUri)).thenReturn(Optional.of(
+                KgChapter.create(chUri, "第一章")
+        ));
+
+        // 章节-小节关系
+        when(kgChapterSectionRepository.findByChapterUri(chUri)).thenReturn(List.of(
+                KgChapterSection.create(chUri, "uri:sec1", 1),
+                KgChapterSection.create(chUri, "uri:sec2", 2)
+        ));
+
+        // 小节实体
+        when(kgSectionRepository.findByUris(anyList())).thenReturn(List.of(
+                KgSection.create("uri:sec1", "第一节"),
+                KgSection.create("uri:sec2", "第二节")
+        ));
+
+        // 小节-知识点关系
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of(
+                KgSectionKP.create("uri:sec1", "uri:kp1", 1),
+                KgSectionKP.create("uri:sec1", "uri:kp2", 2),
+                KgSectionKP.create("uri:sec2", "uri:kp3", 1)
+        ));
+
+        List<SectionNode> result = kgNavigationAppService.getSectionsByChapter(chUri);
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        SectionNode sec1 = result.get(0);
+        assertEquals("uri:sec1", sec1.getUri());
+        assertEquals("第一节", sec1.getLabel());
+        assertEquals(1, sec1.getOrderIndex());
+        assertEquals(2, sec1.getKnowledgePointCount());
+
+        SectionNode sec2 = result.get(1);
+        assertEquals("uri:sec2", sec2.getUri());
+        assertEquals("第二节", sec2.getLabel());
+        assertEquals(2, sec2.getOrderIndex());
+        assertEquals(1, sec2.getKnowledgePointCount());
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("getSectionsByChapter 章节不存在 — 应抛 KG_CHAPTER_NOT_FOUND")
+    void getSectionsByChapter_notFound_shouldThrow() {
+        when(kgChapterRepository.findByUri("uri:notexist")).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                kgNavigationAppService.getSectionsByChapter("uri:notexist")
+        );
+        assertEquals("70002", ex.getCode());
+        assertTrue(ex.getMessage().contains("章节不存在"));
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("getSectionsByChapter 章节无小节 — 应返回空列表")
+    void getSectionsByChapter_noSections_shouldReturnEmpty() {
+        String chUri = "uri:ch1";
+
+        when(kgChapterRepository.findByUri(chUri)).thenReturn(Optional.of(
+                KgChapter.create(chUri, "空章节")
+        ));
+        when(kgChapterSectionRepository.findByChapterUri(chUri)).thenReturn(List.of());
+
+        List<SectionNode> result = kgNavigationAppService.getSectionsByChapter(chUri);
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
     // ==================== 6.15 下拉选项查询测试 ====================
 
     // ==================== 6.15.1 getSubjects ====================
@@ -447,24 +523,6 @@ class KgNavigationAppServiceTest {
         assertEquals("数学", result.get(0).getCode());
         assertEquals("数学", result.get(0).getLabel());
         assertEquals(1, result.get(0).getOrderIndex());
-    }
-
-    // ==================== 6.15.2 getGrades ====================
-
-    @Test
-    @Order(102)
-    @DisplayName("getGrades — 应从 t_kg_textbook 查询 DISTINCT grade")
-    void getGrades_shouldQueryDistinctFromMysql() {
-        List<String> grades = List.of("一年级", "二年级", "七年级");
-        when(kgTextbookRepository.findDistinctGrades()).thenReturn(grades);
-
-        List<String> result = kgNavigationAppService.getGrades();
-
-        assertNotNull(result);
-        assertEquals(3, result.size());
-        assertEquals("一年级", result.get(0));
-        assertEquals("七年级", result.get(2));
-        verify(kgTextbookRepository).findDistinctGrades();
     }
 
     // ==================== 6.15.3 getStages ====================
@@ -541,18 +599,6 @@ class KgNavigationAppServiceTest {
 
     @Test
     @Order(107)
-    @DisplayName("getGrades 空数据 — t_kg_textbook 无数据时应返回空数组")
-    void getGrades_emptyData_shouldReturnEmptyArray() {
-        when(kgTextbookRepository.findDistinctGrades()).thenReturn(List.of());
-
-        List<String> result = kgNavigationAppService.getGrades();
-
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    @Order(108)
     @DisplayName("getGradesBySubject 无匹配学科 — 应返回空数组")
     void getGradesBySubject_noMatch_shouldReturnEmpty() {
         when(kgTextbookRepository.findDistinctGradesBySubject("physics")).thenReturn(List.of());
@@ -579,18 +625,14 @@ class KgNavigationAppServiceTest {
     @Order(110)
     @DisplayName("getSubjects/getStages 枚举始终返回值，不受 MySQL 数据影响")
     void enumMethods_alwaysReturnValuesRegardlessOfMysqlData() {
-        // 即使 MySQL 返回空
-        when(kgTextbookRepository.findDistinctGrades()).thenReturn(List.of());
-
+        // 枚举方法直接返回值，不依赖 MySQL
         List<KgDimensionDTO> subjects = kgNavigationAppService.getSubjects();
         List<KgDimensionDTO> stages = kgNavigationAppService.getStages();
         List<KgDimensionDTO> textbooks = kgNavigationAppService.getTextbooks();
 
-        // 枚举方法仍返回值
+        // 枚举方法始终返回值
         assertFalse(subjects.isEmpty());
         assertFalse(stages.isEmpty());
         assertFalse(textbooks.isEmpty());
-        // 但 MySQL 方法返回空
-        assertTrue(kgNavigationAppService.getGrades().isEmpty());
     }
 }

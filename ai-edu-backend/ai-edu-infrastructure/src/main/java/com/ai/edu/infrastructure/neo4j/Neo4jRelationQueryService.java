@@ -146,10 +146,11 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
     }
 
     private List<KgSectionKP> querySectionKPFromNeo4j(String sectionUri) {
+        // Neo4j 中关系方向是 (TextbookKP)-[:IN_UNIT]->(Section)
         String query = """
-                MATCH (s:Section {uri: $sectionUri})-[r:HAS_KNOWLEDGE_POINT]->(kp:KnowledgePoint)
-                RETURN s.uri AS sectionUri, kp.uri AS kpUri, r.order_index AS orderIndex
-                ORDER BY r.order_index
+                MATCH (kp:TextbookKP)-[r:IN_UNIT]->(s:Section {uri: $sectionUri})
+                RETURN s.uri AS sectionUri, kp.uri AS kpUri, r.order AS orderIndex
+                ORDER BY r.order
                 """;
         return queryNeo4jRelations(query, Map.entry("sectionUri", sectionUri),
                 record -> {
@@ -183,9 +184,10 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
      */
     @Override
     public GraphQueryResult queryGraphForKnowledgePoint(String kpUri) {
+        // Neo4j 中关系方向是 (TextbookKP)-[:IN_UNIT]->(Section)
         String query = """
-                MATCH (kp:KnowledgePoint {uri: $kpUri})
-                OPTIONAL MATCH (s:Section)-[:HAS_KNOWLEDGE_POINT]->(kp)
+                MATCH (kp:TextbookKP {uri: $kpUri})
+                OPTIONAL MATCH (kp)-[:IN_UNIT]->(s:Section)
                 OPTIONAL MATCH (c:Chapter)-[:CONTAINS]->(s)
                 OPTIONAL MATCH (t:Textbook)-[:CONTAINS]->(c)
                 OPTIONAL MATCH (kp)-[:MATCHES_KG]->(concept:Concept)

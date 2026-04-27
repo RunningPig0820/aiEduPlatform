@@ -58,16 +58,6 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     }
 
     @Override
-    public List<KgTextbook> findAllActive() {
-        return KgTextbookPo.toEntityList(kgTextbookMapper.selectAllActive());
-    }
-
-    @Override
-    public List<String> findDistinctGrades() {
-        return kgTextbookMapper.selectDistinctGrades();
-    }
-
-    @Override
     public List<String> findDistinctGradesBySubject(String subject) {
         return kgTextbookMapper.selectDistinctGradesBySubject(subject);
     }

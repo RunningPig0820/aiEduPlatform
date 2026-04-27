@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS t_kg_textbook (
     edition VARCHAR(100),
     subject VARCHAR(50),
     order_index INT DEFAULT 0,
+    sort INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'active',
     merged_to_uri VARCHAR(500),
     created_by BIGINT DEFAULT 0,

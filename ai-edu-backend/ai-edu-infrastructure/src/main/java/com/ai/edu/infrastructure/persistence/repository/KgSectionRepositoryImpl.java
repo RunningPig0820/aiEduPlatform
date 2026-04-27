@@ -87,11 +87,6 @@ public class KgSectionRepositoryImpl implements KgSectionRepository {
         return kgSectionMapper.selectByStatus("active").size();
     }
 
-    @Override
-    public List<KgSection> findAllActive() {
-        return KgSectionPo.toEntityList(kgSectionMapper.selectByStatus("active"));
-    }
-
     /**
      * 查询与指定章节 URI 列表关联的活跃小节
      *

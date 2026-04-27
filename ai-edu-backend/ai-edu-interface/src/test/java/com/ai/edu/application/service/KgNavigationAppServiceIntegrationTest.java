@@ -1,6 +1,7 @@
 package com.ai.edu.application.service;
 
 import com.ai.edu.application.dto.kg.ChapterTreeNode;
+import com.ai.edu.application.dto.kg.SectionNode;
 import com.ai.edu.application.dto.kg.SyncRequest;
 import com.ai.edu.application.dto.kg.SyncResult;
 import com.ai.edu.application.service.kg.KgNavigationAppService;
@@ -106,7 +107,7 @@ class KgNavigationAppServiceIntegrationTest {
                         chapter.getSections() != null ? chapter.getSections().size() : 0);
 
                 if (chapter.getSections() != null) {
-                    for (ChapterTreeNode.SectionNode section : chapter.getSections()) {
+                    for (SectionNode section : chapter.getSections()) {
                         log.info("  小节: uri={}, label={}, kpCount={}",
                                 section.getUri(), section.getLabel(), section.getKnowledgePointCount());
                     }

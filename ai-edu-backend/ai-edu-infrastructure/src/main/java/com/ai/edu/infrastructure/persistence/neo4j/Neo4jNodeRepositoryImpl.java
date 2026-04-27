@@ -91,8 +91,9 @@ public class Neo4jNodeRepositoryImpl implements Neo4jNodeRepository {
 
     @Override
     public List<KgKnowledgePoint> findKnowledgePointsByTextbookUris(List<String> textbookUris) {
+        // Neo4j 中关系方向是 (TextbookKP)-[:IN_UNIT]->(Section)
         String query = """
-                MATCH (t:Textbook)-[:CONTAINS]->(:Chapter)-[:CONTAINS]->(:Section)-[:HAS_KNOWLEDGE_POINT]->(kp:KnowledgePoint)
+                MATCH (kp:TextbookKP)-[:IN_UNIT]->(:Section)<-[:CONTAINS]-(:Chapter)<-[:CONTAINS]-(t:Textbook)
                 WHERE t.uri IN $uris
                 RETURN kp
                 """;

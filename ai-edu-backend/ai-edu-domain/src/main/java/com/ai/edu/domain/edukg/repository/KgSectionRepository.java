@@ -27,11 +27,6 @@ public interface KgSectionRepository {
     void updateStatus(String uri, String status);
 
     /**
-     * 查询所有活跃的小节
-     */
-    List<KgSection> findAllActive();
-
-    /**
      * 查询与指定章节 URI 列表关联的活跃小节（用于按 grade 范围隔离）
      */
     List<KgSection> findAllActiveByChapterUris(List<String> chapterUris);

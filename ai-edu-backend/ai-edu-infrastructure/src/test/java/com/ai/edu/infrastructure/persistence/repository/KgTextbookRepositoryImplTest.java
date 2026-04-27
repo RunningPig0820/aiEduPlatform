@@ -40,9 +40,8 @@ class KgTextbookRepositoryImplTest {
     /** 每个测试前清理测试数据 */
     @BeforeEach
     void setUp() {
-        // 硬删除清理（绕过逻辑删除）
-        kgTextbookMapper.selectAllActive().forEach(tb ->
-                kgTextbookMapper.deleteById(tb.getId()));
+        // 使用 MyBatis-Plus delete 方法清空表
+        kgTextbookMapper.delete(null);
     }
 
     // ==================== 6.6.1 save — insert new ====================
@@ -122,50 +121,10 @@ class KgTextbookRepositoryImplTest {
         assertTrue(result.isEmpty());
     }
 
-    // ==================== 6.6.1 findAllActive ====================
+    // ==================== updateStatus ====================
 
     @Test
     @Order(5)
-    @DisplayName("findAllActive 应只返回活跃教材")
-    void findAllActive_shouldReturnOnlyActive() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "人教版", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "人教版", "math");
-        kgTextbookMapper.insert(KgTextbookPo.from(tb1));
-        kgTextbookMapper.insert(KgTextbookPo.from(tb2));
-
-        List<KgTextbook> active = kgTextbookRepository.findAllActive();
-
-        assertEquals(2, active.size());
-    }
-
-    @Test
-    @Order(6)
-    @DisplayName("findAllActive 应排除 status 为 deleted 的教材")
-    void findAllActive_shouldExcludeDeletedStatus() {
-        KgTextbook tb1 = KgTextbook.create(TEST_URI, "教材1", "七年级", "junior", "人教版", "math");
-        KgTextbook tb2 = KgTextbook.create(TEST_URI_2, "教材2", "八年级", "junior", "人教版", "math");
-        kgTextbookMapper.insert(KgTextbookPo.from(tb1));
-        kgTextbookMapper.insert(KgTextbookPo.from(tb2));
-
-        // 将 tb1 标记为 deleted（updateStatus 只改 status，不改 is_deleted）
-        kgTextbookRepository.updateStatus(TEST_URI, "deleted");
-
-        // findAllActive 使用 is_deleted = false 过滤，所以仍能查到（is_deleted 仍为 false）
-        // 但业务上应通过 status 判断
-        List<KgTextbook> all = kgTextbookRepository.findAllActive();
-        // selectAllActive 的 SQL 只过滤 is_deleted，不过滤 status
-        assertEquals(2, all.size());
-
-        // 验证 status 确实被更新了
-        KgTextbookPo deleted = kgTextbookMapper.selectByUri(TEST_URI);
-        assertNotNull(deleted);
-        assertEquals("deleted", deleted.getStatus());
-    }
-
-    // ==================== 6.6.1 updateStatus ====================
-
-    @Test
-    @Order(7)
     @DisplayName("updateStatus 应更新 status 字段")
     void updateStatus_shouldChangeStatus() {
         KgTextbook textbook = KgTextbook.create(TEST_URI, "教材", "七年级", "junior", "人教版", "math");

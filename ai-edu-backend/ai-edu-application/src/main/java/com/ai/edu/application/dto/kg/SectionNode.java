@@ -6,25 +6,22 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serial;
-import java.io.Serializable;
-import java.util.List;
 
 /**
- * 章节树节点 DTO
+ * @author 张敏
+ * @date 2026-04-23 20:46
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChapterTreeNode implements Serializable {
+public class SectionNode {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     private String uri;
     private String label;
-    private String topic;
     private Integer orderIndex;
-    private List<SectionNode> sections;
-
+    private Integer knowledgePointCount;
 }

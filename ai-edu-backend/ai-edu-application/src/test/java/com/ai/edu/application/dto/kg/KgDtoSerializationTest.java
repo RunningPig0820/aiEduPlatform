@@ -76,14 +76,14 @@ class KgDtoSerializationTest {
     @Order(3)
     @DisplayName("ChapterTreeNode — 嵌套结构正确（章节含小节，小节含 knowledgePointCount）")
     void chapterTreeNode_nestedStructure() throws Exception {
-        List<ChapterTreeNode.SectionNode> sections = List.of(
-                ChapterTreeNode.SectionNode.builder()
+        List<SectionNode> sections = List.of(
+                SectionNode.builder()
                         .uri("uri:sec1")
                         .label("第一节")
                         .orderIndex(1)
                         .knowledgePointCount(3)
                         .build(),
-                ChapterTreeNode.SectionNode.builder()
+                SectionNode.builder()
                         .uri("uri:sec2")
                         .label("第二节")
                         .orderIndex(2)
@@ -118,7 +118,7 @@ class KgDtoSerializationTest {
                 .label("第一章")
                 .orderIndex(1)
                 .sections(List.of(
-                        ChapterTreeNode.SectionNode.builder()
+                        SectionNode.builder()
                                 .uri("uri:sec1")
                                 .label("第一节")
                                 .knowledgePointCount(3)

@@ -47,9 +47,9 @@ public final class KgConvert {
 
     // ==================== Section ====================
 
-    public static ChapterTreeNode.SectionNode toSectionNode(KgSection section, Integer orderIndex, int kpCount) {
+    public static SectionNode toSectionNode(KgSection section, Integer orderIndex, int kpCount) {
         if (section == null) return null;
-        return ChapterTreeNode.SectionNode.builder()
+        return SectionNode.builder()
                 .uri(section.getUri())
                 .label(section.getLabel())
                 .orderIndex(orderIndex)

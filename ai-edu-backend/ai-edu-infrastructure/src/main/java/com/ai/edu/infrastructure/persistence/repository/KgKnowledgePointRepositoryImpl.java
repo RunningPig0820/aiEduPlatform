@@ -92,11 +92,6 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
         return kgKnowledgePointMapper.selectByStatus("active").size();
     }
 
-    @Override
-    public List<KgKnowledgePoint> findAllActive() {
-        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByStatus("active"));
-    }
-
     /**
      * 查询与指定小节 URI 列表关联的活跃知识点
      *

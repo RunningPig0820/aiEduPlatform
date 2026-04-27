@@ -1,11 +1,7 @@
 package com.ai.edu.application.service.kg;
 
 import com.ai.edu.application.assembler.KgConvert;
-import com.ai.edu.application.dto.kg.ChapterTreeNode;
-import com.ai.edu.application.dto.kg.GradeTextbookDTO;
-import com.ai.edu.application.dto.kg.KgDimensionDTO;
-import com.ai.edu.application.dto.kg.KgKnowledgePointDetailDTO;
-import com.ai.edu.application.dto.kg.KgTextbookDTO;
+import com.ai.edu.application.dto.kg.*;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.*;
@@ -101,7 +97,7 @@ public class KgNavigationAppService {
             ChapterTreeNode chapterNode = KgConvert.toChapterTreeNode(chapter, rel.getOrderIndex());
 
             List<KgChapterSection> sectionRels = chSecGrouped.getOrDefault(rel.getChapterUri(), List.of());
-            List<ChapterTreeNode.SectionNode> sectionNodes = new ArrayList<>();
+            List<SectionNode> sectionNodes = new ArrayList<>();
             for (KgChapterSection secRel : sectionRels) {
                 KgSection section = sectionMap.get(secRel.getSectionUri());
                 if (section == null) continue;
@@ -117,6 +113,41 @@ public class KgNavigationAppService {
         }
 
         return treeNodes;
+    }
+
+    /**
+     * 获取章节下的小节列表
+     */
+    public List<SectionNode> getSectionsByChapter(String chapterUri) {
+        kgChapterRepository.findByUri(chapterUri)
+                .orElseThrow(() -> new BusinessException(ErrorCode.KG_CHAPTER_NOT_FOUND, "章节不存在: " + chapterUri));
+
+        List<KgChapterSection> chSecRelations = kgChapterSectionRepository.findByChapterUri(chapterUri);
+        if (chSecRelations.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> sectionUris = chSecRelations.stream()
+                .map(KgChapterSection::getSectionUri)
+                .collect(Collectors.toSet());
+        List<KgSection> sections = kgSectionRepository.findByUris(new ArrayList<>(sectionUris));
+        Map<String, KgSection> sectionMap = sections.stream()
+                .collect(Collectors.toMap(KgSection::getUri, sec -> sec, (existing, replacement) -> existing));
+
+        // 按小节 URI 列表批量查询小节-知识点关联
+        List<KgSectionKP> secKpRelations = kgSectionKPRepository.findBySectionUris(new ArrayList<>(sectionUris));
+        Map<String, Long> sectionKpCount = secKpRelations.stream()
+                .collect(Collectors.groupingBy(KgSectionKP::getSectionUri, Collectors.counting()));
+
+        List<SectionNode> sectionNodes = new ArrayList<>();
+        for (KgChapterSection rel : chSecRelations) {
+            KgSection section = sectionMap.get(rel.getSectionUri());
+            if (section == null) continue;
+            int kpCount = sectionKpCount.getOrDefault(rel.getSectionUri(), 0L).intValue();
+            sectionNodes.add(KgConvert.toSectionNode(section, rel.getOrderIndex(), kpCount));
+        }
+
+        return sectionNodes;
     }
 
     /**
@@ -191,13 +222,6 @@ public class KgNavigationAppService {
                         .orderIndex(e.getOrderIndex())
                         .build())
                 .toList();
-    }
-
-    /**
-     * 获取年级列表（从 MySQL 聚合查询）
-     */
-    public List<String> getGrades() {
-        return kgTextbookRepository.findDistinctGrades();
     }
 
     /**

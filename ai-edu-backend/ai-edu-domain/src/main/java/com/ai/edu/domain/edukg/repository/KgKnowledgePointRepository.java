@@ -27,11 +27,6 @@ public interface KgKnowledgePointRepository {
     List<KgKnowledgePoint> findByStatus(String status);
 
     /**
-     * 查询所有活跃的知识点
-     */
-    List<KgKnowledgePoint> findAllActive();
-
-    /**
      * 查询与指定小节 URI 列表关联的活跃知识点（用于按 grade 范围隔离）
      */
     List<KgKnowledgePoint> findAllActiveBySectionUris(List<String> sectionUris);

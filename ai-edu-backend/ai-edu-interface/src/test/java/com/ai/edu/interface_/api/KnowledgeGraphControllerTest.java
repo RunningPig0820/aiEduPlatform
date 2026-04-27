@@ -206,7 +206,7 @@ class KnowledgeGraphControllerTest {
                         .label("第一章")
                         .orderIndex(1)
                         .sections(List.of(
-                                ChapterTreeNode.SectionNode.builder()
+                                SectionNode.builder()
                                         .uri("uri:sec1")
                                         .label("第一节")
                                         .knowledgePointCount(3)

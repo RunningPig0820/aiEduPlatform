@@ -297,7 +297,7 @@ class KgSyncAppServiceIntegrationTest {
 
         log.info("=== 一年级上册数据验证完成 ===");
         log.info("建议：请在 Neo4j Browser 中执行以下查询验证知识点数据：");
-        log.info("MATCH (t:Textbook)-[:CONTAINS]->(c:Chapter)-[:CONTAINS]->(s:Section)-[:HAS_KNOWLEDGE_POINT]->(kp:KnowledgePoint)");
+        log.info("MATCH (t:Textbook)-[:CONTAINS]->(c:Chapter)-[:CONTAINS]->(s:Section)-[:IN_UNIT]->(kp:TextbookKP)");
         log.info("WHERE t.edition = '人教版' AND t.subject = '数学' AND t.grade = '一年级'");
         log.info("RETURN t.label, c.label, s.label, kp.label LIMIT 20");
     }

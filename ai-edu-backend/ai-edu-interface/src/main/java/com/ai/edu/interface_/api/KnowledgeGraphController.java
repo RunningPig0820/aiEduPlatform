@@ -104,6 +104,22 @@ public class KnowledgeGraphController {
     }
 
     /**
+     * 获取章节下的小节列表
+     * POST /api/kg/chapters/sections
+     *
+     * @param request 章节 URI，格式示例：
+     *   {"chapterUri": "http://edukg.org/knowledge/3.1/chapter/math#renjiao-g1s-2"}
+     *   其中 renjiao-g1s-2 表示人教版一年级上册第2章
+     */
+    @PostMapping("/chapters/sections")
+    public ApiResponse<List<SectionNode>> getSectionsByChapter(
+            @RequestBody ChapterUriRequest request) {
+        log.info("获取章节小节列表: chapterUri={}", request.getChapterUri());
+        List<SectionNode> sections = kgNavigationAppService.getSectionsByChapter(request.getChapterUri());
+        return ApiResponse.success(sections);
+    }
+
+    /**
      * 5.7 小节知识点列表
      * POST /api/kg/sections/points
      *

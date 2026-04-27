@@ -87,11 +87,6 @@ public class KgChapterRepositoryImpl implements KgChapterRepository {
         return kgChapterMapper.selectByStatus("active").size();
     }
 
-    @Override
-    public List<KgChapter> findAllActive() {
-        return KgChapterPo.toEntityList(kgChapterMapper.selectByStatus("active"));
-    }
-
     /**
      * 查询与指定教材 URI 列表关联的活跃章节
      *

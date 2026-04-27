@@ -61,16 +61,20 @@ public class Neo4jRelationRepositoryImpl implements Neo4jRelationRepository {
 
     @Override
     public List<KgSectionKP> findSectionKPRelations(List<String> sectionUris) {
+        log.info("findSectionKPRelations: querying for {} section URIs", sectionUris.size());
+        // Neo4j 中关系方向是 (TextbookKP)-[:IN_UNIT]->(Section)
         String query = """
-                MATCH (s:Section)-[r:HAS_KNOWLEDGE_POINT]->(kp:KnowledgePoint)
+                MATCH (kp:TextbookKP)-[r:IN_UNIT]->(s:Section)
                 WHERE s.uri IN $uris
-                RETURN s.uri AS sectionUri, kp.uri AS kpUri, r.order_index AS orderIndex
-                ORDER BY s.uri, r.order_index
+                RETURN s.uri AS sectionUri, kp.uri AS kpUri, r.order AS orderIndex
+                ORDER BY s.uri, r.order
                 """;
+        log.info("findSectionKPRelations: Cypher={}", query);
         return queryNeo4jRelations(query, parameters("uris", sectionUris), record -> {
             String sectionUri = record.get("sectionUri").asString();
             String kpUri = record.get("kpUri").asString();
             int orderIndex = record.get("orderIndex").asInt(0);
+            log.debug("Mapped SectionKP: sectionUri={}, kpUri={}, orderIndex={}", sectionUri, kpUri, orderIndex);
             return KgSectionKP.create(sectionUri, kpUri, orderIndex);
         });
     }
