@@ -289,6 +289,28 @@ public class KnowledgeGraphController {
     }
 
     /**
+     * 展开结构关系邻居（IN_UNIT、CONTAINS）
+     * POST /api/auth/kg/graph/expand/structure
+     */
+    @PostMapping("/graph/expand/structure")
+    public ApiResponse<KgGraphDTO> expandNodeStructure(@RequestBody ExpandNodeRequest request) {
+        log.info("展开结构关系: nodeUri={}, limit={}", request.getNodeUri(), request.getLimit());
+        KgGraphDTO graph = kgNeo4jService.expandNodeStructure(request.getNodeUri(), request.getLimit());
+        return ApiResponse.success(graph);
+    }
+
+    /**
+     * 展开知识关系邻居（MATCHES_KG、RELATED_TO 等）
+     * POST /api/auth/kg/graph/expand/knowledge
+     */
+    @PostMapping("/graph/expand/knowledge")
+    public ApiResponse<KgGraphDTO> expandNodeKnowledge(@RequestBody ExpandNodeRequest request) {
+        log.info("展开知识关系: nodeUri={}, limit={}", request.getNodeUri(), request.getLimit());
+        KgGraphDTO graph = kgNeo4jService.expandNodeKnowledge(request.getNodeUri(), request.getLimit());
+        return ApiResponse.success(graph);
+    }
+
+    /**
      * 批量关联请求体
      */
     @lombok.Data

@@ -26,6 +26,9 @@ public class KgGraphDTO implements Serializable {
     private List<GraphNode> nodes;
     private List<GraphEdge> edges;
 
+    /** 是否还有更多数据，用于前端"加载更多" */
+    private boolean hasMore;
+
     /**
      * 图谱节点
      */

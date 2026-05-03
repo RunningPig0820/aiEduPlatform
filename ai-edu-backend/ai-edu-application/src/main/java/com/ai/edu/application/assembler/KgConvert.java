@@ -225,4 +225,56 @@ public final class KgConvert {
                 .relations(entries)
                 .build();
     }
+
+    // ==================== Graph Visualization ====================
+
+    /**
+     * 将 Neo4j 节点标签列表映射为前端展示类型
+     *
+     * 映射表：
+     *   TextbookKP → textbook_kp
+     *   Concept    → concept
+     *   Statement  → statement
+     *   Class      → class
+     *   Section    → section
+     *   Chapter    → chapter
+     *   Textbook   → textbook
+     *   其他        → 小写兜底
+     */
+    public static String mapLabelToType(List<String> labels) {
+        for (String label : labels) {
+            return switch (label) {
+                case "TextbookKP" -> "textbook_kp";
+                case "Concept" -> "concept";
+                case "Statement" -> "statement";
+                case "Class" -> "class";
+                case "Section" -> "section";
+                case "Chapter" -> "chapter";
+                case "Textbook" -> "textbook";
+                default -> label.toLowerCase();
+            };
+        }
+        return "unknown";
+    }
+
+    /**
+     * 构建图谱节点（用于 expand 等场景）
+     *
+     * @param uri    节点 URI
+     * @param labels Neo4j 标签列表，用于推导前端 type
+     * @param label  节点显示名称，为 null 时回退为 uri
+     */
+    public static KgGraphDTO.GraphNode toGraphNode(String uri, List<String> labels, String label) {
+        String displayLabel = label != null ? label : uri;
+        String type = mapLabelToType(labels);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("uri", uri);
+        data.put("name", displayLabel);
+        return KgGraphDTO.GraphNode.builder()
+                .id(uri)
+                .type(type)
+                .label(displayLabel)
+                .data(data)
+                .build();
+    }
 }

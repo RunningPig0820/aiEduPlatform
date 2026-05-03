@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.neo4j;
 import com.ai.edu.domain.edukg.model.entity.relation.KgChapterSection;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
+import com.ai.edu.domain.edukg.model.result.ExpandRelationResult;
 import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
 import com.ai.edu.domain.edukg.model.result.RelatedConcept;
 import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
@@ -196,12 +197,13 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
                        s.uri AS sectionUri, s.label AS sectionLabel,
                        concept.uri AS conceptUri, concept.label AS conceptLabel,
                        kp.uri AS kpUri, kp.label AS kpLabel,
-                       kp.difficulty AS kpDifficulty, kp.cognitive_level AS kpCognitiveLevel
+                       kp.difficulty AS kpDifficulty, kp.cognitive_level AS kpCognitiveLevel,
+                       kp.importance AS kpImportance
                 """;
 
         Set<TextbookHierarchy> hierarchies = new LinkedHashSet<>();
         Set<RelatedConcept> concepts = new LinkedHashSet<>();
-        String kpLabel = null, kpDifficulty = null, kpCognitiveLevel = null;
+        String kpLabel = null, kpDifficulty = null, kpCognitiveLevel = null, kpImportance = null;
 
         try (var session = neo4jDriver.session()) {
             var result = session.readTransaction(tx -> {
@@ -213,6 +215,7 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
                 kpLabel = record.get("kpLabel").isNull() ? null : record.get("kpLabel").asString();
                 kpDifficulty = record.get("kpDifficulty").isNull() ? null : record.get("kpDifficulty").asString();
                 kpCognitiveLevel = record.get("kpCognitiveLevel").isNull() ? null : record.get("kpCognitiveLevel").asString();
+                kpImportance = record.get("kpImportance").isNull() ? null : record.get("kpImportance").asString();
 
                 String tbUri = record.get("textbookUri").isNull() ? null : record.get("textbookUri").asString();
                 String tbLabel = record.get("textbookLabel").isNull() ? null : record.get("textbookLabel").asString();
@@ -238,7 +241,48 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
             log.warn("Neo4j query failed for graph query of {}: {}", kpUri, e.getMessage());
         }
 
-        return new GraphQueryResult(kpUri, kpLabel, kpDifficulty, kpCognitiveLevel, null,
+        return new GraphQueryResult(kpUri, kpLabel, kpDifficulty, kpCognitiveLevel, kpImportance,
                 new ArrayList<>(hierarchies), new ArrayList<>(concepts));
+    }
+
+    /**
+     * 展开任意节点的直接邻居，按关系类型过滤
+     */
+    @Override
+    public List<ExpandRelationResult> expandNode(String nodeUri, List<String> relationTypes, int limit) {
+        String query = """
+                MATCH (n {uri: $uri})-[r]-(m)
+                WHERE type(r) IN $relationTypes
+                RETURN labels(n) AS sourceLabels, n.label AS sourceLabel, type(r) AS relType,
+                       startNode(r) = n AS isOutgoing,
+                       labels(m) AS targetLabels, m.uri AS targetUri, m.label AS targetLabel
+                LIMIT $limit
+                """;
+
+        List<ExpandRelationResult> results = new ArrayList<>();
+        try (var session = neo4jDriver.session()) {
+            session.readTransaction(tx -> {
+                var result = tx.run(query,
+                        org.neo4j.driver.Values.parameters(
+                                "uri", nodeUri,
+                                "relationTypes", relationTypes,
+                                "limit", limit));
+                while (result.hasNext()) {
+                    var record = result.next();
+                    List<String> sourceLabels = record.get("sourceLabels").asList(org.neo4j.driver.Value::asString);
+                    String sourceLabel = record.get("sourceLabel").isNull() ? null : record.get("sourceLabel").asString();
+                    String relType = record.get("relType").asString();
+                    boolean isOutgoing = record.get("isOutgoing").asBoolean();
+                    List<String> targetLabels = record.get("targetLabels").asList(org.neo4j.driver.Value::asString);
+                    String targetUri = record.get("targetUri").asString();
+                    String targetLabel = record.get("targetLabel").isNull() ? null : record.get("targetLabel").asString();
+                    results.add(new ExpandRelationResult(sourceLabels, sourceLabel, relType, isOutgoing, targetLabels, targetUri, targetLabel));
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            log.warn("Neo4j expand query failed for node {}: {}", nodeUri, e.getMessage());
+        }
+        return results;
     }
 }

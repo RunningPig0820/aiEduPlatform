@@ -23,11 +23,18 @@ public class CorsConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         // 允许的前端域名（开发环境）
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000",
-                "http://127.0.0.1:3000",
-                "http://localhost:5173",  // Vite 默认端口
-                "http://127.0.0.1:5173"
+        // 使用 allowedOriginPatterns 替代 allowedOrigins，支持通配符和IP地址访问
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://192.168.*.*:*",
+                "http://10.*.*.*:*",
+                "http://172.16.*.*:*",
+                "http://172.17.*.*:*",
+                "http://172.18.*.*:*",
+                "http://172.19.*.*:*",
+                "http://172.2*.*.*:*",
+                "http://172.3*.*.*:*"
         ));
 
         // 允许的 HTTP 方法

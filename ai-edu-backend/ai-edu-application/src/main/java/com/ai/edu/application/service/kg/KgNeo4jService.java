@@ -5,6 +5,7 @@ import com.ai.edu.application.dto.kg.BatchRelationsDTO;
 import com.ai.edu.application.dto.kg.HealthDTO;
 import com.ai.edu.application.dto.kg.KgGraphDTO;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.model.result.ExpandRelationResult;
 import com.ai.edu.domain.edukg.model.result.GraphQueryResult;
 import com.ai.edu.domain.edukg.model.result.RelatedConcept;
 import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
@@ -85,17 +86,43 @@ public class KgNeo4jService {
 
     /**
      * 获取知识点的图谱数据（用于前端图谱可视化）
+     *
+     * 以 Neo4j 为主要数据源，MySQL 作为元数据补充。
+     * 图结构（层级链 + 关联概念）完全来自 Neo4j。
      */
     public KgGraphDTO getKnowledgePointGraph(String kpUri) {
-        // 查询知识点本身
+        // 1. 从 Neo4j 获取图数据
+        GraphQueryResult graphData = kgKnowledgeGraphQueryRepository.queryGraphForKnowledgePoint(kpUri);
+
+        // 2. 尝试 MySQL 补充元数据（difficulty / importance / cognitiveLevel 可能更丰富）
         Optional<KgKnowledgePoint> kpOpt = kgKnowledgePointRepository.findByUri(kpUri);
-        if (kpOpt.isEmpty()) {
+
+        // 3. 确定 KP 的元数据：优先 MySQL，回退 Neo4j
+        String kpLabel;
+        String difficulty;
+        String cognitiveLevel;
+        String importance;
+
+        if (kpOpt.isPresent()) {
+            KgKnowledgePoint kp = kpOpt.get();
+            kpLabel = kp.getLabel();
+            difficulty = kp.getDifficulty();
+            cognitiveLevel = kp.getCognitiveLevel();
+            importance = kp.getImportance();
+        } else if (graphData.kpLabel() != null) {
+            kpLabel = graphData.kpLabel();
+            difficulty = graphData.kpDifficulty();
+            cognitiveLevel = graphData.kpCognitiveLevel();
+            importance = graphData.kpImportance();
+        } else {
             return KgGraphDTO.builder().nodes(List.of()).edges(List.of()).build();
         }
-        KgKnowledgePoint kp = kpOpt.get();
 
-        // 从领域服务获取图谱数据
-        GraphQueryResult graphData = kgKnowledgeGraphQueryRepository.queryGraphForKnowledgePoint(kpUri);
+        // 回退缺失字段
+        if (kpLabel == null) kpLabel = graphData.kpLabel();
+        if (difficulty == null) difficulty = graphData.kpDifficulty();
+        if (cognitiveLevel == null) cognitiveLevel = graphData.kpCognitiveLevel();
+        if (importance == null) importance = graphData.kpImportance();
 
         List<KgGraphDTO.GraphNode> nodes = new ArrayList<>();
         List<KgGraphDTO.GraphEdge> edges = new ArrayList<>();
@@ -103,132 +130,181 @@ public class KgNeo4jService {
 
         // 添加知识点自身节点
         Map<String, Object> kpData = new LinkedHashMap<>();
-        kpData.put("uri", kp.getUri());
-        kpData.put("name", kp.getLabel());
-        kpData.put("difficulty", kp.getDifficulty());
-        kpData.put("cognitiveLevel", kp.getCognitiveLevel());
-        kpData.put("importance", kp.getImportance());
+        kpData.put("uri", kpUri);
+        kpData.put("name", kpLabel);
+        kpData.put("difficulty", difficulty);
+        kpData.put("cognitiveLevel", cognitiveLevel);
+        kpData.put("importance", importance);
 
         nodes.add(KgGraphDTO.GraphNode.builder()
-                .id(kp.getUri())
-                .type("kp")
-                .label(kp.getLabel())
+                .id(kpUri)
+                .type("textbook_kp")
+                .label(kpLabel)
                 .data(kpData)
                 .build());
-        seenNodes.put(kp.getUri(), true);
+        seenNodes.put(kpUri, true);
 
-        int edgeIndex = 0;
-
-        // 处理教材层级路径
+        // 处理教材层级路径：Textbook → Chapter → Section → KP
+        // Neo4j 方向：(KP)-[:IN_UNIT]->(Section), (Chapter)-[:CONTAINS]->(Section), (Textbook)-[:CONTAINS]->(Chapter)
         for (TextbookHierarchy hierarchy : graphData.hierarchies()) {
-            // 添加 Section 节点（textbook_kp 类型）
-            if (hierarchy.sectionUri() != null && !seenNodes.containsKey("tkp:" + hierarchy.sectionUri())) {
-                Map<String, Object> secData = buildTextbookKpData(
-                        hierarchy.sectionUri(), hierarchy.sectionLabel(), "", "", "", hierarchy.sectionLabel());
-
-                nodes.add(KgGraphDTO.GraphNode.builder()
-                        .id(hierarchy.sectionUri())
-                        .type("textbook_kp")
-                        .label(hierarchy.sectionLabel())
-                        .data(secData)
-                        .build());
-                seenNodes.put("tkp:" + hierarchy.sectionUri(), true);
-
-                // 边：Section -> KP
+            // 边：KP → Section  (Neo4j: (KP)-[IN_UNIT]->(Section))
+            if (hierarchy.sectionUri() != null) {
+                if (!seenNodes.containsKey(hierarchy.sectionUri())) {
+                    nodes.add(KgGraphDTO.GraphNode.builder()
+                            .id(hierarchy.sectionUri())
+                            .type("section")
+                            .label(hierarchy.sectionLabel())
+                            .data(Map.of("uri", hierarchy.sectionUri(), "name", hierarchy.sectionLabel()))
+                            .build());
+                    seenNodes.put(hierarchy.sectionUri(), true);
+                }
                 edges.add(KgGraphDTO.GraphEdge.builder()
-                        .id("edge-" + (edgeIndex++))
-                        .source(hierarchy.sectionUri())
-                        .target(kpUri)
-                        .label("关联")
-                        .build());
-            }
-
-            // 添加 Chapter 节点
-            if (hierarchy.chapterUri() != null && !seenNodes.containsKey("tkp:" + hierarchy.chapterUri())) {
-                Map<String, Object> chData = buildTextbookKpData(
-                        hierarchy.chapterUri(), hierarchy.chapterLabel(), "", "", hierarchy.chapterLabel(), "");
-
-                nodes.add(KgGraphDTO.GraphNode.builder()
-                        .id(hierarchy.chapterUri())
-                        .type("textbook_kp")
-                        .label(hierarchy.chapterLabel())
-                        .data(chData)
-                        .build());
-                seenNodes.put("tkp:" + hierarchy.chapterUri(), true);
-            }
-
-            // 边：Chapter -> Section
-            if (hierarchy.chapterUri() != null && hierarchy.sectionUri() != null) {
-                edges.add(KgGraphDTO.GraphEdge.builder()
-                        .id("edge-" + (edgeIndex++))
-                        .source(hierarchy.chapterUri())
+                        .id(kpUri + "→IN_UNIT→" + hierarchy.sectionUri())
+                        .source(kpUri)
                         .target(hierarchy.sectionUri())
-                        .label("关联")
+                        .label("IN_UNIT")
                         .build());
             }
 
-            // 添加 Textbook 节点
-            if (hierarchy.textbookUri() != null && !seenNodes.containsKey("tkp:" + hierarchy.textbookUri())) {
-                Map<String, Object> tbData = buildTextbookKpData(
-                        hierarchy.textbookUri(), hierarchy.textbookLabel(), "", "", "", "");
-
-                nodes.add(KgGraphDTO.GraphNode.builder()
-                        .id(hierarchy.textbookUri())
-                        .type("textbook_kp")
-                        .label(hierarchy.textbookLabel())
-                        .data(tbData)
-                        .build());
-                seenNodes.put("tkp:" + hierarchy.textbookUri(), true);
+            // 边：Chapter → Section  (Neo4j: (Chapter)-[CONTAINS]->(Section))
+            if (hierarchy.chapterUri() != null) {
+                if (!seenNodes.containsKey(hierarchy.chapterUri())) {
+                    nodes.add(KgGraphDTO.GraphNode.builder()
+                            .id(hierarchy.chapterUri())
+                            .type("chapter")
+                            .label(hierarchy.chapterLabel())
+                            .data(Map.of("uri", hierarchy.chapterUri(), "name", hierarchy.chapterLabel()))
+                            .build());
+                    seenNodes.put(hierarchy.chapterUri(), true);
+                }
+                if (hierarchy.sectionUri() != null) {
+                    edges.add(KgGraphDTO.GraphEdge.builder()
+                            .id(hierarchy.chapterUri() + "→CONTAINS→" + hierarchy.sectionUri())
+                            .source(hierarchy.chapterUri())
+                            .target(hierarchy.sectionUri())
+                            .label("CONTAINS")
+                            .build());
+                }
             }
 
-            // 边：Textbook -> Chapter
-            if (hierarchy.textbookUri() != null && hierarchy.chapterUri() != null) {
-                edges.add(KgGraphDTO.GraphEdge.builder()
-                        .id("edge-" + (edgeIndex++))
-                        .source(hierarchy.textbookUri())
-                        .target(hierarchy.chapterUri())
-                        .label("关联")
-                        .build());
+            // 边：Textbook → Chapter  (Neo4j: (Textbook)-[CONTAINS]->(Chapter))
+            if (hierarchy.textbookUri() != null) {
+                if (!seenNodes.containsKey(hierarchy.textbookUri())) {
+                    nodes.add(KgGraphDTO.GraphNode.builder()
+                            .id(hierarchy.textbookUri())
+                            .type("textbook")
+                            .label(hierarchy.textbookLabel())
+                            .data(Map.of("uri", hierarchy.textbookUri(), "name", hierarchy.textbookLabel()))
+                            .build());
+                    seenNodes.put(hierarchy.textbookUri(), true);
+                }
+                if (hierarchy.chapterUri() != null) {
+                    edges.add(KgGraphDTO.GraphEdge.builder()
+                            .id(hierarchy.textbookUri() + "→CONTAINS→" + hierarchy.chapterUri())
+                            .source(hierarchy.textbookUri())
+                            .target(hierarchy.chapterUri())
+                            .label("CONTAINS")
+                            .build());
+                }
             }
         }
 
-        // 处理关联概念
+        // 处理关联概念：KP → Concept  (Neo4j: (KP)-[MATCHES_KG]->(Concept))
         for (RelatedConcept concept : graphData.relatedConcepts()) {
             if (!seenNodes.containsKey(concept.conceptUri())) {
-                Map<String, Object> cData = new LinkedHashMap<>();
-                cData.put("uri", concept.conceptUri());
-                cData.put("name", concept.conceptLabel());
-
                 nodes.add(KgGraphDTO.GraphNode.builder()
                         .id(concept.conceptUri())
-                        .type("kp")
+                        .type("concept")
                         .label(concept.conceptLabel())
-                        .data(cData)
+                        .data(Map.of("uri", concept.conceptUri(), "name", concept.conceptLabel()))
                         .build());
                 seenNodes.put(concept.conceptUri(), true);
-
-                // 边：KP -> Concept
-                edges.add(KgGraphDTO.GraphEdge.builder()
-                        .id("edge-" + (edgeIndex++))
-                        .source(kpUri)
-                        .target(concept.conceptUri())
-                        .label("关联")
-                        .build());
             }
+            edges.add(KgGraphDTO.GraphEdge.builder()
+                    .id(kpUri + "→MATCHES_KG→" + concept.conceptUri())
+                    .source(kpUri)
+                    .target(concept.conceptUri())
+                    .label("MATCHES_KG")
+                    .build());
         }
 
         return KgGraphDTO.builder().nodes(nodes).edges(edges).build();
     }
 
-    private Map<String, Object> buildTextbookKpData(String uri, String name,
-                                                     String subject, String grade, String unit, String lesson) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("uri", uri);
-        data.put("name", name != null ? name : uri);
-        data.put("subject", subject);
-        data.put("grade", grade);
-        data.put("unit", unit);
-        data.put("lesson", lesson);
-        return data;
+    /** 结构关系：教材知识点的层级归属 */
+    private static final List<String> STRUCTURE_RELATIONS = List.of("IN_UNIT", "CONTAINS");
+
+    /** 知识关系：概念/知识点之间的语义关联 */
+    private static final List<String> KNOWLEDGE_RELATIONS = List.of(
+            "MATCHES_KG", "RELATED_TO", "BELONGS_TO", "PART_OF",
+            "HAS_TYPE", "SUB_CLASS_OF", "DEVELOPS", "HAS_DIMENSION",
+            "ASSOCIATED_WITH", "PEER_RELATION");
+
+    private static final int DEFAULT_LIMIT = 20;
+
+    /**
+     * 展开结构关系邻居（IN_UNIT、CONTAINS）
+     */
+    public KgGraphDTO expandNodeStructure(String nodeUri, int limit) {
+        int queryLimit = resolveLimit(limit) + 1; // 多查一条判断 hasMore
+        List<ExpandRelationResult> relations = kgKnowledgeGraphQueryRepository.expandNode(nodeUri, STRUCTURE_RELATIONS, queryLimit);
+        return buildExpandGraph(nodeUri, relations, limit);
     }
+
+    /**
+     * 展开知识关系邻居（MATCHES_KG、RELATED_TO 等）
+     */
+    public KgGraphDTO expandNodeKnowledge(String nodeUri, int limit) {
+        int queryLimit = resolveLimit(limit) + 1;
+        List<ExpandRelationResult> relations = kgKnowledgeGraphQueryRepository.expandNode(nodeUri, KNOWLEDGE_RELATIONS, queryLimit);
+        return buildExpandGraph(nodeUri, relations, limit);
+    }
+
+    private int resolveLimit(int limit) {
+        return limit > 0 ? limit : DEFAULT_LIMIT;
+    }
+
+    /**
+     * 将展开结果构建为 KgGraphDTO
+     */
+    private KgGraphDTO buildExpandGraph(String nodeUri, List<ExpandRelationResult> relations, int requestedLimit) {
+        if (relations.isEmpty()) {
+            return KgGraphDTO.builder().nodes(List.of()).edges(List.of()).hasMore(false).build();
+        }
+
+        boolean hasMore = relations.size() > requestedLimit;
+        if (hasMore) {
+            relations = relations.subList(0, requestedLimit);
+        }
+
+        List<KgGraphDTO.GraphNode> nodes = new ArrayList<>();
+        List<KgGraphDTO.GraphEdge> edges = new ArrayList<>();
+        Map<String, Boolean> seenNodes = new LinkedHashMap<>();
+
+        // 源节点
+        ExpandRelationResult first = relations.getFirst();
+        String sourceLabel = first.sourceLabel() != null ? first.sourceLabel() : nodeUri;
+        nodes.add(KgConvert.toGraphNode(nodeUri, first.sourceLabels(), sourceLabel));
+        seenNodes.put(nodeUri, true);
+
+        for (ExpandRelationResult rel : relations) {
+            String targetUri = rel.targetUri();
+            if (targetUri == null) continue;
+
+            if (!seenNodes.containsKey(targetUri)) {
+                nodes.add(KgConvert.toGraphNode(targetUri, rel.targetLabels(), rel.targetLabel()));
+                seenNodes.put(targetUri, true);
+            }
+
+            String edgeSource = rel.isOutgoing() ? nodeUri : targetUri;
+            String edgeTarget = rel.isOutgoing() ? targetUri : nodeUri;
+            edges.add(KgGraphDTO.GraphEdge.builder()
+                    .id(edgeSource + "→" + rel.relType() + "→" + edgeTarget)
+                    .source(edgeSource).target(edgeTarget).label(rel.relType())
+                    .build());
+        }
+
+        return KgGraphDTO.builder().nodes(nodes).edges(edges).hasMore(hasMore).build();
+    }
+
 }
