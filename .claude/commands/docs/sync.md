@@ -1,31 +1,69 @@
 ---
 name: "DOCS: Sync"
-description: Sync OpenSpec artifacts to Yuque via OpenClaw session
+description: Sync OpenSpec artifacts to Yuque via Yuque MCP tools
 category: Workflow
 tags: [workflow, openspec, yuque, sync]
 ---
 
-Sync OpenSpec change artifacts to Yuque via OpenClaw session message API.
+Sync OpenSpec change artifacts to Yuque directly using Yuque MCP tools.
 
-**Gateway Configuration**
-- URL: `http://114.132.222.92:22867`
-- Session Key: `openclaw-control-ui`
+**Yuque Repository**: `zhangmin-jrrer/iu9s4m` (智启学堂)
 
-**Input**: Change name (e.g., `/docs:sync organization-management`). If omitted, list available changes and prompt.
+**Input**: Full Yuque path ending with change name.
+Format: `/docs:sync 产品中心/组织中心/设计方案/organization-center`
+
+**Path parsing rule**: Last segment = change name, all preceding segments = target Yuque directory.
+
+---
+
+## Global Mappings (Reference only - user path overrides)
+
+### Slug Naming Strategy
+| Doc Type | Slug Format | Example (change=organization-management) |
+|----------|-------------|------------------------------------------|
+| proposal | `<change>-proposal` | `organization-management-proposal` |
+| design | `<change>-design` | `organization-management-design` |
+| tasks | `<change>-tasks` | `organization-management-tasks` |
+| api | `<change>-api` | `organization-management-api` |
+| tests | `<change>-tests` | `organization-management-tests` |
+
+> **Note**: Yuque slug is **repository-level unique**, not path-level. Using simple names like `proposal` will conflict with existing docs. Always use prefixed unique slugs.
+
+### Change Name ↔ Yuque Path (Default mapping for convenience)
+| Change Name | Default Yuque Path |
+|-------------|-------------------|
+| `knowledge-graph-ui` | `产品中心/知识图谱页面化/knowledge-graph-ui` |
+| `knowledge-graph-datasource` | `产品中心/知识图谱页面化/knowledge-graph-datasource` |
+| `organization-center` | `产品中心/组织中心` |
+| ... | ... |
+
+> **Note**: If user provides full path, it overrides default mapping.
+
+---
 
 ## Steps
 
-1. **Select the change**
+1. **Parse input path**
 
-   If a name is provided, use it. Otherwise:
-   - Run `openspec list --json` to get active changes
-   - Use **AskUserQuestion tool** to let the user select
+   Extract path segments from arguments.
 
-   Always announce: "Syncing change: <name>"
+   Example: `产品中心/组织中心/设计方案/organization-center`
+   - **Target Yuque directory**: `产品中心/组织中心/设计方案`
+   - **Change name**: `organization-center`
+
+   If no path provided:
+   - List files in `openspec/changes/` directory
+   - Use **AskUserQuestion tool** to let user select change AND specify target path
+
+   Always announce:
+   ```
+   Syncing change: <change_name>
+   Target Yuque directory: <yuque_directory>
+   ```
 
 2. **Read local artifacts**
 
-   Read all available artifacts from `openspec/changes/<name>/`:
+   Read all available artifacts from `openspec/changes/<change_name>/`:
    - `proposal.md`
    - `design.md`
    - `tasks.md`
@@ -33,60 +71,101 @@ Sync OpenSpec change artifacts to Yuque via OpenClaw session message API.
    - `test.md`
    - `specs/*/spec.md` (if any)
 
-3. **Determine Yuque path**
+   Report which files found.
 
-   Map the change name to a Yuque path. Infer from context:
-   - `organization-management` → `产品中心/组织中心/organization-management`
-   - `knowledge-graph-ui` → `产品中心/知识图谱页面化/knowledge-graph-ui`
-   - `knowledge-graph-datasource` → `产品中心/知识图谱页面化/knowledge-graph-datasource`
-   - `llm-gateway-integration` → `产品中心/llm对接/llm-gateway-integration`
+3. **Get Yuque TOC and create directories if needed**
 
-   If uncertain, use **AskUserQuestion** to ask:
-   > "这个变更属于哪个语雀目录？"
+   Call `mcp__yuque-mcp__yuque_get_toc` with `repo_id: "zhangmin-jrrer/iu9s4m"`
 
-4. **Sync each artifact via session message**
+   Navigate TOC to find/create target directory hierarchy:
+   - Split target directory by `/` (e.g., `产品中心/组织中心/设计方案`)
+   - For each level, check if node exists with matching `title`
+   - If exists, use its `uuid` as parent for next level
+   - If NOT exists, create via `mcp__yuque-mcp__yuque_update_toc`:
 
-   For each artifact, send a message to OpenClaw session:
-
-   ```bash
-   curl -s -X POST http://114.132.222.92:22867/api/sessions/send \
-     -H "Authorization: Bearer a844da9d5750ef67f0f71612756ff900b21684e961f27bc8" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "sessionKey": "openclaw-control-ui",
-       "message": "docs:sync <yuque_path> <doc_type>\n<markdown_content>"
-     }'
+   ```json
+   {
+     "repo_id": "zhangmin-jrrer/iu9s4m",
+     "toc_data": "{\"action\":\"appendNode\",\"action_mode\":\"child\",\"target_uuid\":\"<parent_uuid>\",\"type\":\"TITLE\",\"title\":\"<directory_name>\"}"
+   }
    ```
 
-   Map doc_type to artifact:
-   - `proposal.md` → `proposal`
-   - `design.md` → `design`
-   - `tasks.md` → `tasks`
-   - `api.md` → `api`
-   - `test.md` → `tests`
+   Repeat until full path hierarchy created/found.
+   Store final directory `uuid` for document placement.
 
-   OpenClaw behavior:
-   - If Yuque directory doesn't exist → auto-creates it
-   - If document doesn't exist → auto-creates it
-   - Returns Yuque URL
+4. **Check existing documents**
 
-5. **Report results**
+   Call `mcp__yuque-mcp__yuque_list_docs` with `repo_id: "zhangmin-jrrer/iu9s4m"`
 
-   For each synced doc, show the Yuque URL returned by the API.
+   Check if docs with target slugs exist under the target directory path.
+
+5. **Sync each artifact**
+
+   For each artifact file:
+
+   Generate unique slug: `<change_name>-<doc_type>` (e.g., `organization-management-proposal`)
+
+   **If document exists** (by slug): Call `mcp__yuque-mcp__yuque_update_doc`:
+   ```json
+   {
+     "repo_id": "zhangmin-jrrer/iu9s4m",
+     "doc_id": "<existing_doc_id_or_slug>",
+     "body": "<markdown_content>"
+   }
+   ```
+
+   **If document NOT exists**: Call `mcp__yuque-mcp__yuque_create_doc`:
+   ```json
+   {
+     "repo_id": "zhangmin-jrrer/iu9s4m",
+     "title": "<doc_type>",
+     "slug": "<change_name>-<doc_type>",
+     "body": "<markdown_content>",
+     "format": "markdown"
+   }
+   ```
+
+   Store the returned `doc_id` and get doc `uuid` from TOC for each created doc.
+
+   Handle failures:
+   - API error 4xx/5xx: retry once
+   - If retry fails: record error, continue to next doc
+   - Track success/failure status for each doc
+
+6. **Organize docs under target directory (if new docs created)**
+
+   For newly created docs, move them under target directory via `mcp__yuque-mcp__yuque_update_toc`:
+
+   **Use `appendNode` action with `node_uuid` parameter** (NOT moveNode):
+   ```json
+   {
+     "repo_id": "zhangmin-jrrer/iu9s4m",
+     "toc_data": "{\"action\":\"appendNode\",\"action_mode\":\"child\",\"target_uuid\":\"<directory_uuid>\",\"node_uuid\":\"<doc_uuid>\"}"
+   }
+   ```
+
+   > **Important**: Yuque does NOT have `moveNode` action. Use `appendNode` with `node_uuid` to move existing document nodes.
+
+7. **Report results**
+
+---
 
 ## Output On Success
 
 ```
 ## Sync Complete
 
-**Change:** <change-name>
-**Yuque Path:** <yuque_path>
-**Documents synced:**
-- proposal: <yuque_url>
-- design: <yuque_url>
-- tasks: <yuque_url>
-- api: <yuque_url>
-- tests: <yuque_url>
+**Change:** <change_name>
+**Yuque Directory:** <yuque_directory>
+**Documents synced:** <N> of <M>
+
+| Type | Status | URL |
+|------|--------|-----|
+| proposal | ✓ created & moved | https://www.yuque.com/zhangmin-jrrer/iu9s4m/<change>-proposal |
+| design | ✓ created & moved | https://www.yuque.com/zhangmin-jrrer/iu9s4m/<change>-design |
+| tasks | ✓ created & moved | https://www.yuque.com/zhangmin-jrrer/iu9s4m/<change>-tasks |
+| api | skipped (not found locally) | - |
+| tests | ✗ failed: API error 500 | - |
 ```
 
 ## Output On Error
@@ -94,13 +173,26 @@ Sync OpenSpec change artifacts to Yuque via OpenClaw session message API.
 ```
 ## Sync Failed
 
-**Change:** <change-name>
+**Change:** <change_name>
 **Error:** <error_message>
+
+Details:
+- Failed to create directory: <reason>
+- Or: All document syncs failed
 ```
 
+---
+
 ## Guardrails
-- Read all local artifacts before syncing
-- Skip artifacts that don't exist (don't error on missing files)
+
+- Parse path: last segment = change name, rest = target directory
+- User-provided path overrides default mapping table
+- **Slug naming**: Use `<change_name>-<doc_type>` format for unique repository-level slugs
+- Yuque slug is **repository-level unique**, NOT path-level unique
+- Skip artifacts that don't exist locally (report as "skipped")
+- Create directory hierarchy level-by-level if not exists
+- **TOC move**: Use `appendNode` action with `node_uuid` parameter (NOT moveNode)
 - Report each sync result individually
-- Escape newlines in content properly for JSON payload
-- Content must be raw markdown, not HTML
+- Content must be raw markdown
+- API failure: retry once → record error → continue
+- Preserve document history when updating

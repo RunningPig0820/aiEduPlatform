@@ -1,55 +1,98 @@
 ---
 name: "DOCS: Status"
-description: Check OpenSpec sync progress and task status from Yuque
+description: Check task progress from Yuque tasks document
 category: Workflow
 tags: [workflow, openspec, yuque, status]
 ---
 
-Check the sync status and task progress for an OpenSpec change from Yuque.
+Check task progress for a change from Yuque tasks document.
 
-**⚠️ Requires OpenClaw `docs:get` command — not yet implemented.**
+**Yuque Repository**: `zhangmin-jrrer/iu9s4m` (智启学堂)
 
-**Gateway Configuration**
-- URL: `http://114.132.222.92:22867`
-- Session Key: `openclaw-control-ui`
+**Input**: Yuque path (e.g., `/docs:status 产品中心/组织中心`).
 
-**Input**: Change name or Yuque path (e.g., `/docs:status 产品中心/组织中心/organization-management`).
+---
 
 ## Steps
 
-1. **Determine Yuque path**
+1. **Parse Yuque path**
 
-2. **Request tasks doc via session message**
+   Extract Yuque path from arguments.
+   Derive change name from last segment.
 
-   ```bash
-   curl -s -X POST http://114.132.222.92:22867/api/sessions/send \
-     -H "Authorization: Bearer <token>" \
-     -d '{
-       "sessionKey": "openclaw-control-ui",
-       "message": "docs:get <yuque_path> tasks"
-     }'
+2. **Find tasks document in Yuque**
+
+   Call `mcp__yuque-mcp__yuque_list_docs` with `repo_id: "zhangmin-jrrer/iu9s4m"`
+
+   Find document with slug `<change_name>-tasks` (e.g., `organization-management-tasks`).
+
+3. **Get tasks document**
+
+   Call `mcp__yuque-mcp__yuque_get_doc`:
+   ```json
+   {
+     "repo_id": "zhangmin-jrrer/iu9s4m",
+     "doc_id": "<doc_id_or_slug>",
+     "include_lake": false
+   }
    ```
 
-3. **Compare with local status**
+   Handle failures:
+   - 404: output "No tasks document found"
+   - 5xx: retry once → output error
 
-   Run `openspec status --change "<name>" --json` to compare local vs remote.
+4. **Parse tasks and calculate progress**
 
-4. **Parse tasks and show progress**
+   Parse checkbox formats:
+   - Standard: `- [x]` = done, `- [ ]` = pending
+   - Yuque Lake: `- [✓]` = done
 
-   Count `- [x]` vs `- [ ]` from remote tasks content.
+   Count total and completed, calculate percentage.
 
-## Output
+5. **Handle edge cases**
+
+   If no checkboxes: output "No tasks found"
+
+---
+
+## Output On Success
 
 ```
-## Status: <change-name>
+## Status: <yuque_path>
 
+**Change Name:** <change_name>
 **Progress:** <X/Y> tasks complete (<percentage>%)
 
-### Remote Tasks (Yuque)
-- [x] Task 1
-- [ ] Task 2
+### Tasks
+- [x] Task 1: <description>
+- [ ] Task 2: <description>
+...
 ```
 
+## Output On No Tasks
+
+```
+## Status: <yuque_path>
+
+**Progress:** No tasks found
+The tasks document exists but contains no checkboxes.
+```
+
+## Output On Error
+
+```
+## Status: <yuque_path>
+
+**Error:** No tasks document found at this path
+To sync tasks first, run: /docs:sync <path>
+```
+
+---
+
 ## Guardrails
-- Requires OpenClaw `docs:get` to be implemented
-- Parse checkbox format carefully: `- [x]` = done, `- [ ]` = pending
+
+- Find tasks document by slug `<change_name>-tasks` (e.g., `organization-management-tasks`)
+- Yuque slug is **repository-level unique**, NOT path-level unique
+- Parse both `- [x]` and `- [✓]` formats
+- If no checkboxes: output "No tasks found"
+- Derive change name from path's last segment
