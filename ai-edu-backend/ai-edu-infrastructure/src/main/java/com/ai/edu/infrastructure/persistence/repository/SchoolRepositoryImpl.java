@@ -40,6 +40,16 @@ public class SchoolRepositoryImpl implements SchoolRepository {
     }
 
     @Override
+    public Optional<School> findByName(String name) {
+        return Optional.ofNullable(schoolMapper.selectByName(name));
+    }
+
+    @Override
+    public List<School> findAll() {
+        return schoolMapper.selectAll();
+    }
+
+    @Override
     public List<School> findByProvinceAndCity(String province, String city) {
         return schoolMapper.selectByProvinceAndCity(province, city);
     }
@@ -57,6 +67,11 @@ public class SchoolRepositoryImpl implements SchoolRepository {
     @Override
     public boolean existsByCode(String code) {
         return schoolMapper.existsByCode(code);
+    }
+
+    @Override
+    public boolean existsByName(String name) {
+        return schoolMapper.existsByName(name);
     }
 
     @Override

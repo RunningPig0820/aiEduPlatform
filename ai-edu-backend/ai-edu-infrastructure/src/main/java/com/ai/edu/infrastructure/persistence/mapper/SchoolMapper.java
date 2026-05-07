@@ -17,6 +17,9 @@ public interface SchoolMapper extends BaseMapper<School> {
     @Select("SELECT * FROM t_school WHERE code = #{code} AND is_deleted = false")
     School selectByCode(@Param("code") String code);
 
+    @Select("SELECT * FROM t_school WHERE name = #{name} AND is_deleted = false")
+    School selectByName(@Param("name") String name);
+
     @Select("SELECT * FROM t_school WHERE province = #{province} AND city = #{city} AND is_deleted = false")
     List<School> selectByProvinceAndCity(@Param("province") String province, @Param("city") String city);
 
@@ -26,6 +29,12 @@ public interface SchoolMapper extends BaseMapper<School> {
     @Select("SELECT * FROM t_school WHERE is_deleted = false")
     List<School> selectAllActive();
 
+    @Select("SELECT * FROM t_school")
+    List<School> selectAll();
+
     @Select("SELECT COUNT(*) > 0 FROM t_school WHERE code = #{code} AND is_deleted = false")
     boolean existsByCode(@Param("code") String code);
+
+    @Select("SELECT COUNT(*) > 0 FROM t_school WHERE name = #{name} AND is_deleted = false")
+    boolean existsByName(@Param("name") String name);
 }

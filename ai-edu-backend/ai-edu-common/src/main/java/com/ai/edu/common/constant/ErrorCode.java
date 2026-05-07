@@ -54,4 +54,11 @@ public final class ErrorCode {
     public static final String KG_NEO4J_QUERY_FAILED = "70005";
     public static final String KG_SYNC_IN_PROGRESS = "70006";
     public static final String KG_SYNC_PARAM_ERROR = "70007";
+
+    // 组织模块 8xxxx
+    public static final String SCHOOL_NOT_FOUND = "80001";
+    public static final String SCHOOL_NAME_EXISTS = "80002";
+    public static final String SCHOOL_USER_ASSOCIATION_EXISTS = "80003";
+    public static final String NO_SCHOOL_ACCESS = "80004";
+    public static final String SCHOOL_USER_NOT_ADMIN = "80005";
 }
