@@ -32,9 +32,6 @@ public class SchoolAppService {
 
     /**
      * 创建学校
-     *
-     * @param command 创建请求
-     * @return 学校DTO
      */
     @Transactional
     public SchoolDTO createSchool(CreateSchoolCommand command) {
@@ -60,30 +57,23 @@ public class SchoolAppService {
         );
 
         // 4. 保存（使用现有School实体作为持久化载体）
-        School school = School.create(command.getName(), null, command.getType());
+        School school = School.create(command.getName(), null, institutionalType);
         School savedSchool = schoolRepository.save(school);
 
-        // 设置聚合根ID
-        aggregate.setId(SchoolId.of(savedSchool.getId()));
-
-        log.info("学校创建成功: id={}, name={}", savedSchool.getId(), savedSchool.getName());
+        log.info("学校创建成功: id={}, name={}", savedSchool.getIdValue(), savedSchool.getName());
 
         return toDTO(savedSchool, command.getIconUrl(), command.getType(), command.getStages());
     }
 
     /**
      * 更新学校
-     *
-     * @param id      学校ID
-     * @param command 更新请求
-     * @return 学校DTO
      */
     @Transactional
     public SchoolDTO updateSchool(Long id, UpdateSchoolCommand command) {
         log.info("更新学校: id={}, name={}", id, command.getName());
 
         // 1. 查找学校
-        School school = schoolRepository.findById(id)
+        School school = schoolRepository.findById(SchoolId.of(id))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "学校不存在"));
 
         // 2. 检查名称冲突（如果修改了名称）
@@ -92,7 +82,8 @@ public class SchoolAppService {
         }
 
         // 3. 更新学校信息
-        school = updateSchoolFields(school, command);
+        SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(command.getType());
+        school = updateSchoolFields(school, command, institutionalType);
         schoolRepository.save(school);
 
         log.info("学校更新成功: id={}", id);
@@ -102,14 +93,11 @@ public class SchoolAppService {
 
     /**
      * 获取学校详情
-     *
-     * @param id 学校ID
-     * @return 学校DTO
      */
     public SchoolDTO getSchoolById(Long id) {
         log.info("获取学校详情: id={}", id);
 
-        School school = schoolRepository.findById(id)
+        School school = schoolRepository.findById(SchoolId.of(id))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "学校不存在"));
 
         return toDTO(school);
@@ -117,8 +105,6 @@ public class SchoolAppService {
 
     /**
      * 获取学校列表
-     *
-     * @return 学校列表
      */
     public List<SchoolDTO> listSchools() {
         log.info("获取学校列表");
@@ -131,14 +117,12 @@ public class SchoolAppService {
 
     /**
      * 按类型获取学校列表
-     *
-     * @param type 学校类型
-     * @return 学校列表
      */
     public List<SchoolDTO> listSchoolsByType(String type) {
         log.info("按类型获取学校列表: type={}", type);
 
-        List<School> schools = schoolRepository.findBySchoolType(type);
+        SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(type);
+        List<School> schools = schoolRepository.findByInstitutionalType(institutionalType);
         return schools.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
@@ -146,13 +130,11 @@ public class SchoolAppService {
 
     /**
      * 删除学校
-     *
-     * @param id 学校ID
      */
     @Transactional
     public void deleteSchool(Long id) {
         log.info("删除学校: id={}", id);
-        schoolRepository.deleteById(id);
+        schoolRepository.deleteById(SchoolId.of(id));
     }
 
     // ==================== 私有方法 ====================
@@ -160,11 +142,12 @@ public class SchoolAppService {
     /**
      * 更新学校字段
      */
-    private School updateSchoolFields(School school, UpdateSchoolCommand command) {
-        // 使用反射或直接设置字段（School实体目前字段受限）
-        // 这里简化处理：创建新的School实体
-        School updatedSchool = School.create(command.getName(), school.getCode(), command.getType());
-        // 需要School实体支持更多字段更新方法
+    private School updateSchoolFields(School school, UpdateSchoolCommand command, SchoolInstitutionalType institutionalType) {
+        // 创建新的School实体保留原有ID
+        School updatedSchool = School.create(command.getName(), school.getCode(), institutionalType);
+        if (school.getId() != null) {
+            updatedSchool.setId(school.getId());
+        }
         return updatedSchool;
     }
 
@@ -172,7 +155,7 @@ public class SchoolAppService {
      * 转换为DTO
      */
     private SchoolDTO toDTO(School school) {
-        return toDTO(school, null, school.getSchoolType(), null);
+        return toDTO(school, null, school.getSchoolTypeValue(), null);
     }
 
     /**
@@ -180,10 +163,10 @@ public class SchoolAppService {
      */
     private SchoolDTO toDTO(School school, String iconUrl, String type, List<String> stages) {
         return SchoolDTO.builder()
-                .id(school.getId())
+                .id(school.getIdValue())
                 .name(school.getName())
                 .iconUrl(iconUrl)
-                .type(type != null ? type : school.getSchoolType())
+                .type(type != null ? type : school.getSchoolTypeValue())
                 .stages(stages)
                 .status("ACTIVE")
                 .build();

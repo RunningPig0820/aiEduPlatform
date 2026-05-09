@@ -1,6 +1,8 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.School;
+import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.shared.valueobject.SchoolId;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +21,7 @@ public interface SchoolRepository {
     /**
      * 根据ID查找学校
      */
-    Optional<School> findById(Long id);
+    Optional<School> findById(SchoolId id);
 
     /**
      * 根据编码查找学校
@@ -42,9 +44,9 @@ public interface SchoolRepository {
     List<School> findByProvinceAndCity(String province, String city);
 
     /**
-     * 根据学校类型查找学校
+     * 根据学校性质类型查找学校
      */
-    List<School> findBySchoolType(String schoolType);
+    List<School> findByInstitutionalType(SchoolInstitutionalType institutionalType);
 
     /**
      * 查找所有活跃学校
@@ -64,10 +66,10 @@ public interface SchoolRepository {
     /**
      * 根据ID删除学校
      */
-    void deleteById(Long id);
+    void deleteById(SchoolId id);
 
     /**
      * 根据ID恢复学校
      */
-    void restoreById(Long id);
+    void restoreById(SchoolId id);
 }

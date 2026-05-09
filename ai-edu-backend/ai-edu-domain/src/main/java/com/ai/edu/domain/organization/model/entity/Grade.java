@@ -1,58 +1,49 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.AccessLevel;
+import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
+import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 /**
  * 年级实体
  */
-@TableName("t_grade")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Grade {
 
-    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
-
-    @TableField("school_id")
-    private Long schoolId;
-
-    @TableField("name")
+    private SchoolId schoolId;
     private String name;
-
-    @TableField("code")
     private String code;
-
-    @TableField("grade_level")
-    private Integer gradeLevel;
-
-    @TableField("description")
+    private GradeLevel gradeLevel;
     private String description;
+    private Long createdBy;
+    private Long modifiedBy;
+    private boolean deleted;
 
-    @TableField("created_by")
-    private Long createdBy = 0L;
+    protected Grade() {}
 
-    @TableField("modified_by")
-    private Long modifiedBy = 0L;
-
-    @TableField("is_deleted")
-    private Boolean deleted = false;
-
-    public static Grade create(String name, Integer gradeLevel) {
+    public static Grade create(String name, GradeLevel gradeLevel) {
         Grade grade = new Grade();
         grade.name = name;
         grade.gradeLevel = gradeLevel;
+        grade.createdBy = 0L;
+        grade.modifiedBy = 0L;
+        grade.deleted = false;
         return grade;
     }
 
-    public static Grade createWithSchool(String name, Integer gradeLevel, Long schoolId) {
+    public static Grade createWithSchool(String name, GradeLevel gradeLevel, SchoolId schoolId) {
         Grade grade = create(name, gradeLevel);
         grade.schoolId = schoolId;
         return grade;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setCode(String code) {
+        this.code = code;
     }
 
     public void updateDescription(String description) {
@@ -68,14 +59,26 @@ public class Grade {
     }
 
     public boolean isPrimarySchool() {
-        return gradeLevel != null && gradeLevel >= 1 && gradeLevel <= 6;
+        return gradeLevel != null && gradeLevel.isPrimary();
     }
 
     public boolean isJuniorHigh() {
-        return gradeLevel != null && gradeLevel >= 7 && gradeLevel <= 9;
+        return gradeLevel != null && gradeLevel.isJuniorHigh();
     }
 
     public boolean isHighSchool() {
-        return gradeLevel != null && gradeLevel >= 10 && gradeLevel <= 12;
+        return gradeLevel != null && gradeLevel.isHighSchool();
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public Integer getGradeLevelValue() {
+        return gradeLevel != null ? gradeLevel.getValue() : null;
+    }
+
+    public Long getSchoolIdValue() {
+        return schoolId != null ? schoolId.getValue() : null;
     }
 }

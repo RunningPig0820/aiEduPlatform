@@ -2,6 +2,9 @@ package com.ai.edu.domain.organization.model.aggregate;
 
 import com.ai.edu.domain.organization.model.entity.Class;
 import com.ai.edu.domain.organization.model.entity.School;
+import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.shared.valueobject.ClassId;
+import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -22,13 +25,17 @@ public class SchoolAggregate {
         this.classes = new ArrayList<>();
     }
 
-    public static SchoolAggregate create(String name, String code, String schoolType) {
+    public static SchoolAggregate create(String name, String code, SchoolInstitutionalType schoolType) {
         School school = School.create(name, code, schoolType);
         return new SchoolAggregate(school);
     }
 
-    public Long getId() {
+    public SchoolId getId() {
         return school.getId();
+    }
+
+    public Long getIdValue() {
+        return school.getIdValue();
     }
 
     public String getName() {
@@ -39,8 +46,12 @@ public class SchoolAggregate {
         return school.getCode();
     }
 
-    public String getSchoolType() {
+    public SchoolInstitutionalType getSchoolType() {
         return school.getSchoolType();
+    }
+
+    public String getSchoolTypeValue() {
+        return school.getSchoolTypeValue();
     }
 
     // 班级管理
@@ -51,11 +62,11 @@ public class SchoolAggregate {
         classes.add(classEntity);
     }
 
-    public void removeClass(Long classId) {
+    public void removeClass(ClassId classId) {
         classes.removeIf(cls -> cls.getId().equals(classId));
     }
 
-    public Class getClassById(Long classId) {
+    public Class getClassById(ClassId classId) {
         return classes.stream()
                 .filter(cls -> cls.getId().equals(classId))
                 .findFirst()
@@ -70,7 +81,7 @@ public class SchoolAggregate {
 
     public List<Class> getClassesByGrade(String grade) {
         return classes.stream()
-                .filter(cls -> cls.getGrade().equals(grade) && cls.isActive())
+                .filter(cls -> cls.getGradeValue() != null && cls.getGradeValue().equals(grade) && cls.isActive())
                 .toList();
     }
 
@@ -92,15 +103,15 @@ public class SchoolAggregate {
         school.updateDescription(description);
     }
 
-    public boolean isPrimary() {
-        return school.isPrimary();
+    public boolean isPublic() {
+        return school.isPublic();
     }
 
-    public boolean isJuniorHigh() {
-        return school.isJuniorHigh();
+    public boolean isPrivate() {
+        return school.isPrivate();
     }
 
-    public boolean isHighSchool() {
-        return school.isHighSchool();
+    public boolean isTrainingInstitute() {
+        return school.isTrainingInstitute();
     }
 }

@@ -1,6 +1,8 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.Grade;
+import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
+import com.ai.edu.domain.shared.valueobject.SchoolId;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,9 +18,9 @@ public interface GradeRepository {
 
     Optional<Grade> findByCode(String code);
 
-    List<Grade> findBySchoolId(Long schoolId);
+    List<Grade> findBySchoolId(SchoolId schoolId);
 
-    List<Grade> findByGradeLevel(Integer gradeLevel);
+    List<Grade> findByGradeLevel(GradeLevel gradeLevel);
 
     List<Grade> findAllActive();
 

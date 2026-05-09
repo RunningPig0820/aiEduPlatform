@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.relation.KgSectionKP;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgSectionKPMapper;
 import com.ai.edu.infrastructure.persistence.edukg.po.KgSectionKPPo;
+import com.ai.edu.infrastructure.persistence.edukg.respository.KgSectionKPRepositoryImpl;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import jakarta.annotation.Resource;

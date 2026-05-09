@@ -9,6 +9,9 @@ import com.ai.edu.domain.edukg.model.result.RelatedConcept;
 import com.ai.edu.domain.edukg.model.result.TextbookHierarchy;
 import com.ai.edu.domain.edukg.repository.KgKnowledgeGraphQueryRepository;
 import com.ai.edu.infrastructure.cache.Neo4jRelationCacheService;
+import com.ai.edu.infrastructure.persistence.edukg.respository.KgChapterSectionRepositoryImpl;
+import com.ai.edu.infrastructure.persistence.edukg.respository.KgSectionKPRepositoryImpl;
+import com.ai.edu.infrastructure.persistence.edukg.respository.KgTextbookChapterRepositoryImpl;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
@@ -40,13 +43,13 @@ public class Neo4jRelationQueryService implements KgKnowledgeGraphQueryRepositor
     private Neo4jRelationCacheService cacheService;
 
     @Resource
-    private com.ai.edu.infrastructure.persistence.repository.KgTextbookChapterRepositoryImpl textbookChapterRepo;
+    private KgTextbookChapterRepositoryImpl textbookChapterRepo;
 
     @Resource
-    private com.ai.edu.infrastructure.persistence.repository.KgChapterSectionRepositoryImpl chapterSectionRepo;
+    private KgChapterSectionRepositoryImpl chapterSectionRepo;
 
     @Resource
-    private com.ai.edu.infrastructure.persistence.repository.KgSectionKPRepositoryImpl sectionKPRepo;
+    private KgSectionKPRepositoryImpl sectionKPRepo;
 
     /**
      * 查询教材-章节关联（带缓存 + 降级）

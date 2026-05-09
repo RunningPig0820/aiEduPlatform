@@ -1,6 +1,11 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.Class;
+import com.ai.edu.domain.organization.model.valueobject.ClassStatus;
+import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
+import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
+import com.ai.edu.domain.shared.valueobject.ClassId;
+import com.ai.edu.domain.shared.valueobject.SchoolId;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,27 +17,27 @@ public interface ClassRepository {
 
     Class save(Class classEntity);
 
-    Optional<Class> findById(Long id);
+    Optional<Class> findById(ClassId id);
 
     Optional<Class> findByCode(String code);
 
-    List<Class> findBySchoolId(Long schoolId);
+    List<Class> findBySchoolId(SchoolId schoolId);
 
-    List<Class> findByGrade(String grade);
+    List<Class> findByGrade(GradeLevel grade);
 
-    List<Class> findBySchoolYear(String schoolYear);
+    List<Class> findBySchoolYear(SchoolYear schoolYear);
 
-    List<Class> findByStatus(String status);
+    List<Class> findByStatus(ClassStatus status);
 
-    List<Class> findActiveBySchoolId(Long schoolId);
+    List<Class> findActiveBySchoolId(SchoolId schoolId);
 
-    Optional<Class> findActiveById(Long id);
+    Optional<Class> findActiveById(ClassId id);
 
-    boolean existsByNameAndSchoolYear(String name, String schoolYear);
+    boolean existsByNameAndSchoolYear(String name, SchoolYear schoolYear);
 
-    int countBySchoolIdAndStatus(Long schoolId, String status);
+    int countBySchoolIdAndStatus(SchoolId schoolId, ClassStatus status);
 
-    void deleteById(Long id);
+    void deleteById(ClassId id);
 
-    void restoreById(Long id);
+    void restoreById(ClassId id);
 }

@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.repository;
 import com.ai.edu.domain.edukg.model.entity.relation.KgTextbookChapter;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgTextbookChapterMapper;
 import com.ai.edu.infrastructure.persistence.edukg.po.KgTextbookChapterPo;
+import com.ai.edu.infrastructure.persistence.edukg.respository.KgTextbookChapterRepositoryImpl;
 import com.ai.edu.infrastructure.test.TestInfrastructureConfig;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import jakarta.annotation.Resource;

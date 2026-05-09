@@ -34,17 +34,13 @@ public class OrganizationAppService {
 
     /**
      * 关联用户与学校
-     *
-     * @param schoolId 学校ID
-     * @param command  关联请求
-     * @return 关联DTO
      */
     @Transactional
     public UserSchoolAssociationDTO associateUserWithSchool(Long schoolId, AssociateUserWithSchoolCommand command) {
         log.info("关联用户与学校: schoolId={}, userId={}, role={}", schoolId, command.getUserId(), command.getRole());
 
         // 1. 检查学校是否存在
-        if (!schoolRepository.findById(schoolId).isPresent()) {
+        if (!schoolRepository.findById(SchoolId.of(schoolId)).isPresent()) {
             throw new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "学校不存在");
         }
 
@@ -67,9 +63,6 @@ public class OrganizationAppService {
 
     /**
      * 获取用户的学校列表
-     *
-     * @param userId 用户ID
-     * @return 学校列表
      */
     public List<UserSchoolAssociationDTO> getUserSchools(Long userId) {
         log.info("获取用户学校列表: userId={}", userId);
@@ -84,10 +77,6 @@ public class OrganizationAppService {
 
     /**
      * 检查用户是否有学校访问权限
-     *
-     * @param userId   用户ID
-     * @param schoolId 学校ID
-     * @return 是否有权限
      */
     public boolean checkUserSchoolPermission(Long userId, Long schoolId) {
         log.info("检查用户学校权限: userId={}, schoolId={}", userId, schoolId);
@@ -104,10 +93,6 @@ public class OrganizationAppService {
 
     /**
      * 获取用户在某学校的角色
-     *
-     * @param userId   用户ID
-     * @param schoolId 学校ID
-     * @return 角色，如果没有关联则返回null
      */
     public String getUserRoleInSchool(Long userId, Long schoolId) {
         log.info("获取用户学校角色: userId={}, schoolId={}", userId, schoolId);
@@ -122,9 +107,6 @@ public class OrganizationAppService {
 
     /**
      * 移除用户与学校的关联
-     *
-     * @param userId   用户ID
-     * @param schoolId 学校ID
      */
     @Transactional
     public void removeUserFromSchool(Long userId, Long schoolId) {
@@ -160,7 +142,7 @@ public class OrganizationAppService {
         UserSchoolAssociationDTO dto = toDTO(association);
 
         // 查询学校名称
-        schoolRepository.findById(association.getSchoolId().getValue())
+        schoolRepository.findById(association.getSchoolId())
                 .ifPresent(school -> dto.setSchoolName(school.getName()));
 
         return dto;

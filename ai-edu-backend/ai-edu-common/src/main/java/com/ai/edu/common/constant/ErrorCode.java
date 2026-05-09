@@ -61,4 +61,8 @@ public final class ErrorCode {
     public static final String SCHOOL_USER_ASSOCIATION_EXISTS = "80003";
     public static final String NO_SCHOOL_ACCESS = "80004";
     public static final String SCHOOL_USER_NOT_ADMIN = "80005";
+    public static final String CLASS_NOT_FOUND = "80006";
+    public static final String CLASS_NOT_ACTIVE = "80007";
+    public static final String STUDENT_ALREADY_IN_CLASS = "80008";
+    public static final String GRADE_NOT_FOUND = "80009";
 }

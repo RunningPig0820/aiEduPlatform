@@ -10,7 +10,6 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,14 +34,14 @@ class KgDatasourceRoutingTest {
     );
 
     private static final List<String> BUSINESS_MAPPER_CLASSES = List.of(
-            "com.ai.edu.infrastructure.persistence.mapper.UserMapper",
+            "com.ai.edu.infrastructure.persistence.user.mapper.UserMapper",
             "com.ai.edu.infrastructure.persistence.mapper.QuestionMapper",
             "com.ai.edu.infrastructure.persistence.mapper.HomeworkMapper",
             "com.ai.edu.infrastructure.persistence.mapper.ErrorBookMapper",
-            "com.ai.edu.infrastructure.persistence.mapper.ClassMapper",
-            "com.ai.edu.infrastructure.persistence.mapper.SchoolMapper",
-            "com.ai.edu.infrastructure.persistence.mapper.StudentClassMapper",
-            "com.ai.edu.infrastructure.persistence.mapper.TeacherClassMapper"
+            "com.ai.edu.infrastructure.persistence.organization.mapper.ClassMapper",
+            "com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper",
+            "com.ai.edu.infrastructure.persistence.organization.mapper.StudentClassMapper",
+            "com.ai.edu.infrastructure.persistence.organization.mapper.TeacherClassMapper"
     );
 
     // ==================== 6.14.1 edukg Mapper @DS("kg") ====================
@@ -104,7 +103,7 @@ class KgDatasourceRoutingTest {
                 "所有 edukg Mapper 的 @DS 值应仅为 \"kg\"");
 
         // 抽样验证业务 Mapper 无 @DS
-        Class<?> userMapper = Class.forName("com.ai.edu.infrastructure.persistence.mapper.UserMapper");
+        Class<?> userMapper = Class.forName("com.ai.edu.infrastructure.persistence.user.mapper.UserMapper");
         Class<?> questionMapper = Class.forName("com.ai.edu.infrastructure.persistence.mapper.QuestionMapper");
         assertNull(userMapper.getAnnotation(DS.class), "UserMapper 不应有 @DS 注解");
         assertNull(questionMapper.getAnnotation(DS.class), "QuestionMapper 不应有 @DS 注解");

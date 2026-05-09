@@ -1,68 +1,54 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.AccessLevel;
+import com.ai.edu.domain.organization.model.valueobject.TeacherClassStatus;
+import com.ai.edu.domain.shared.valueobject.ClassId;
+import com.ai.edu.domain.shared.valueobject.UserId;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
 /**
- * 老师-班级关联实体
+ * 教师-班级关联实体
  */
-@TableName("t_teacher_class")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TeacherClass {
 
-    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
-
-    @TableField("teacher_id")
-    private Long teacherId;
-
-    @TableField("class_id")
-    private Long classId;
-
-    @TableField("subject")
+    private UserId teacherId;
+    private ClassId classId;
     private String subject;
-
-    @TableField("is_head_teacher")
-    private Boolean headTeacher = false;
-
-    @TableField("start_date")
+    private boolean headTeacher;
     private LocalDate startDate;
-
-    @TableField("end_date")
     private LocalDate endDate;
+    private TeacherClassStatus status;
+    private Long createdBy;
+    private Long modifiedBy;
+    private boolean deleted;
 
-    @TableField("status")
-    private String status = "ACTIVE";
+    protected TeacherClass() {}
 
-    @TableField("created_by")
-    private Long createdBy = 0L;
-
-    @TableField("modified_by")
-    private Long modifiedBy = 0L;
-
-    @TableField("is_deleted")
-    private Boolean deleted = false;
-
-    public static TeacherClass create(Long teacherId, Long classId, String subject) {
+    public static TeacherClass create(UserId teacherId, ClassId classId, String subject) {
         TeacherClass tc = new TeacherClass();
         tc.teacherId = teacherId;
         tc.classId = classId;
         tc.subject = subject;
         tc.startDate = LocalDate.now();
+        tc.status = TeacherClassStatus.active();
+        tc.headTeacher = false;
+        tc.createdBy = 0L;
+        tc.modifiedBy = 0L;
+        tc.deleted = false;
         return tc;
     }
 
-    public static TeacherClass createAsHeadTeacher(Long teacherId, Long classId, String subject) {
+    public static TeacherClass createAsHeadTeacher(UserId teacherId, ClassId classId, String subject) {
         TeacherClass tc = create(teacherId, classId, subject);
         tc.headTeacher = true;
         return tc;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public void assignAsHeadTeacher() {
@@ -74,12 +60,12 @@ public class TeacherClass {
     }
 
     public void deactivate() {
-        this.status = "INACTIVE";
+        this.status = TeacherClassStatus.inactive();
         this.endDate = LocalDate.now();
     }
 
     public void activate() {
-        this.status = "ACTIVE";
+        this.status = TeacherClassStatus.active();
     }
 
     public void delete() {
@@ -91,10 +77,26 @@ public class TeacherClass {
     }
 
     public boolean isActive() {
-        return "ACTIVE".equals(status);
+        return status != null && status.isActive();
     }
 
     public boolean isHeadTeacher() {
-        return Boolean.TRUE.equals(headTeacher);
+        return headTeacher;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public String getStatusValue() {
+        return status != null ? status.getValue() : null;
+    }
+
+    public Long getTeacherIdValue() {
+        return teacherId != null ? teacherId.getValue() : null;
+    }
+
+    public Long getClassIdValue() {
+        return classId != null ? classId.getValue() : null;
     }
 }

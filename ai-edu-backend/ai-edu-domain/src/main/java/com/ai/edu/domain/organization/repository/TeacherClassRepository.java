@@ -1,12 +1,15 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.TeacherClass;
+import com.ai.edu.domain.organization.model.valueobject.TeacherClassStatus;
+import com.ai.edu.domain.shared.valueobject.ClassId;
+import com.ai.edu.domain.shared.valueobject.UserId;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * 老师-班级关联仓储接口
+ * 教师-班级关联仓储接口
  */
 public interface TeacherClassRepository {
 
@@ -14,29 +17,29 @@ public interface TeacherClassRepository {
 
     Optional<TeacherClass> findById(Long id);
 
-    Optional<TeacherClass> findByTeacherIdAndClassId(Long teacherId, Long classId);
+    Optional<TeacherClass> findByTeacherIdAndClassId(UserId teacherId, ClassId classId);
 
-    List<TeacherClass> findByClassId(Long classId);
+    List<TeacherClass> findByClassId(ClassId classId);
 
-    List<TeacherClass> findActiveByClassId(Long classId);
+    List<TeacherClass> findActiveByClassId(ClassId classId);
 
-    List<TeacherClass> findByTeacherId(Long teacherId);
+    List<TeacherClass> findByTeacherId(UserId teacherId);
 
-    List<TeacherClass> findActiveByTeacherId(Long teacherId);
+    List<TeacherClass> findActiveByTeacherId(UserId teacherId);
 
-    Optional<TeacherClass> findHeadTeacherByClassId(Long classId);
+    Optional<TeacherClass> findHeadTeacherByClassId(ClassId classId);
 
-    List<TeacherClass> findByTeacherIdAndSubject(Long teacherId, String subject);
+    List<TeacherClass> findByTeacherIdAndSubject(UserId teacherId, String subject);
 
-    boolean existsByTeacherIdAndClassId(Long teacherId, Long classId);
+    boolean existsByTeacherIdAndClassId(UserId teacherId, ClassId classId);
 
-    boolean existsHeadTeacherByClassId(Long classId);
+    boolean existsHeadTeacherByClassId(ClassId classId);
 
-    int countByClassIdAndStatus(Long classId, String status);
+    int countByClassIdAndStatus(ClassId classId, TeacherClassStatus status);
 
     void deleteById(Long id);
 
-    void deleteByTeacherId(Long teacherId);
+    void deleteByTeacherId(UserId teacherId);
 
-    void deleteByClassId(Long classId);
+    void deleteByClassId(ClassId classId);
 }

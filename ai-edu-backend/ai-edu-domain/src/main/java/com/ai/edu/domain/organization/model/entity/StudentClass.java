@@ -1,78 +1,69 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.AccessLevel;
+import com.ai.edu.domain.organization.model.valueobject.StudentClassStatus;
+import com.ai.edu.domain.shared.valueobject.ClassId;
+import com.ai.edu.domain.shared.valueobject.UserId;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
 /**
  * 学生-班级关联实体
  */
-@TableName("t_student_class")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudentClass {
 
-    @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
-
-    @TableField("student_id")
-    private Long studentId;
-
-    @TableField("class_id")
-    private Long classId;
-
-    @TableField("student_no")
+    private UserId studentId;
+    private ClassId classId;
     private String studentNo;
-
-    @TableField("join_date")
     private LocalDate joinDate;
-
-    @TableField("leave_date")
     private LocalDate leaveDate;
+    private StudentClassStatus status;
+    private Long createdBy;
+    private Long modifiedBy;
+    private boolean deleted;
 
-    @TableField("status")
-    private String status = "ACTIVE";
+    protected StudentClass() {}
 
-    @TableField("created_by")
-    private Long createdBy = 0L;
-
-    @TableField("modified_by")
-    private Long modifiedBy = 0L;
-
-    @TableField("is_deleted")
-    private Boolean deleted = false;
-
-    public static StudentClass create(Long studentId, Long classId) {
+    public static StudentClass create(UserId studentId, ClassId classId) {
         StudentClass sc = new StudentClass();
         sc.studentId = studentId;
         sc.classId = classId;
         sc.joinDate = LocalDate.now();
+        sc.status = StudentClassStatus.active();
+        sc.createdBy = 0L;
+        sc.modifiedBy = 0L;
+        sc.deleted = false;
         return sc;
     }
 
-    public static StudentClass createWithNo(Long studentId, Long classId, String studentNo) {
+    public static StudentClass createWithNo(UserId studentId, ClassId classId, String studentNo) {
         StudentClass sc = create(studentId, classId);
         sc.studentNo = studentNo;
         return sc;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setStudentNo(String studentNo) {
+        this.studentNo = studentNo;
+    }
+
     public void transfer() {
-        this.status = "TRANSFERRED";
+        this.status = StudentClassStatus.transferred();
         this.leaveDate = LocalDate.now();
     }
 
     public void graduate() {
-        this.status = "GRADUATED";
+        this.status = StudentClassStatus.graduated();
         this.leaveDate = LocalDate.now();
     }
 
     public void activate() {
-        this.status = "ACTIVE";
+        this.status = StudentClassStatus.active();
     }
 
     public void delete() {
@@ -84,6 +75,30 @@ public class StudentClass {
     }
 
     public boolean isActive() {
-        return "ACTIVE".equals(status);
+        return status != null && status.isActive();
+    }
+
+    public boolean isGraduated() {
+        return status != null && status.isGraduated();
+    }
+
+    public boolean isTransferred() {
+        return status != null && status.isTransferred();
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public String getStatusValue() {
+        return status != null ? status.getValue() : null;
+    }
+
+    public Long getStudentIdValue() {
+        return studentId != null ? studentId.getValue() : null;
+    }
+
+    public Long getClassIdValue() {
+        return classId != null ? classId.getValue() : null;
     }
 }
