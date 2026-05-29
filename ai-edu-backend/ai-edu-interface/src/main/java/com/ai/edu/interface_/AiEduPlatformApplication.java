@@ -15,6 +15,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 @EnableMethodSecurity
 @MapperScan({
     "com.ai.edu.infrastructure.persistence.mapper",
+    "com.ai.edu.infrastructure.persistence.user.mapper",
+    "com.ai.edu.infrastructure.persistence.organization.mapper",
     "com.ai.edu.infrastructure.persistence.edukg.mapper"
 })
 @ComponentScan(basePackages = "com.ai.edu")

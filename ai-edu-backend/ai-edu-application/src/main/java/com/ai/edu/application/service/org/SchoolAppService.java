@@ -48,20 +48,11 @@ public class SchoolAppService {
                 .map(SchoolStage::of)
                 .collect(Collectors.toList());
 
-        // 3. 创建聚合根
-        SchoolOrganizationAggregate aggregate = SchoolOrganizationAggregate.create(
-                command.getName(),
-                command.getIconUrl(),
-                institutionalType,
-                stages
-        );
-
-        // 4. 保存（使用现有School实体作为持久化载体）
+        // 3. 保存（使用现有School实体作为持久化载体）
         School school = School.create(command.getName(), null, institutionalType);
         School savedSchool = schoolRepository.save(school);
 
         log.info("学校创建成功: id={}, name={}", savedSchool.getIdValue(), savedSchool.getName());
-
         return toDTO(savedSchool, command.getIconUrl(), command.getType(), command.getStages());
     }
 

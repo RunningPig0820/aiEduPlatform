@@ -57,7 +57,7 @@ public class SchoolController {
     public ApiResponse<SchoolDTO> getSchool(@PathVariable Long id) {
         log.info("getSchool: id={}", id);
         SchoolDTO school = schoolAppService.getSchoolById(id);
-        return ApiResponse.success(school);
+        return ApiResponse.success(school );
     }
 
     /**
