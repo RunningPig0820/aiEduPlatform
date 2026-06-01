@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
  */
 @Data
 @Component
-@ConfigurationProperties(prefix = "aliyun.cos")
+@ConfigurationProperties(prefix = "qcloud.cos")
 public class CosProperties {
 
     /**
