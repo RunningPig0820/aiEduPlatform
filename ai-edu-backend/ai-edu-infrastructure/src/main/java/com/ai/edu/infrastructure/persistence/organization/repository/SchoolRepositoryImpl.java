@@ -112,8 +112,8 @@ public class SchoolRepositoryImpl implements SchoolRepository {
      */
     private School toEntity(SchoolPO po) {
         SchoolInstitutionalType institutionalType = null;
-        if (po.getInstitutionalType() != null && !po.getInstitutionalType().isEmpty()) {
-            institutionalType = SchoolInstitutionalType.of(po.getInstitutionalType());
+        if (po.getSchoolType() != null && !po.getSchoolType().isEmpty()) {
+            institutionalType = SchoolInstitutionalType.of(po.getSchoolType());
         }
 
         School school = School.create(
@@ -136,10 +136,6 @@ public class SchoolRepositoryImpl implements SchoolRepository {
 
         if (po.getIconUrl() != null) {
             school.setIconUrl(po.getIconUrl());
-        }
-
-        if (po.getStages() != null) {
-            school.setStages(po.getStages());
         }
 
         if (po.getStatus() != null) {
@@ -166,9 +162,7 @@ public class SchoolRepositoryImpl implements SchoolRepository {
         po.setDistrict(school.getDistrict());
         po.setAddress(school.getAddress());
         po.setSchoolType(school.getSchoolTypeValue());
-        po.setInstitutionalType(school.getSchoolTypeValue());
         po.setIconUrl(school.getIconUrl());
-        po.setStages(school.getStages());
         po.setStatus(school.getStatus() != null ? school.getStatus() : "ACTIVE");
         po.setDescription(school.getDescription());
         po.setDeleted(school.isDeleted());

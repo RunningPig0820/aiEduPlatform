@@ -20,7 +20,6 @@ public class School {
     private SchoolInstitutionalType schoolType;
     private String description;
     private String iconUrl;
-    private String stages;
     private String status;
     private Long createdBy;
     private Long modifiedBy;
@@ -59,10 +58,6 @@ public class School {
 
     public void setIconUrl(String iconUrl) {
         this.iconUrl = iconUrl;
-    }
-
-    public void setStages(String stages) {
-        this.stages = stages;
     }
 
     public void setStatus(String status) {

@@ -7,7 +7,6 @@ import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
-import com.ai.edu.domain.organization.model.valueobject.SchoolStage;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import jakarta.annotation.Resource;
@@ -34,7 +33,7 @@ public class SchoolAppService {
      */
     @Transactional
     public SchoolDTO createSchool(CreateSchoolCommand command) {
-        log.info("创建学校: name={}, type={}, stages={}", command.getName(), command.getType(), command.getStages());
+        log.info("创建学校: name={}, type={}", command.getName(), command.getType());
 
         // 1. 检查名称是否已存在
         if (schoolRepository.existsByName(command.getName())) {
@@ -43,9 +42,6 @@ public class SchoolAppService {
 
         // 2. 转换值对象
         SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(command.getType());
-        List<SchoolStage> stages = command.getStages().stream()
-                .map(SchoolStage::of)
-                .collect(Collectors.toList());
 
         // 3. 创建学校实体并设置属性
         School school = School.create(command.getName(), null, institutionalType);
@@ -55,20 +51,11 @@ public class SchoolAppService {
             school.setIconUrl(command.getIconUrl());
         }
 
-        // 设置 stages（转换为逗号分隔字符串）
-        if (command.getStages() != null && !command.getStages().isEmpty()) {
-            String stagesStr = command.getStages().stream()
-                    .map(SchoolStage::of)
-                    .map(SchoolStage::getValue)
-                    .collect(Collectors.joining(","));
-            school.setStages(stagesStr);
-        }
-
         // 4. 保存
         School savedSchool = schoolRepository.save(school);
 
         log.info("学校创建成功: id={}, name={}", savedSchool.getIdValue(), savedSchool.getName());
-        return toDTO(savedSchool, command.getIconUrl(), command.getType(), command.getStages());
+        return toDTO(savedSchool, command.getIconUrl(), command.getType());
     }
 
     /**
@@ -94,7 +81,7 @@ public class SchoolAppService {
 
         log.info("学校更新成功: id={}", id);
 
-        return toDTO(school, command.getIconUrl(), command.getType(), command.getStages());
+        return toDTO(school, command.getIconUrl(), command.getType());
     }
 
     /**
@@ -162,17 +149,6 @@ public class SchoolAppService {
             updatedSchool.setIconUrl(school.getIconUrl());
         }
 
-        // 设置 stages
-        if (command.getStages() != null && !command.getStages().isEmpty()) {
-            String stagesStr = command.getStages().stream()
-                    .map(SchoolStage::of)
-                    .map(SchoolStage::getValue)
-                    .collect(Collectors.joining(","));
-            updatedSchool.setStages(stagesStr);
-        } else if (school.getStages() != null) {
-            updatedSchool.setStages(school.getStages());
-        }
-
         // 保留原有地址和描述
         if (school.getProvince() != null || school.getCity() != null) {
             updatedSchool.updateAddress(school.getProvince(), school.getCity(), school.getDistrict(), school.getAddress());
@@ -188,34 +164,23 @@ public class SchoolAppService {
      * 转换为DTO
      */
     private SchoolDTO toDTO(School school) {
-        // 从实体获取 stages 列表
-        List<String> stages = null;
-        if (school.getStages() != null && !school.getStages().isEmpty()) {
-            stages = List.of(school.getStages().split(","));
-        }
-        return toDTO(school, school.getIconUrl(), school.getSchoolTypeValue(), stages);
+        return toDTO(school, school.getIconUrl(), school.getSchoolTypeValue());
     }
 
     /**
      * 转换为DTO（带完整信息）
      */
-    private SchoolDTO toDTO(School school, String iconUrl, String type, List<String> stages) {
+    private SchoolDTO toDTO(School school, String iconUrl, String type) {
         // 优先使用实体的 iconUrl
         String finalIconUrl = school.getIconUrl() != null ? school.getIconUrl() : iconUrl;
         // 优先使用实体的 type
         String finalType = school.getSchoolTypeValue() != null ? school.getSchoolTypeValue() : type;
-        // 如果 stages 参数为空，尝试从实体获取
-        List<String> finalStages = stages;
-        if (finalStages == null && school.getStages() != null && !school.getStages().isEmpty()) {
-            finalStages = List.of(school.getStages().split(","));
-        }
 
         return SchoolDTO.builder()
                 .id(school.getIdValue())
                 .name(school.getName())
                 .iconUrl(finalIconUrl)
                 .type(finalType)
-                .stages(finalStages)
                 .status(school.getStatus() != null ? school.getStatus() : "ACTIVE")
                 .build();
     }

@@ -1,7 +1,6 @@
 package com.ai.edu.application.dto.org.command;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,7 +9,6 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.List;
 
 /**
  * 更新学校请求
@@ -41,10 +39,4 @@ public class UpdateSchoolCommand implements Serializable {
      */
     @NotBlank(message = "学校类型不能为空")
     private String type;
-
-    /**
-     * 包含学段: PRIMARY, JUNIOR_HIGH, SENIOR_HIGH, UNIVERSITY
-     */
-    @NotEmpty(message = "学段不能为空")
-    private List<String> stages;
 }

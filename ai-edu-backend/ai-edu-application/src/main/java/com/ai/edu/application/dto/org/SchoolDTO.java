@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 学校响应DTO
@@ -41,11 +40,6 @@ public class SchoolDTO implements Serializable {
      * 学校性质类型: PUBLIC, PRIVATE, TRAINING_INSTITUTE
      */
     private String type;
-
-    /**
-     * 包含学段
-     */
-    private List<String> stages;
 
     /**
      * 学校状态
