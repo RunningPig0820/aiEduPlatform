@@ -41,9 +41,11 @@ public class SchoolPO {
     @TableField("icon_url")
     private String iconUrl;
 
+    //删除
     @TableField("institutional_type")
     private String institutionalType;
 
+    //删除
     @TableField("stages")
     private String stages;
 
