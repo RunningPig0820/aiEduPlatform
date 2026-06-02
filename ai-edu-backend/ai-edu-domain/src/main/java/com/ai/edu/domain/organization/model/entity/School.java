@@ -12,10 +12,8 @@ public class School {
 
     private SchoolId id;
     private String name;
-    private String code;
     private String province;
     private String city;
-    private String district;
     private String address;
     private SchoolInstitutionalType schoolType;
     private String description;
@@ -28,10 +26,9 @@ public class School {
 
     protected School() {}
 
-    public static School create(String name, String code, SchoolInstitutionalType schoolType) {
+    public static School create(String name, SchoolInstitutionalType schoolType) {
         School school = new School();
         school.name = name;
-        school.code = code;
         school.schoolType = schoolType;
         school.status = "ACTIVE";
         school.createdBy = 0L;
@@ -40,12 +37,11 @@ public class School {
         return school;
     }
 
-    public static School createWithAddress(String name, String code, SchoolInstitutionalType schoolType,
-                                           String province, String city, String district, String address) {
-        School school = create(name, code, schoolType);
+    public static School createWithAddress(String name, SchoolInstitutionalType schoolType,
+                                           String province, String city, String address) {
+        School school = create(name, schoolType);
         school.province = province;
         school.city = city;
-        school.district = district;
         school.address = address;
         return school;
     }
@@ -69,10 +65,9 @@ public class School {
         this.status = status;
     }
 
-    public void updateAddress(String province, String city, String district, String address) {
+    public void updateAddress(String province, String city, String address) {
         this.province = province;
         this.city = city;
-        this.district = district;
         this.address = address;
     }
 

@@ -25,8 +25,8 @@ public class SchoolAggregate {
         this.classes = new ArrayList<>();
     }
 
-    public static SchoolAggregate create(String name, String code, SchoolInstitutionalType schoolType) {
-        School school = School.create(name, code, schoolType);
+    public static SchoolAggregate create(String name, SchoolInstitutionalType schoolType) {
+        School school = School.create(name, schoolType);
         return new SchoolAggregate(school);
     }
 
@@ -40,10 +40,6 @@ public class SchoolAggregate {
 
     public String getName() {
         return school.getName();
-    }
-
-    public String getCode() {
-        return school.getCode();
     }
 
     public SchoolInstitutionalType getSchoolType() {
@@ -95,8 +91,8 @@ public class SchoolAggregate {
     }
 
     // 学校信息管理
-    public void updateAddress(String province, String city, String district, String address) {
-        school.updateAddress(province, city, district, address);
+    public void updateAddress(String province, String city, String address) {
+        school.updateAddress(province, city, address);
     }
 
     public void updateDescription(String description) {

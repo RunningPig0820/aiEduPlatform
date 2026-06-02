@@ -24,11 +24,6 @@ public interface SchoolRepository {
     Optional<School> findById(SchoolId id);
 
     /**
-     * 根据编码查找学校
-     */
-    Optional<School> findByCode(String code);
-
-    /**
      * 根据名称查找学校
      */
     Optional<School> findByName(String name);
@@ -52,11 +47,6 @@ public interface SchoolRepository {
      * 查找所有活跃学校
      */
     List<School> findAllActive();
-
-    /**
-     * 检查编码是否已存在
-     */
-    boolean existsByCode(String code);
 
     /**
      * 检查名称是否已存在

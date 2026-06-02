@@ -60,7 +60,7 @@ public class SchoolAppService {
         SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(command.getType());
 
         // 3. 创建学校实体并设置属性
-        School school = School.create(command.getName(), null, institutionalType);
+        School school = School.create(command.getName(),  institutionalType);
 
         // 设置 iconUrl
         if (command.getIconUrl() != null && !command.getIconUrl().isBlank()) {
@@ -208,7 +208,7 @@ public class SchoolAppService {
      */
     private School updateSchoolFields(School school, UpdateSchoolCommand command, SchoolInstitutionalType institutionalType) {
         // 创建新的School实体保留原有ID
-        School updatedSchool = School.create(command.getName(), school.getCode(), institutionalType);
+        School updatedSchool = School.create(command.getName(), institutionalType);
         if (school.getId() != null) {
             updatedSchool.setId(school.getId());
         }
@@ -229,7 +229,7 @@ public class SchoolAppService {
 
         // 保留原有地址和描述
         if (school.getProvince() != null || school.getCity() != null) {
-            updatedSchool.updateAddress(school.getProvince(), school.getCity(), school.getDistrict(), school.getAddress());
+            updatedSchool.updateAddress(school.getProvince(), school.getCity(), school.getAddress());
         }
         if (school.getDescription() != null) {
             updatedSchool.updateDescription(school.getDescription());

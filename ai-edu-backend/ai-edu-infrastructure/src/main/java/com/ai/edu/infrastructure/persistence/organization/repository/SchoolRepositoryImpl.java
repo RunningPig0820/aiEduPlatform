@@ -53,12 +53,6 @@ public class SchoolRepositoryImpl implements SchoolRepository {
     }
 
     @Override
-    public Optional<School> findByCode(String code) {
-        SchoolPO po = schoolMapper.selectByCode(code);
-        return Optional.ofNullable(po).map(this::toEntity);
-    }
-
-    @Override
     public Optional<School> findByName(String name) {
         SchoolPO po = schoolMapper.selectByName(name);
         return Optional.ofNullable(po).map(this::toEntity);
@@ -86,11 +80,6 @@ public class SchoolRepositoryImpl implements SchoolRepository {
     public List<School> findAllActive() {
         List<SchoolPO> poList = schoolMapper.selectAllActive();
         return poList.stream().map(this::toEntity).toList();
-    }
-
-    @Override
-    public boolean existsByCode(String code) {
-        return schoolMapper.existsByCode(code);
     }
 
     @Override
@@ -129,7 +118,6 @@ public class SchoolRepositoryImpl implements SchoolRepository {
 
         School school = School.create(
             po.getName(),
-            po.getCode(),
             institutionalType
         );
 
@@ -137,8 +125,8 @@ public class SchoolRepositoryImpl implements SchoolRepository {
             school.setId(SchoolId.of(po.getId()));
         }
 
-        if (po.getProvince() != null || po.getCity() != null || po.getDistrict() != null || po.getAddress() != null) {
-            school.updateAddress(po.getProvince(), po.getCity(), po.getDistrict(), po.getAddress());
+        if (po.getProvince() != null || po.getCity() != null || po.getAddress() != null) {
+            school.updateAddress(po.getProvince(), po.getCity(), po.getAddress());
         }
 
         if (po.getDescription() != null) {
@@ -171,10 +159,8 @@ public class SchoolRepositoryImpl implements SchoolRepository {
         }
 
         po.setName(school.getName());
-        po.setCode(school.getCode());
         po.setProvince(school.getProvince());
         po.setCity(school.getCity());
-        po.setDistrict(school.getDistrict());
         po.setAddress(school.getAddress());
         po.setSchoolType(school.getSchoolTypeValue());
         po.setIconUrl(school.getIconUrl());

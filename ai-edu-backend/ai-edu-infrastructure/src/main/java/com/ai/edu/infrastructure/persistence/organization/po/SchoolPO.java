@@ -20,17 +20,11 @@ public class SchoolPO {
     @TableField("name")
     private String name;
 
-    @TableField("code")
-    private String code;
-
     @TableField("province")
     private String province;
 
     @TableField("city")
     private String city;
-
-    @TableField("district")
-    private String district;
 
     @TableField("address")
     private String address;

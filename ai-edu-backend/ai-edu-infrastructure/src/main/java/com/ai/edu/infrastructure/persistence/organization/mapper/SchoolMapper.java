@@ -17,9 +17,6 @@ import java.util.List;
 @Mapper
 public interface SchoolMapper extends BaseMapper<SchoolPO> {
 
-    @Select("SELECT * FROM t_school WHERE code = #{code} AND is_deleted = false")
-    SchoolPO selectByCode(@Param("code") String code);
-
     @Select("SELECT * FROM t_school WHERE name = #{name} AND is_deleted = false")
     SchoolPO selectByName(@Param("name") String name);
 
@@ -34,9 +31,6 @@ public interface SchoolMapper extends BaseMapper<SchoolPO> {
 
     @Select("SELECT * FROM t_school")
     List<SchoolPO> selectAll();
-
-    @Select("SELECT COUNT(*) > 0 FROM t_school WHERE code = #{code} AND is_deleted = false")
-    boolean existsByCode(@Param("code") String code);
 
     @Select("SELECT COUNT(*) > 0 FROM t_school WHERE name = #{name} AND is_deleted = false")
     boolean existsByName(@Param("name") String name);
