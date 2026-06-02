@@ -3,9 +3,11 @@ package com.ai.edu.interface_.api;
 import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.file.UploadResultDTO;
+import com.ai.edu.application.dto.org.PageResult;
 import com.ai.edu.application.dto.org.command.AssociateUserWithSchoolCommand;
 import com.ai.edu.application.dto.org.command.CreateSchoolCommand;
 import com.ai.edu.application.dto.org.SchoolDTO;
+import com.ai.edu.application.dto.org.command.SchoolQueryCommand;
 import com.ai.edu.application.dto.org.command.UpdateSchoolCommand;
 import com.ai.edu.application.dto.org.UserSchoolAssociationDTO;
 import com.ai.edu.application.service.file.FileUploadAppService;
@@ -65,18 +67,15 @@ public class SchoolController {
     }
 
     /**
-     * 获取学校列表
+     * 分页查询学校列表
      */
-    @GetMapping("/list")
-    public ApiResponse<List<SchoolDTO>> listSchools(@RequestParam(required = false) String type) {
-        log.info("listSchools: type={}", type);
-        List<SchoolDTO> schools;
-        if (type != null && !type.isBlank()) {
-            schools = schoolAppService.listSchoolsByType(type);
-        } else {
-            schools = schoolAppService.listSchools();
-        }
-        return ApiResponse.success(schools);
+    @PostMapping("/page")
+    public ApiResponse<PageResult<SchoolDTO>> pageSchools(@RequestBody SchoolQueryCommand query) {
+        log.info("listSchools: id={}, name={}, type={}, pageNum={}, pageSize={}",
+                query.getId(), query.getName(), query.getType(), query.getPageNum(), query.getPageSize());
+
+        PageResult<SchoolDTO> result = schoolAppService.querySchools(query);
+        return ApiResponse.success(result);
     }
 
     /**

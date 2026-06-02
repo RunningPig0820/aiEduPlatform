@@ -21,6 +21,12 @@
             <artifactId>ai-edu-domain</artifactId>
         </dependency>
 
+        <!-- Infrastructure (用于分页查询 Mapper) -->
+        <dependency>
+            <groupId>com.ai.edu</groupId>
+            <artifactId>ai-edu-infrastructure</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

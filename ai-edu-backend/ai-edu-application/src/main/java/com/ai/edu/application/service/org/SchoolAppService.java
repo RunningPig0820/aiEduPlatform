@@ -1,8 +1,10 @@
 package com.ai.edu.application.service.org;
 
 import cn.hutool.json.JSONUtil;
+import com.ai.edu.application.dto.org.PageResult;
 import com.ai.edu.application.dto.org.command.CreateSchoolCommand;
 import com.ai.edu.application.dto.org.SchoolDTO;
+import com.ai.edu.application.dto.org.command.SchoolQueryCommand;
 import com.ai.edu.application.dto.org.command.UpdateSchoolCommand;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -10,7 +12,11 @@ import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
+import com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper;
+import com.ai.edu.infrastructure.persistence.organization.po.SchoolPO;
 import com.baomidou.dynamic.datasource.annotation.DS;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,6 +39,9 @@ public class SchoolAppService {
 
     @Resource
     private SchoolRepository schoolRepository;
+
+    @Resource
+    private SchoolMapper schoolMapper;
 
     /**
      * 创建学校
@@ -107,6 +116,54 @@ public class SchoolAppService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "学校不存在"));
 
         return toDTO(school);
+    }
+
+    /**
+     * 分页查询学校列表
+     */
+    @DS("org")
+    public PageResult<SchoolDTO> querySchools(SchoolQueryCommand query) {
+        log.info("分页查询学校: id={}, name={}, type={}, pageNum={}, pageSize={}",
+                query.getId(), query.getName(), query.getType(), query.getPageNum(), query.getPageSize());
+
+        // 构建查询条件
+        LambdaQueryWrapper<SchoolPO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SchoolPO::getDeleted, false);  // 未删除
+
+        // ID 精确查询
+        if (query.getId() != null) {
+            wrapper.eq(SchoolPO::getId, query.getId());
+        }
+
+        // 名称模糊查询
+        if (query.getName() != null && !query.getName().isBlank()) {
+            wrapper.like(SchoolPO::getName, query.getName());
+        }
+
+        // 类型查询
+        if (query.getType() != null && !query.getType().isBlank()) {
+            wrapper.eq(SchoolPO::getSchoolType, query.getType());
+        }
+
+        // 按创建时间倒序
+        wrapper.orderByDesc(SchoolPO::getCreatedAt);
+
+        // 分页查询
+        Page<SchoolPO> page = new Page<>(query.getPageNum(), query.getPageSize());
+        Page<SchoolPO> result = schoolMapper.selectPage(page, wrapper);
+
+        // 转换结果
+        List<SchoolDTO> list = result.getRecords().stream()
+                .map(this::poToDTO)
+                .collect(Collectors.toList());
+
+        return PageResult.<SchoolDTO>builder()
+                .list(list)
+                .total(result.getTotal())
+                .pageNum((int) result.getCurrent())
+                .pageSize((int) result.getSize())
+                .pages((int) result.getPages())
+                .build();
     }
 
     /**
@@ -198,6 +255,28 @@ public class SchoolAppService {
                 .type(school.getSchoolTypeValue())
                 .stages(stages)
                 .status(school.getStatus() != null ? school.getStatus() : "ACTIVE")
+                .build();
+    }
+
+    /**
+     * PO 转换为DTO（包含创建时间）
+     */
+    private SchoolDTO poToDTO(SchoolPO po) {
+        // 解析 stages JSON 字符串为列表
+        List<String> stages = null;
+        if (po.getStages() != null && !po.getStages().isEmpty()) {
+            stages = JSONUtil.toList(po.getStages(), String.class);
+        }
+
+        return SchoolDTO.builder()
+                .id(po.getId())
+                .name(po.getName())
+                .iconUrl(po.getIconUrl())
+                .type(po.getSchoolType())
+                .stages(stages)
+                .status(po.getStatus() != null ? po.getStatus() : "ACTIVE")
+                .createdAt(po.getCreatedAt())
+                .updatedAt(po.getUpdatedAt())
                 .build();
     }
 }
