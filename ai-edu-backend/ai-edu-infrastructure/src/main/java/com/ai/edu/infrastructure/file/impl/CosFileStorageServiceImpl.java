@@ -1,5 +1,8 @@
 package com.ai.edu.infrastructure.file.impl;
 
+import com.ai.edu.common.exception.BusinessException;
+import com.ai.edu.domain.shared.service.FileStorageService;
+import com.ai.edu.infrastructure.config.CosProperties;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
@@ -8,11 +11,7 @@ import com.qcloud.cos.http.HttpProtocol;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
 import com.qcloud.cos.region.Region;
-import com.ai.edu.common.exception.BusinessException;
-import com.ai.edu.domain.shared.service.FileStorageService;
-import com.ai.edu.infrastructure.config.CosProperties;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +25,10 @@ import java.util.UUID;
 @Service
 public class CosFileStorageServiceImpl implements FileStorageService {
 
-    private final CosProperties cosProperties;
-    private COSClient cosClient;
+    @Resource
+    private CosProperties cosProperties;
 
-    public CosFileStorageServiceImpl(CosProperties cosProperties) {
-        this.cosProperties = cosProperties;
-    }
-
-    @PostConstruct
-    public void init() {
+    public COSClient createCOSClient() {
         log.info("初始化腾讯云 COS 客户端: region={}, bucket={}", cosProperties.getRegion(), cosProperties.getBucketName());
 
         // 1. 初始化用户身份信息
@@ -46,22 +40,17 @@ public class CosFileStorageServiceImpl implements FileStorageService {
         clientConfig.setHttpProtocol(HttpProtocol.https);
 
         // 3. 生成 cos 客户端
-        this.cosClient = new COSClient(cred, clientConfig);
+        return new COSClient(cred, clientConfig);
     }
 
-    @PreDestroy
-    public void destroy() {
-        if (cosClient != null) {
-            cosClient.shutdown();
-            log.info("腾讯云 COS 客户端已关闭");
-        }
-    }
 
     @Override
     public String upload(String directory, String fileName, byte[] content, String contentType) {
         // 生成唯一文件名，避免冲突
         String uniqueFileName = generateUniqueFileName(fileName);
         String objectKey = directory + "/" + uniqueFileName;
+
+        COSClient cosClient = createCOSClient();
 
         try {
             // 设置元数据
@@ -83,6 +72,8 @@ public class CosFileStorageServiceImpl implements FileStorageService {
         } catch (Exception e) {
             log.error("文件上传失败: directory={}, fileName={}", directory, fileName, e);
             throw new BusinessException("FILE_UPLOAD_FAILED", "文件上传失败: " + e.getMessage());
+        }finally {
+            cosClient.shutdown();
         }
     }
 
@@ -94,12 +85,16 @@ public class CosFileStorageServiceImpl implements FileStorageService {
             return;
         }
 
+        COSClient cosClient = createCOSClient();
+
         try {
             cosClient.deleteObject(cosProperties.getBucketName(), objectKey);
             log.info("文件删除成功: objectKey={}", objectKey);
         } catch (Exception e) {
             log.error("文件删除失败: objectKey={}", objectKey, e);
             throw new BusinessException("FILE_DELETE_FAILED", "文件删除失败: " + e.getMessage());
+        }finally {
+            cosClient.shutdown();
         }
     }
 

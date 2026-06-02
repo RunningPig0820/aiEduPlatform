@@ -40,6 +40,12 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Dynamic Datasource (用于多数据源事务) -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+        </dependency>
+
         <!-- Jakarta Validation -->
         <dependency>
             <groupId>jakarta.validation</groupId>

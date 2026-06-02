@@ -26,8 +26,8 @@ public interface SchoolMapper extends BaseMapper<SchoolPO> {
     @Select("SELECT * FROM t_school WHERE province = #{province} AND city = #{city} AND is_deleted = false")
     List<SchoolPO> selectByProvinceAndCity(@Param("province") String province, @Param("city") String city);
 
-    @Select("SELECT * FROM t_school WHERE institutional_type = #{institutionalType} AND is_deleted = false")
-    List<SchoolPO> selectByInstitutionalType(@Param("institutionalType") String institutionalType);
+    @Select("SELECT * FROM t_school WHERE school_type = #{schoolType} AND is_deleted = false")
+    List<SchoolPO> selectByInstitutionalType(@Param("schoolType") String schoolType);
 
     @Select("SELECT * FROM t_school WHERE is_deleted = false")
     List<SchoolPO> selectAllActive();

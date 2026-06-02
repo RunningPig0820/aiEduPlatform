@@ -6,6 +6,7 @@ import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper;
 import com.ai.edu.infrastructure.persistence.organization.po.SchoolPO;
+import com.baomidou.dynamic.datasource.annotation.DS;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
@@ -17,6 +18,7 @@ import java.util.Optional;
  * 实现 Entity 和 PO 的转换
  */
 @Repository
+@DS("org")
 public class SchoolRepositoryImpl implements SchoolRepository {
 
     @Resource

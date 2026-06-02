@@ -2,17 +2,20 @@ package com.ai.edu.interface_.api;
 
 import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.ApiResponse;
+import com.ai.edu.application.dto.file.UploadResultDTO;
 import com.ai.edu.application.dto.org.command.AssociateUserWithSchoolCommand;
 import com.ai.edu.application.dto.org.command.CreateSchoolCommand;
 import com.ai.edu.application.dto.org.SchoolDTO;
 import com.ai.edu.application.dto.org.command.UpdateSchoolCommand;
 import com.ai.edu.application.dto.org.UserSchoolAssociationDTO;
+import com.ai.edu.application.service.file.FileUploadAppService;
 import com.ai.edu.application.service.org.OrganizationAppService;
 import com.ai.edu.application.service.org.SchoolAppService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -21,19 +24,20 @@ import java.util.List;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/auth/schools")
 public class SchoolController {
-
+    
     @Resource
-    private SchoolAppService schoolAppService;
-
+    private FileUploadAppService fileUploadAppService;
     @Resource
     private OrganizationAppService organizationAppService;
+    @Resource
+    private SchoolAppService schoolAppService;
 
     /**
      * 创建学校
      */
-    @PostMapping("/schools/create")
+    @PostMapping("/create")
     public ApiResponse<SchoolDTO> createSchool(@Valid @RequestBody CreateSchoolCommand command) {
         log.info("createSchool: request={}", JSONUtil.toJsonStr(command));
         SchoolDTO school = schoolAppService.createSchool(command);
@@ -43,7 +47,7 @@ public class SchoolController {
     /**
      * 更新学校
      */
-    @PostMapping("/schools/{id}/update")
+    @PostMapping("/{id}/update")
     public ApiResponse<SchoolDTO> updateSchool(@PathVariable Long id, @Valid @RequestBody UpdateSchoolCommand command) {
         log.info("updateSchool: id={}, request={}", id, JSONUtil.toJsonStr(command));
         SchoolDTO school = schoolAppService.updateSchool(id, command);
@@ -53,7 +57,7 @@ public class SchoolController {
     /**
      * 获取学校详情
      */
-    @GetMapping("/schools/{id}")
+    @GetMapping("/{id}")
     public ApiResponse<SchoolDTO> getSchool(@PathVariable Long id) {
         log.info("getSchool: id={}", id);
         SchoolDTO school = schoolAppService.getSchoolById(id);
@@ -63,7 +67,7 @@ public class SchoolController {
     /**
      * 获取学校列表
      */
-    @GetMapping("/schools/list")
+    @GetMapping("/list")
     public ApiResponse<List<SchoolDTO>> listSchools(@RequestParam(required = false) String type) {
         log.info("listSchools: type={}", type);
         List<SchoolDTO> schools;
@@ -78,17 +82,34 @@ public class SchoolController {
     /**
      * 删除学校
      */
-    @PostMapping("/schools/{id}/delete")
+    @PostMapping("/{id}/delete")
     public ApiResponse<Void> deleteSchool(@PathVariable Long id) {
         log.info("deleteSchool: id={}", id);
         schoolAppService.deleteSchool(id);
         return ApiResponse.success(null);
     }
 
+
+    /**
+     * 上传学校头像
+     *
+     * @param schoolId 学校ID
+     * @param file     图片文件（jpg/png，最大5MB）
+     * @return 上传结果，包含图片URL
+     */
+    @PostMapping("/{schoolId}/avatar")
+    public ApiResponse<UploadResultDTO> uploadSchoolAvatar(
+            @PathVariable Long schoolId,
+            @RequestParam("file") MultipartFile file) {
+        log.info("uploadSchoolAvatar: schoolId={}, fileName={}", schoolId, file.getOriginalFilename());
+        UploadResultDTO result = fileUploadAppService.uploadSchoolAvatar(schoolId, file);
+        return ApiResponse.success(result);
+    }
+
     /**
      * 关联用户与学校
      */
-    @PostMapping("/schools/{schoolId}/users/add")
+    @PostMapping("/{schoolId}/users/add")
     public ApiResponse<UserSchoolAssociationDTO> associateUserWithSchool(
             @PathVariable Long schoolId,
             @Valid @RequestBody AssociateUserWithSchoolCommand command) {
@@ -110,7 +131,7 @@ public class SchoolController {
     /**
      * 移除用户与学校的关联
      */
-    @PostMapping("/schools/{schoolId}/users/{userId}/remove")
+    @PostMapping("/{schoolId}/users/{userId}/remove")
     public ApiResponse<Void> removeUserFromSchool(
             @PathVariable Long schoolId,
             @PathVariable Long userId) {
@@ -122,7 +143,7 @@ public class SchoolController {
     /**
      * 检查用户学校权限
      */
-    @GetMapping("/schools/{schoolId}/users/{userId}/check")
+    @GetMapping("/{schoolId}/users/{userId}/check")
     public ApiResponse<Boolean> checkUserPermission(
             @PathVariable Long schoolId,
             @PathVariable Long userId) {

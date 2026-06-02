@@ -9,6 +9,7 @@ import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
+import com.baomidou.dynamic.datasource.annotation.DS;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,10 @@ import java.util.stream.Collectors;
 /**
  * 学校应用服务
  * 处理学校组织的创建、更新、查询等用例
+ *
+ * 多数据源事务处理：
+ * @DS("org") - 在方法执行前切换到 org 数据源
+ * @Transactional - 在已切换的数据源上开启事务
  */
 @Slf4j
 @Service
@@ -31,6 +36,7 @@ public class SchoolAppService {
     /**
      * 创建学校
      */
+    @DS("org")
     @Transactional
     public SchoolDTO createSchool(CreateSchoolCommand command) {
         log.info("创建学校: name={}, type={}", command.getName(), command.getType());
@@ -61,6 +67,7 @@ public class SchoolAppService {
     /**
      * 更新学校
      */
+    @DS("org")
     @Transactional
     public SchoolDTO updateSchool(Long id, UpdateSchoolCommand command) {
         log.info("更新学校: id={}, name={}", id, command.getName());
@@ -124,6 +131,7 @@ public class SchoolAppService {
     /**
      * 删除学校
      */
+    @DS("org")
     @Transactional
     public void deleteSchool(Long id) {
         log.info("删除学校: id={}", id);
