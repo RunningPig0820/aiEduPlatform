@@ -1,5 +1,6 @@
 package com.ai.edu.application.service.org;
 
+import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.org.command.CreateSchoolCommand;
 import com.ai.edu.application.dto.org.SchoolDTO;
 import com.ai.edu.application.dto.org.command.UpdateSchoolCommand;
@@ -39,7 +40,7 @@ public class SchoolAppService {
     @DS("org")
     @Transactional
     public SchoolDTO createSchool(CreateSchoolCommand command) {
-        log.info("创建学校: name={}, type={}", command.getName(), command.getType());
+        log.info("创建学校: name={}, type={}, stages={}", command.getName(), command.getType(), command.getStages());
 
         // 1. 检查名称是否已存在
         if (schoolRepository.existsByName(command.getName())) {
@@ -57,11 +58,16 @@ public class SchoolAppService {
             school.setIconUrl(command.getIconUrl());
         }
 
+        // 设置 stages（转换为 JSON 字符串）
+        if (command.getStages() != null && !command.getStages().isEmpty()) {
+            school.setStages(JSONUtil.toJsonStr(command.getStages()));
+        }
+
         // 4. 保存
         School savedSchool = schoolRepository.save(school);
 
         log.info("学校创建成功: id={}, name={}", savedSchool.getIdValue(), savedSchool.getName());
-        return toDTO(savedSchool, command.getIconUrl(), command.getType());
+        return toDTO(savedSchool);
     }
 
     /**
@@ -70,7 +76,7 @@ public class SchoolAppService {
     @DS("org")
     @Transactional
     public SchoolDTO updateSchool(Long id, UpdateSchoolCommand command) {
-        log.info("更新学校: id={}, name={}", id, command.getName());
+        log.info("更新学校: id={}, name={}, stages={}", id, command.getName(), command.getStages());
 
         // 1. 查找学校
         School school = schoolRepository.findById(SchoolId.of(id))
@@ -88,7 +94,7 @@ public class SchoolAppService {
 
         log.info("学校更新成功: id={}", id);
 
-        return toDTO(school, command.getIconUrl(), command.getType());
+        return toDTO(school);
     }
 
     /**
@@ -157,6 +163,13 @@ public class SchoolAppService {
             updatedSchool.setIconUrl(school.getIconUrl());
         }
 
+        // 设置 stages
+        if (command.getStages() != null && !command.getStages().isEmpty()) {
+            updatedSchool.setStages(JSONUtil.toJsonStr(command.getStages()));
+        } else if (school.getStages() != null) {
+            updatedSchool.setStages(school.getStages());
+        }
+
         // 保留原有地址和描述
         if (school.getProvince() != null || school.getCity() != null) {
             updatedSchool.updateAddress(school.getProvince(), school.getCity(), school.getDistrict(), school.getAddress());
@@ -172,23 +185,18 @@ public class SchoolAppService {
      * 转换为DTO
      */
     private SchoolDTO toDTO(School school) {
-        return toDTO(school, school.getIconUrl(), school.getSchoolTypeValue());
-    }
-
-    /**
-     * 转换为DTO（带完整信息）
-     */
-    private SchoolDTO toDTO(School school, String iconUrl, String type) {
-        // 优先使用实体的 iconUrl
-        String finalIconUrl = school.getIconUrl() != null ? school.getIconUrl() : iconUrl;
-        // 优先使用实体的 type
-        String finalType = school.getSchoolTypeValue() != null ? school.getSchoolTypeValue() : type;
+        // 解析 stages JSON 字符串为列表
+        List<String> stages = null;
+        if (school.getStages() != null && !school.getStages().isEmpty()) {
+            stages = JSONUtil.toList(school.getStages(), String.class);
+        }
 
         return SchoolDTO.builder()
                 .id(school.getIdValue())
                 .name(school.getName())
-                .iconUrl(finalIconUrl)
-                .type(finalType)
+                .iconUrl(school.getIconUrl())
+                .type(school.getSchoolTypeValue())
+                .stages(stages)
                 .status(school.getStatus() != null ? school.getStatus() : "ACTIVE")
                 .build();
     }

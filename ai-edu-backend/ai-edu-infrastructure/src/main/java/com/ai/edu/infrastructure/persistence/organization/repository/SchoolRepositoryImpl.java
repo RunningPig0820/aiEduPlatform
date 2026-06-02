@@ -7,7 +7,9 @@ import com.ai.edu.domain.shared.valueobject.SchoolId;
 import com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper;
 import com.ai.edu.infrastructure.persistence.organization.po.SchoolPO;
 import com.baomidou.dynamic.datasource.annotation.DS;
+import com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -17,6 +19,7 @@ import java.util.Optional;
  * 学校仓储实现
  * 实现 Entity 和 PO 的转换
  */
+@Slf4j
 @Repository
 @DS("org")
 public class SchoolRepositoryImpl implements SchoolRepository {
@@ -26,7 +29,13 @@ public class SchoolRepositoryImpl implements SchoolRepository {
 
     @Override
     public School save(School school) {
+        // 调试：打印当前数据源
+        String currentDs = DynamicDataSourceContextHolder.peek();
+        log.info("当前数据源: {}", currentDs);
+
         SchoolPO po = toPO(school);
+        log.info("准备插入 SchoolPO: name={}, schoolType={}, status={}, iconUrl={}",
+                po.getName(), po.getSchoolType(), po.getStatus(), po.getIconUrl());
 
         if (school.getId() == null) {
             schoolMapper.insert(po);
@@ -140,6 +149,10 @@ public class SchoolRepositoryImpl implements SchoolRepository {
             school.setIconUrl(po.getIconUrl());
         }
 
+        if (po.getStages() != null) {
+            school.setStages(po.getStages());
+        }
+
         if (po.getStatus() != null) {
             school.setStatus(po.getStatus());
         }
@@ -165,6 +178,7 @@ public class SchoolRepositoryImpl implements SchoolRepository {
         po.setAddress(school.getAddress());
         po.setSchoolType(school.getSchoolTypeValue());
         po.setIconUrl(school.getIconUrl());
+        po.setStages(school.getStages());
         po.setStatus(school.getStatus() != null ? school.getStatus() : "ACTIVE");
         po.setDescription(school.getDescription());
         po.setDeleted(school.isDeleted());

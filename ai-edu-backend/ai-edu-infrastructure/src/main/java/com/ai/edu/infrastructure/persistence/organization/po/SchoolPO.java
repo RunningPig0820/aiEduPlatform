@@ -41,6 +41,9 @@ public class SchoolPO {
     @TableField("icon_url")
     private String iconUrl;
 
+    @TableField("stages")
+    private String stages;
+
     @TableField("status")
     private String status;
 

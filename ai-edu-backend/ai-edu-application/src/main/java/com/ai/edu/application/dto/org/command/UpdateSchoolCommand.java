@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 更新学校请求
@@ -35,8 +36,13 @@ public class UpdateSchoolCommand implements Serializable {
     private String iconUrl;
 
     /**
-     * 学校性质类型: PUBLIC, PRIVATE, TRAINING_INSTITUTE
+     * 学校类型: KINDERGARTEN, PRIMARY, JUNIOR, SENIOR, COMPREHENSIVE
      */
     @NotBlank(message = "学校类型不能为空")
     private String type;
+
+    /**
+     * 包含学段: KINDERGARTEN, PRIMARY, JUNIOR, SENIOR
+     */
+    private List<String> stages;
 }

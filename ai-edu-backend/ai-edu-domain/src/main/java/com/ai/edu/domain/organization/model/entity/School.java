@@ -20,6 +20,7 @@ public class School {
     private SchoolInstitutionalType schoolType;
     private String description;
     private String iconUrl;
+    private String stages;
     private String status;
     private Long createdBy;
     private Long modifiedBy;
@@ -60,6 +61,10 @@ public class School {
         this.iconUrl = iconUrl;
     }
 
+    public void setStages(String stages) {
+        this.stages = stages;
+    }
+
     public void setStatus(String status) {
         this.status = status;
     }
@@ -87,16 +92,24 @@ public class School {
         this.modifiedBy = modifiedBy;
     }
 
-    public boolean isPublic() {
-        return schoolType != null && schoolType.isPublic();
+    public boolean isKindergarten() {
+        return schoolType != null && schoolType.isKindergarten();
     }
 
-    public boolean isPrivate() {
-        return schoolType != null && schoolType.isPrivate();
+    public boolean isPrimary() {
+        return schoolType != null && schoolType.isPrimary();
     }
 
-    public boolean isTrainingInstitute() {
-        return schoolType != null && schoolType.isTrainingInstitute();
+    public boolean isJunior() {
+        return schoolType != null && schoolType.isJunior();
+    }
+
+    public boolean isSenior() {
+        return schoolType != null && schoolType.isSenior();
+    }
+
+    public boolean isComprehensive() {
+        return schoolType != null && schoolType.isComprehensive();
     }
 
     public boolean isActive() {

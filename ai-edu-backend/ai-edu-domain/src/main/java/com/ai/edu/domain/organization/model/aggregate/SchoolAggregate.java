@@ -103,15 +103,23 @@ public class SchoolAggregate {
         school.updateDescription(description);
     }
 
-    public boolean isPublic() {
-        return school.isPublic();
+    public boolean isKindergarten() {
+        return school.isKindergarten();
     }
 
-    public boolean isPrivate() {
-        return school.isPrivate();
+    public boolean isPrimary() {
+        return school.isPrimary();
     }
 
-    public boolean isTrainingInstitute() {
-        return school.isTrainingInstitute();
+    public boolean isJunior() {
+        return school.isJunior();
+    }
+
+    public boolean isSenior() {
+        return school.isSenior();
+    }
+
+    public boolean isComprehensive() {
+        return school.isComprehensive();
     }
 }

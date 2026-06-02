@@ -5,8 +5,8 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 /**
- * 学校性质类型值对象
- * 表示学校的机构性质：公立、私立、培训机构
+ * 学校类型值对象
+ * 表示学校的类型：幼儿园、小学、初中、高中、综合性学校
  */
 @Getter
 @EqualsAndHashCode
@@ -19,24 +19,38 @@ public class SchoolInstitutionalType implements ValueObject {
     }
 
     /**
-     * 公立学校
+     * 幼儿园
      */
-    public static SchoolInstitutionalType publicSchool() {
-        return new SchoolInstitutionalType("PUBLIC");
+    public static SchoolInstitutionalType kindergarten() {
+        return new SchoolInstitutionalType("KINDERGARTEN");
     }
 
     /**
-     * 私立学校
+     * 小学
      */
-    public static SchoolInstitutionalType privateSchool() {
-        return new SchoolInstitutionalType("PRIVATE");
+    public static SchoolInstitutionalType primary() {
+        return new SchoolInstitutionalType("PRIMARY");
     }
 
     /**
-     * 培训机构
+     * 初中
      */
-    public static SchoolInstitutionalType trainingInstitute() {
-        return new SchoolInstitutionalType("TRAINING_INSTITUTE");
+    public static SchoolInstitutionalType junior() {
+        return new SchoolInstitutionalType("JUNIOR");
+    }
+
+    /**
+     * 高中
+     */
+    public static SchoolInstitutionalType senior() {
+        return new SchoolInstitutionalType("SENIOR");
+    }
+
+    /**
+     * 综合性学校
+     */
+    public static SchoolInstitutionalType comprehensive() {
+        return new SchoolInstitutionalType("COMPREHENSIVE");
     }
 
     public static SchoolInstitutionalType of(String value) {
@@ -46,23 +60,33 @@ public class SchoolInstitutionalType implements ValueObject {
         return new SchoolInstitutionalType(value);
     }
 
-    public boolean isPublic() {
-        return "PUBLIC".equals(value);
+    public boolean isKindergarten() {
+        return "KINDERGARTEN".equals(value);
     }
 
-    public boolean isPrivate() {
-        return "PRIVATE".equals(value);
+    public boolean isPrimary() {
+        return "PRIMARY".equals(value);
     }
 
-    public boolean isTrainingInstitute() {
-        return "TRAINING_INSTITUTE".equals(value);
+    public boolean isJunior() {
+        return "JUNIOR".equals(value);
+    }
+
+    public boolean isSenior() {
+        return "SENIOR".equals(value);
+    }
+
+    public boolean isComprehensive() {
+        return "COMPREHENSIVE".equals(value);
     }
 
     public String getDescription() {
         return switch (value) {
-            case "PUBLIC" -> "公立学校";
-            case "PRIVATE" -> "私立学校";
-            case "TRAINING_INSTITUTE" -> "培训机构";
+            case "KINDERGARTEN" -> "幼儿园";
+            case "PRIMARY" -> "小学";
+            case "JUNIOR" -> "初中";
+            case "SENIOR" -> "高中";
+            case "COMPREHENSIVE" -> "综合性学校";
             default -> value;
         };
     }

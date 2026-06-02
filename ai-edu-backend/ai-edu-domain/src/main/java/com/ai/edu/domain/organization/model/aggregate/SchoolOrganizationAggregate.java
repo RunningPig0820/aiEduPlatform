@@ -143,24 +143,38 @@ public class SchoolOrganizationAggregate {
     }
 
     /**
-     * 检查是否为公立学校
+     * 检查是否为幼儿园
      */
-    public boolean isPublicSchool() {
-        return institutionalType != null && institutionalType.isPublic();
+    public boolean isKindergarten() {
+        return institutionalType != null && institutionalType.isKindergarten();
     }
 
     /**
-     * 检查是否为私立学校
+     * 检查是否为小学
      */
-    public boolean isPrivateSchool() {
-        return institutionalType != null && institutionalType.isPrivate();
+    public boolean isPrimary() {
+        return institutionalType != null && institutionalType.isPrimary();
     }
 
     /**
-     * 检查是否为培训机构
+     * 检查是否为初中
      */
-    public boolean isTrainingInstitute() {
-        return institutionalType != null && institutionalType.isTrainingInstitute();
+    public boolean isJunior() {
+        return institutionalType != null && institutionalType.isJunior();
+    }
+
+    /**
+     * 检查是否为高中
+     */
+    public boolean isSenior() {
+        return institutionalType != null && institutionalType.isSenior();
+    }
+
+    /**
+     * 检查是否为综合性学校
+     */
+    public boolean isComprehensive() {
+        return institutionalType != null && institutionalType.isComprehensive();
     }
 
     /**
