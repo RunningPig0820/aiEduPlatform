@@ -26,6 +26,9 @@ public class SchoolPO {
     @TableField("city")
     private String city;
 
+    @TableField("district")
+    private String district;
+
     @TableField("address")
     private String address;
 

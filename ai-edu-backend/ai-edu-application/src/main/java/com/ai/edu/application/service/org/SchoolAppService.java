@@ -10,13 +10,10 @@ import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.organization.model.valueobject.SchoolQueryParam;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
-import com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper;
-import com.ai.edu.infrastructure.persistence.organization.po.SchoolPO;
 import com.baomidou.dynamic.datasource.annotation.DS;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,9 +37,6 @@ public class SchoolAppService {
     @Resource
     private SchoolRepository schoolRepository;
 
-    @Resource
-    private SchoolMapper schoolMapper;
-
     /**
      * 创建学校
      */
@@ -59,20 +53,26 @@ public class SchoolAppService {
         // 2. 转换值对象
         SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(command.getType());
 
-        // 3. 创建学校实体并设置属性
-        School school = School.create(command.getName(),  institutionalType);
-
-        // 设置 iconUrl
-        if (command.getIconUrl() != null && !command.getIconUrl().isBlank()) {
-            school.setIconUrl(command.getIconUrl());
-        }
-
-        // 设置 stages（转换为 JSON 字符串）
+        // 3. 转换 stages 为 JSON 字符串
+        String stagesJson = null;
         if (command.getStages() != null && !command.getStages().isEmpty()) {
-            school.setStages(JSONUtil.toJsonStr(command.getStages()));
+            stagesJson = JSONUtil.toJsonStr(command.getStages());
         }
 
-        // 4. 保存
+        // 4. 创建学校实体（所有参数封装在实体中）
+        School school = School.create(
+                command.getName(),
+                institutionalType,
+                command.getIconUrl(),
+                stagesJson,
+                command.getProvince(),
+                command.getCity(),
+                command.getDistrict(),
+                command.getAddress(),
+                command.getDescription()
+        );
+
+        // 5. 保存
         School savedSchool = schoolRepository.save(school);
 
         log.info("学校创建成功: id={}, name={}", savedSchool.getIdValue(), savedSchool.getName());
@@ -96,13 +96,34 @@ public class SchoolAppService {
             throw new BusinessException(ErrorCode.SCHOOL_NAME_EXISTS, "学校名称已存在");
         }
 
-        // 3. 更新学校信息
+        // 3. 转换值对象
         SchoolInstitutionalType institutionalType = SchoolInstitutionalType.of(command.getType());
-        school = updateSchoolFields(school, command, institutionalType);
+
+        // 4. 转换 stages 为 JSON 字符串
+        String stagesJson = null;
+        if (command.getStages() != null && !command.getStages().isEmpty()) {
+            stagesJson = JSONUtil.toJsonStr(command.getStages());
+        } else if (school.getStages() != null) {
+            stagesJson = school.getStages();
+        }
+
+        // 5. 更新学校信息（所有参数封装在实体中）
+        school.update(
+                command.getName(),
+                institutionalType,
+                command.getIconUrl() != null ? command.getIconUrl() : school.getIconUrl(),
+                stagesJson,
+                command.getProvince(),
+                command.getCity(),
+                command.getDistrict(),
+                command.getAddress(),
+                command.getDescription() != null ? command.getDescription() : school.getDescription()
+        );
+
+        // 6. 保存
         schoolRepository.save(school);
 
         log.info("学校更新成功: id={}", id);
-
         return toDTO(school);
     }
 
@@ -121,48 +142,33 @@ public class SchoolAppService {
     /**
      * 分页查询学校列表
      */
-    @DS("org")
     public PageResult<SchoolDTO> querySchools(SchoolQueryCommand query) {
         log.info("分页查询学校: id={}, name={}, type={}, pageNum={}, pageSize={}",
                 query.getId(), query.getName(), query.getType(), query.getPageNum(), query.getPageSize());
 
-        // 构建查询条件
-        LambdaQueryWrapper<SchoolPO> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SchoolPO::getDeleted, false);  // 未删除
+        // 构建查询参数
+        SchoolQueryParam param = SchoolQueryParam.builder()
+                .id(query.getId())
+                .name(query.getName())
+                .type(query.getType())
+                .pageNum(query.getPageNum())
+                .pageSize(query.getPageSize())
+                .build();
 
-        // ID 精确查询
-        if (query.getId() != null) {
-            wrapper.eq(SchoolPO::getId, query.getId());
-        }
-
-        // 名称模糊查询
-        if (query.getName() != null && !query.getName().isBlank()) {
-            wrapper.like(SchoolPO::getName, query.getName());
-        }
-
-        // 类型查询
-        if (query.getType() != null && !query.getType().isBlank()) {
-            wrapper.eq(SchoolPO::getSchoolType, query.getType());
-        }
-
-        // 按创建时间倒序
-        wrapper.orderByDesc(SchoolPO::getCreatedAt);
-
-        // 分页查询
-        Page<SchoolPO> page = new Page<>(query.getPageNum(), query.getPageSize());
-        Page<SchoolPO> result = schoolMapper.selectPage(page, wrapper);
+        // 通过 Repository 查询
+        com.ai.edu.domain.shared.valueobject.PageResult<School> result = schoolRepository.queryPage(param);
 
         // 转换结果
-        List<SchoolDTO> list = result.getRecords().stream()
-                .map(this::poToDTO)
+        List<SchoolDTO> list = result.getList().stream()
+                .map(this::toDTO)
                 .collect(Collectors.toList());
 
         return PageResult.<SchoolDTO>builder()
                 .list(list)
                 .total(result.getTotal())
-                .pageNum((int) result.getCurrent())
-                .pageSize((int) result.getSize())
-                .pages((int) result.getPages())
+                .pageNum(result.getPageNum())
+                .pageSize(result.getPageSize())
+                .pages(result.getPages())
                 .build();
     }
 
@@ -204,41 +210,6 @@ public class SchoolAppService {
     // ==================== 私有方法 ====================
 
     /**
-     * 更新学校字段
-     */
-    private School updateSchoolFields(School school, UpdateSchoolCommand command, SchoolInstitutionalType institutionalType) {
-        // 创建新的School实体保留原有ID
-        School updatedSchool = School.create(command.getName(), institutionalType);
-        if (school.getId() != null) {
-            updatedSchool.setId(school.getId());
-        }
-
-        // 设置 iconUrl
-        if (command.getIconUrl() != null && !command.getIconUrl().isBlank()) {
-            updatedSchool.setIconUrl(command.getIconUrl());
-        } else if (school.getIconUrl() != null) {
-            updatedSchool.setIconUrl(school.getIconUrl());
-        }
-
-        // 设置 stages
-        if (command.getStages() != null && !command.getStages().isEmpty()) {
-            updatedSchool.setStages(JSONUtil.toJsonStr(command.getStages()));
-        } else if (school.getStages() != null) {
-            updatedSchool.setStages(school.getStages());
-        }
-
-        // 保留原有地址和描述
-        if (school.getProvince() != null || school.getCity() != null) {
-            updatedSchool.updateAddress(school.getProvince(), school.getCity(), school.getAddress());
-        }
-        if (school.getDescription() != null) {
-            updatedSchool.updateDescription(school.getDescription());
-        }
-
-        return updatedSchool;
-    }
-
-    /**
      * 转换为DTO
      */
     private SchoolDTO toDTO(School school) {
@@ -254,29 +225,15 @@ public class SchoolAppService {
                 .iconUrl(school.getIconUrl())
                 .type(school.getSchoolTypeValue())
                 .stages(stages)
-                .status(school.getStatus() != null ? school.getStatus() : "ACTIVE")
-                .build();
-    }
-
-    /**
-     * PO 转换为DTO（包含创建时间）
-     */
-    private SchoolDTO poToDTO(SchoolPO po) {
-        // 解析 stages JSON 字符串为列表
-        List<String> stages = null;
-        if (po.getStages() != null && !po.getStages().isEmpty()) {
-            stages = JSONUtil.toList(po.getStages(), String.class);
-        }
-
-        return SchoolDTO.builder()
-                .id(po.getId())
-                .name(po.getName())
-                .iconUrl(po.getIconUrl())
-                .type(po.getSchoolType())
-                .stages(stages)
-                .status(po.getStatus() != null ? po.getStatus() : "ACTIVE")
-                .createdAt(po.getCreatedAt())
-                .updatedAt(po.getUpdatedAt())
+                .province(school.getProvince())
+                .city(school.getCity())
+                .district(school.getDistrict())
+                .address(school.getAddress())
+                .description(school.getDescription())
+                .status(school.getStatusValue())
+                .statusValue(school.getStatusDescription())
+                .createdAt(school.getCreatedAt())
+                .updatedAt(school.getUpdatedAt())
                 .build();
     }
 }

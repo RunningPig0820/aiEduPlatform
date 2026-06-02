@@ -91,12 +91,11 @@ public class SchoolAggregate {
     }
 
     // 学校信息管理
-    public void updateAddress(String province, String city, String address) {
-        school.updateAddress(province, city, address);
-    }
-
-    public void updateDescription(String description) {
-        school.updateDescription(description);
+    public void update(String name, SchoolInstitutionalType schoolType,
+                       String iconUrl, String stages,
+                       String province, String city, String district, String address,
+                       String description) {
+        school.update(name, schoolType, iconUrl, stages, province, city, district, address, description);
     }
 
     public boolean isKindergarten() {
@@ -117,5 +116,17 @@ public class SchoolAggregate {
 
     public boolean isComprehensive() {
         return school.isComprehensive();
+    }
+
+    public boolean isNormal() {
+        return school.isNormal();
+    }
+
+    public boolean isArchive() {
+        return school.isArchive();
+    }
+
+    public boolean isFail() {
+        return school.isFail();
     }
 }

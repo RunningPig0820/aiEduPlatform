@@ -49,9 +49,39 @@ public class SchoolDTO implements Serializable {
     private List<String> stages;
 
     /**
+     * 省份
+     */
+    private String province;
+
+    /**
+     * 城市
+     */
+    private String city;
+
+    /**
+     * 区/县
+     */
+    private String district;
+
+    /**
+     * 详细地址
+     */
+    private String address;
+
+    /**
+     * 学校描述
+     */
+    private String description;
+
+    /**
      * 学校状态
      */
     private String status;
+
+    /**
+     * 学校状态
+     */
+    private String statusValue;
 
     /**
      * 创建时间

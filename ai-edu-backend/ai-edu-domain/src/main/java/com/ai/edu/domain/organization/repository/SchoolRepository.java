@@ -2,6 +2,8 @@ package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.organization.model.valueobject.SchoolQueryParam;
+import com.ai.edu.domain.shared.valueobject.PageResult;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 
 import java.util.List;
@@ -47,6 +49,11 @@ public interface SchoolRepository {
      * 查找所有活跃学校
      */
     List<School> findAllActive();
+
+    /**
+     * 分页查询学校
+     */
+    PageResult<School> queryPage(SchoolQueryParam param);
 
     /**
      * 检查名称是否已存在

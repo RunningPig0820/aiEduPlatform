@@ -1,8 +1,11 @@
 package com.ai.edu.domain.organization.model.entity;
 
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.organization.model.valueobject.SchoolStatus;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
+
+import java.time.LocalDateTime;
 
 /**
  * 学校实体
@@ -14,36 +17,50 @@ public class School {
     private String name;
     private String province;
     private String city;
+    private String district;
     private String address;
     private SchoolInstitutionalType schoolType;
     private String description;
     private String iconUrl;
     private String stages;
-    private String status;
+    private SchoolStatus status;
     private Long createdBy;
     private Long modifiedBy;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
     private boolean deleted;
 
     protected School() {}
 
-    public static School create(String name, SchoolInstitutionalType schoolType) {
+    /**
+     * 创建学校 - 完整参数
+     */
+    public static School create(String name, SchoolInstitutionalType schoolType,
+                                String iconUrl, String stages,
+                                String province, String city, String district, String address,
+                                String description) {
         School school = new School();
         school.name = name;
         school.schoolType = schoolType;
-        school.status = "ACTIVE";
+        school.iconUrl = iconUrl;
+        school.stages = stages;
+        school.province = province;
+        school.city = city;
+        school.district = district;
+        school.address = address;
+        school.description = description;
+        school.status = SchoolStatus.NORMAL;
         school.createdBy = 0L;
         school.modifiedBy = 0L;
         school.deleted = false;
         return school;
     }
 
-    public static School createWithAddress(String name, SchoolInstitutionalType schoolType,
-                                           String province, String city, String address) {
-        School school = create(name, schoolType);
-        school.province = province;
-        school.city = city;
-        school.address = address;
-        return school;
+    /**
+     * 创建学校 - 最简参数
+     */
+    public static School create(String name, SchoolInstitutionalType schoolType) {
+        return create(name, schoolType, null, null, null, null, null, null, null);
     }
 
     public void setId(SchoolId id) {
@@ -53,26 +70,50 @@ public class School {
         this.id = id;
     }
 
-    public void setIconUrl(String iconUrl) {
-        this.iconUrl = iconUrl;
+    /**
+     * 更新学校信息
+     */
+    public void update(String name, SchoolInstitutionalType schoolType,
+                       String iconUrl, String stages,
+                       String province, String city, String district, String address,
+                       String description) {
+        this.name = name;
+        this.schoolType = schoolType;
+        if (iconUrl != null) {
+            this.iconUrl = iconUrl;
+        }
+        if (stages != null) {
+            this.stages = stages;
+        }
+        if (province != null || city != null || district != null || address != null) {
+            this.province = province;
+            this.city = city;
+            this.district = district;
+            this.address = address;
+        }
+        if (description != null) {
+            this.description = description;
+        }
     }
 
-    public void setStages(String stages) {
-        this.stages = stages;
-    }
-
-    public void setStatus(String status) {
+    public void setStatus(SchoolStatus status) {
         this.status = status;
     }
 
-    public void updateAddress(String province, String city, String address) {
-        this.province = province;
-        this.city = city;
-        this.address = address;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
-    public void updateDescription(String description) {
-        this.description = description;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public void archive() {
+        this.status = SchoolStatus.ARCHIVE;
+    }
+
+    public void markAsFail() {
+        this.status = SchoolStatus.FAIL;
     }
 
     public void delete() {
@@ -107,8 +148,16 @@ public class School {
         return schoolType != null && schoolType.isComprehensive();
     }
 
-    public boolean isActive() {
-        return "ACTIVE".equals(status);
+    public boolean isNormal() {
+        return status == SchoolStatus.NORMAL;
+    }
+
+    public boolean isArchive() {
+        return status == SchoolStatus.ARCHIVE;
+    }
+
+    public boolean isFail() {
+        return status == SchoolStatus.FAIL;
     }
 
     public boolean isDeleted() {
@@ -121,5 +170,13 @@ public class School {
 
     public String getSchoolTypeValue() {
         return schoolType != null ? schoolType.getValue() : null;
+    }
+
+    public String getStatusValue() {
+        return status != null ? status.getValue() : null;
+    }
+
+    public String getStatusDescription() {
+        return status != null ? status.getDescription() : null;
     }
 }

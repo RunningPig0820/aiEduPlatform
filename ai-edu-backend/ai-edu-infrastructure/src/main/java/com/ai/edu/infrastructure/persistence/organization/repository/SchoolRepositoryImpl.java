@@ -2,12 +2,17 @@ package com.ai.edu.infrastructure.persistence.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
+import com.ai.edu.domain.organization.model.valueobject.SchoolQueryParam;
+import com.ai.edu.domain.organization.model.valueobject.SchoolStatus;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
+import com.ai.edu.domain.shared.valueobject.PageResult;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import com.ai.edu.infrastructure.persistence.organization.mapper.SchoolMapper;
 import com.ai.edu.infrastructure.persistence.organization.po.SchoolPO;
 import com.baomidou.dynamic.datasource.annotation.DS;
 import com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
@@ -83,6 +88,48 @@ public class SchoolRepositoryImpl implements SchoolRepository {
     }
 
     @Override
+    public PageResult<School> queryPage(SchoolQueryParam param) {
+        // 构建查询条件
+        LambdaQueryWrapper<SchoolPO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SchoolPO::getDeleted, false);  // 未删除
+
+        // ID 精确查询
+        if (param.getId() != null) {
+            wrapper.eq(SchoolPO::getId, param.getId());
+        }
+
+        // 名称模糊查询
+        if (param.getName() != null && !param.getName().isBlank()) {
+            wrapper.like(SchoolPO::getName, param.getName());
+        }
+
+        // 类型查询
+        if (param.getType() != null && !param.getType().isBlank()) {
+            wrapper.eq(SchoolPO::getSchoolType, param.getType());
+        }
+
+        // 按创建时间倒序
+        wrapper.orderByDesc(SchoolPO::getCreatedAt);
+
+        // 分页查询
+        Page<SchoolPO> page = new Page<>(param.getPageNum(), param.getPageSize());
+        Page<SchoolPO> result = schoolMapper.selectPage(page, wrapper);
+
+        // 转换结果
+        List<School> list = result.getRecords().stream()
+                .map(this::toEntity)
+                .toList();
+
+        return PageResult.<School>builder()
+                .list(list)
+                .total(result.getTotal())
+                .pageNum((int) result.getCurrent())
+                .pageSize((int) result.getSize())
+                .pages((int) result.getPages())
+                .build();
+    }
+
+    @Override
     public boolean existsByName(String name) {
         return schoolMapper.existsByName(name);
     }
@@ -116,34 +163,30 @@ public class SchoolRepositoryImpl implements SchoolRepository {
             institutionalType = SchoolInstitutionalType.of(po.getSchoolType());
         }
 
+        SchoolStatus status = SchoolStatus.NORMAL;
+        if (po.getStatus() != null && !po.getStatus().isEmpty()) {
+            status = SchoolStatus.of(po.getStatus());
+        }
+
         School school = School.create(
             po.getName(),
-            institutionalType
+            institutionalType,
+            po.getIconUrl(),
+            po.getStages(),
+            po.getProvince(),
+            po.getCity(),
+            po.getDistrict(),
+            po.getAddress(),
+            po.getDescription()
         );
 
         if (po.getId() != null) {
             school.setId(SchoolId.of(po.getId()));
         }
 
-        if (po.getProvince() != null || po.getCity() != null || po.getAddress() != null) {
-            school.updateAddress(po.getProvince(), po.getCity(), po.getAddress());
-        }
-
-        if (po.getDescription() != null) {
-            school.updateDescription(po.getDescription());
-        }
-
-        if (po.getIconUrl() != null) {
-            school.setIconUrl(po.getIconUrl());
-        }
-
-        if (po.getStages() != null) {
-            school.setStages(po.getStages());
-        }
-
-        if (po.getStatus() != null) {
-            school.setStatus(po.getStatus());
-        }
+        school.setStatus(status);
+        school.setCreatedAt(po.getCreatedAt());
+        school.setUpdatedAt(po.getUpdatedAt());
 
         return school;
     }
@@ -161,11 +204,12 @@ public class SchoolRepositoryImpl implements SchoolRepository {
         po.setName(school.getName());
         po.setProvince(school.getProvince());
         po.setCity(school.getCity());
+        po.setDistrict(school.getDistrict());
         po.setAddress(school.getAddress());
         po.setSchoolType(school.getSchoolTypeValue());
         po.setIconUrl(school.getIconUrl());
         po.setStages(school.getStages());
-        po.setStatus(school.getStatus() != null ? school.getStatus() : "ACTIVE");
+        po.setStatus(school.getStatusValue());
         po.setDescription(school.getDescription());
         po.setDeleted(school.isDeleted());
 
