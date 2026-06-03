@@ -131,3 +131,26 @@ CREATE TABLE IF NOT EXISTS t_error_book (
     created_at TIMESTAMP NOT NULL,
     last_error_at TIMESTAMP
 );
+
+-- 部门表
+CREATE TABLE IF NOT EXISTS t_department (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    school_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    parent_id BIGINT,
+    department_path VARCHAR(200),
+    sort_order INT DEFAULT 0,
+    description VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+
+-- 初始化测试学校数据
+INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (1, '测试学校', 'PRIMARY', FALSE);
+INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (2, '空学校', 'PRIMARY', FALSE);
+
+-- 索引
+CREATE INDEX idx_department_school ON t_department(school_id);
+CREATE INDEX idx_department_parent ON t_department(parent_id);
+CREATE INDEX idx_department_path ON t_department(department_path);
