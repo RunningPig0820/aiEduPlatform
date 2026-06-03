@@ -8,7 +8,7 @@ import lombok.Getter;
 @Getter
 public enum SchoolStatus {
 
-    NORMAL("NORMAL", "正常"),
+    ACTIVE("ACTIVE", "正常"),
     ARCHIVE("ARCHIVE", "归档"),
     FAIL("FAIL", "失败");
 
@@ -22,7 +22,11 @@ public enum SchoolStatus {
 
     public static SchoolStatus of(String value) {
         if (value == null || value.isBlank()) {
-            return NORMAL;
+            return ACTIVE;
+        }
+        // 兼容旧数据：NORMAL -> ACTIVE
+        if ("NORMAL".equalsIgnoreCase(value)) {
+            return ACTIVE;
         }
         for (SchoolStatus status : values()) {
             if (status.value.equalsIgnoreCase(value)) {
@@ -32,8 +36,8 @@ public enum SchoolStatus {
         throw new IllegalArgumentException("Invalid school status: " + value);
     }
 
-    public boolean isNormal() {
-        return this == NORMAL;
+    public boolean isActive() {
+        return this == ACTIVE;
     }
 
     public boolean isArchive() {

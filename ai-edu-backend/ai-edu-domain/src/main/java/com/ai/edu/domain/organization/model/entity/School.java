@@ -49,7 +49,7 @@ public class School {
         school.district = district;
         school.address = address;
         school.description = description;
-        school.status = SchoolStatus.NORMAL;
+        school.status = SchoolStatus.ACTIVE;
         school.createdBy = 0L;
         school.modifiedBy = 0L;
         school.deleted = false;
@@ -148,8 +148,8 @@ public class School {
         return schoolType != null && schoolType.isComprehensive();
     }
 
-    public boolean isNormal() {
-        return status == SchoolStatus.NORMAL;
+    public boolean isActive() {
+        return status == SchoolStatus.ACTIVE;
     }
 
     public boolean isArchive() {

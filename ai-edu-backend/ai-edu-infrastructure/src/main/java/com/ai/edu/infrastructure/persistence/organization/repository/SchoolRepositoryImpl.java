@@ -163,7 +163,7 @@ public class SchoolRepositoryImpl implements SchoolRepository {
             institutionalType = SchoolInstitutionalType.of(po.getSchoolType());
         }
 
-        SchoolStatus status = SchoolStatus.NORMAL;
+        SchoolStatus status = SchoolStatus.ACTIVE;
         if (po.getStatus() != null && !po.getStatus().isEmpty()) {
             status = SchoolStatus.of(po.getStatus());
         }

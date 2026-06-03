@@ -118,8 +118,8 @@ public class SchoolAggregate {
         return school.isComprehensive();
     }
 
-    public boolean isNormal() {
-        return school.isNormal();
+    public boolean isActive() {
+        return school.isActive();
     }
 
     public boolean isArchive() {
