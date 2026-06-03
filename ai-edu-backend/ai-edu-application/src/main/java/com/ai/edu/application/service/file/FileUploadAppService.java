@@ -43,7 +43,6 @@ public class FileUploadAppService {
     /**
      * 上传学校头像
      *
-     * @param schoolId 学校ID
      * @param file     图片文件
      * @return 上传结果
      */
@@ -75,7 +74,7 @@ public class FileUploadAppService {
                     .contentType(file.getContentType())
                     .build();
         } catch (Exception e) {
-            log.error("学校头像上传失败: schoolId={}", schoolId, e);
+            log.error("学校头像上传失败: ", e);
             throw new BusinessException("FILE_UPLOAD_FAILED", "文件上传失败: " + e.getMessage());
         }
     }

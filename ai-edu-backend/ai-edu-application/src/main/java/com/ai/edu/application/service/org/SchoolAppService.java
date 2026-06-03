@@ -63,7 +63,7 @@ public class SchoolAppService {
         School school = School.create(
                 command.getName(),
                 institutionalType,
-                command.getIconUrl(),
+                null,
                 stagesJson,
                 command.getProvince(),
                 command.getCity(),

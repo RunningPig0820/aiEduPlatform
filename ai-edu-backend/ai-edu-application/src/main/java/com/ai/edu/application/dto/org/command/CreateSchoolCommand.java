@@ -31,11 +31,6 @@ public class CreateSchoolCommand implements Serializable {
     private String name;
 
     /**
-     * 学校图标URL
-     */
-    private String iconUrl;
-
-    /**
      * 学校类型: KINDERGARTEN, PRIMARY, JUNIOR, SENIOR, COMPREHENSIVE
      */
     @NotBlank(message = "学校类型不能为空")
