@@ -150,7 +150,34 @@ CREATE TABLE IF NOT EXISTS t_department (
 INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (1, '测试学校', 'PRIMARY', FALSE);
 INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (2, '空学校', 'PRIMARY', FALSE);
 
+-- 初始化测试用户数据（用于教职工关联）
+INSERT INTO t_user (id, username, password, real_name, phone, role, enabled) VALUES
+(1, 'teacher001', 'password123', '张三', '13800138001', 'TEACHER', TRUE),
+(2, 'teacher002', 'password123', '李四', '13800138002', 'TEACHER', TRUE),
+(3, 'teacher003', 'password123', '王五', '13800138003', 'TEACHER', TRUE);
+
+-- 初始化测试部门数据
+INSERT INTO t_department (id, school_id, name, parent_id, department_path, sort_order, is_deleted) VALUES
+(1, 1, '教务处', NULL, '1', 1, FALSE),
+(2, 1, '语文教研组', 1, '1_2', 1, FALSE),
+(3, 1, '数学教研组', 1, '1_3', 2, FALSE);
+
+-- 教职工关联关系表
+CREATE TABLE IF NOT EXISTS t_org_teacher (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    school_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    department_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by BIGINT NOT NULL DEFAULT 0,
+    modified_by BIGINT NOT NULL DEFAULT 0,
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+
 -- 索引
 CREATE INDEX idx_department_school ON t_department(school_id);
 CREATE INDEX idx_department_parent ON t_department(parent_id);
 CREATE INDEX idx_department_path ON t_department(department_path);
+CREATE UNIQUE INDEX idx_org_teacher_school_user ON t_org_teacher(school_id, user_id);
+CREATE INDEX idx_org_teacher_department ON t_org_teacher(department_id);
