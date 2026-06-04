@@ -11,7 +11,7 @@ import com.ai.edu.domain.edukg.repository.KgSyncRecordRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookChapterRepository;
 import com.ai.edu.domain.edukg.repository.KgTextbookRepository;
 import com.ai.edu.domain.shared.service.RedisService;
-import com.ai.edu.interface_.AiEduPlatformApplication;
+import com.ai.edu.interfaces.AiEduPlatformApplication;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;

@@ -40,7 +40,7 @@ com.ai.edu.application.edukg/
 ├── KgSyncAppService.java            # 同步编排
 └── KgNavigationAppService.java      # 导航查询编排
 
-com.ai.edu.interface_.api/
+com.ai.edu.interfaces.api/
 └── KnowledgeGraphController.java    # /api/kg/**
 
 com.ai.edu.infrastructure.edukg/

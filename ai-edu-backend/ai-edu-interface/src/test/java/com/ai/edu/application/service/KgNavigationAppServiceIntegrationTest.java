@@ -8,7 +8,7 @@ import com.ai.edu.application.service.kg.KgNavigationAppService;
 import com.ai.edu.application.service.kg.KgSyncAppService;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.repository.*;
-import com.ai.edu.interface_.AiEduPlatformApplication;
+import com.ai.edu.interfaces.AiEduPlatformApplication;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;

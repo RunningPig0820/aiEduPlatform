@@ -33,7 +33,7 @@
 
 ## 5. Interface 层 - REST 控制器
 
-- [x] 5.1 创建 LlmApiController (com.ai.edu.interface_.api)
+- [x] 5.1 创建 LlmApiController (com.ai.edu.interfaces.api)
 - [x] 5.2 实现 POST /api/llm/chat - 同步对话接口
 - [x] 5.3 实现 POST /api/llm/chat/stream - 流式对话接口 (SSE)
 - [x] 5.4 实现 GET /api/llm/allowed-models - 获取允许调用的模型列表

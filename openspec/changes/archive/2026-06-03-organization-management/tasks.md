@@ -46,7 +46,7 @@
 
 ## 6. Interface Layer - REST API
 
-- [x] 6.1 Create `SchoolController` in `com.ai.edu.interface_.api` — ✓ Created `SchoolController.java`
+- [x] 6.1 Create `SchoolController` in `com.ai.edu.interfaces.api` — ✓ Created `SchoolController.java`
 - [x] 6.2 Implement `POST /api/schools` - create school endpoint — ✓ Implemented `createSchool()`
 - [x] 6.3 Implement `PUT /api/schools/{id}` - update school endpoint — ✓ Implemented `updateSchool()`
 - [x] 6.4 Implement `GET /api/schools/{id}` - get school details endpoint — ✓ Implemented `getSchool()`

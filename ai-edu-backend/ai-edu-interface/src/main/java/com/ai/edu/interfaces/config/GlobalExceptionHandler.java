@@ -1,0 +1,76 @@
+package com.ai.edu.interfaces.config;
+
+import com.ai.edu.common.exception.BusinessException;
+import com.ai.edu.common.exception.EntityNotFoundException;
+import com.ai.edu.common.exception.LlmGatewayException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * 全局异常处理器
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleBusinessException(BusinessException e) {
+        log.warn("Business exception: {} - {}", e.getCode(), e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", e.getCode());
+        result.put("message", e.getMessage());
+        return result;
+    }
+
+    @ExceptionHandler(EntityNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleEntityNotFoundException(EntityNotFoundException e) {
+        log.warn("Entity not found: {}", e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", e.getCode());
+        result.put("message", e.getMessage());
+        return result;
+    }
+
+    @ExceptionHandler(LlmGatewayException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public Map<String, Object> handleLlmGatewayException(LlmGatewayException e) {
+        log.warn("LLM Gateway exception: {} - {}", e.getCode(), e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", e.getCode());
+        result.put("message", e.getMessage());
+        return result;
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleValidationException(MethodArgumentNotValidException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("参数验证失败");
+        log.warn("Validation failed: {}", message);
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", "10001");
+        result.put("message", message);
+        return result;
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Map<String, Object> handleException(Exception e) {
+        log.error("Unexpected error", e);
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", "10000");
+        result.put("message", "系统错误，请稍后重试");
+        return result;
+    }
+}

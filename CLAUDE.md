@@ -102,7 +102,7 @@ Use `@Resource` for dependency injection (not constructor injection).
 - Lombok `@Getter` for field access
 
 ### REST API Design
-- All controllers in `com.ai.edu.interface_.api`
+- All controllers in `com.ai.edu.interfaces.api`
 - Use `ApiResponse<T>` as unified response wrapper
 - Follow RESTful conventions
 

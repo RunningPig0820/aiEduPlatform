@@ -59,7 +59,7 @@ com.ai.edu.infrastructure.persistence/
 ├── mapper/               # UserMapper.java (MyBatis-Plus)
 └── jpa/                  # UserJpaRepository.java
 
-com.ai.edu.interface_.api/
+com.ai.edu.interfaces.api/
 └── UserController.java   # REST Controller
 ```
 

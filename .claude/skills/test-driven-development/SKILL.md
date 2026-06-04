@@ -223,7 +223,7 @@ com.ai.edu.application/
 ├── dto/                  # DTO
 └── assembler/            # 转换器
 
-com.ai.edu.interface_.api/
+com.ai.edu.interfaces.api/
 └── *Controller.java      # REST API
 ```
 
