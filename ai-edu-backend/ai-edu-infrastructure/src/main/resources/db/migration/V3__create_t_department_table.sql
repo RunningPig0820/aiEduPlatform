@@ -12,12 +12,11 @@ CREATE TABLE IF NOT EXISTS `t_department` (
     `description` VARCHAR(500) DEFAULT NULL COMMENT '部门描述',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `created_by` bigint(20) NOT NULL DEFAULT '0' COMMENT '创建人ID',
+    `modified_by` bigint(20) NOT NULL DEFAULT '0' COMMENT '修改人',
     `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0-未删除，1-已删除',
     PRIMARY KEY (`id`),
     INDEX `idx_school_id` (`school_id`),
     INDEX `idx_parent_id` (`parent_id`),
     INDEX `idx_department_path` (`department_path`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='部门表';
-
--- 创建唯一索引：同一学校下部门名称唯一
-CREATE UNIQUE INDEX `idx_school_name` ON `t_department` (`school_id`, `name`) WHERE `is_deleted` = 0;

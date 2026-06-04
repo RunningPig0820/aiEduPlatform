@@ -198,6 +198,8 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
                 po.getDepartmentPath(),
                 po.getSortOrder(),
                 po.getDescription(),
+                po.getCreatedBy(),
+                po.getModifiedBy(),
                 po.getCreatedAt(),
                 po.getUpdatedAt(),
                 po.getDeleted() != null && po.getDeleted()
@@ -217,6 +219,8 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
         po.setDepartmentPath(department.getDepartmentPath());
         po.setSortOrder(department.getSortOrder());
         po.setDescription(department.getDescription());
+        po.setCreatedBy(department.getCreatedBy());
+        po.setModifiedBy(department.getModifiedBy());
         po.setDeleted(department.isDeleted());
 
         return po;

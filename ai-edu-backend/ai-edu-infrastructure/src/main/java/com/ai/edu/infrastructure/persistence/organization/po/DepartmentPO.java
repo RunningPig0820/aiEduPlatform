@@ -35,6 +35,12 @@ public class DepartmentPO {
     @TableField("description")
     private String description;
 
+    @TableField("created_by")
+    private Long createdBy;
+
+    @TableField("modified_by")
+    private Long modifiedBy;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
 

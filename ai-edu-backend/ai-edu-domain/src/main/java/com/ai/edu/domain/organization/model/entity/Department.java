@@ -20,6 +20,8 @@ public class Department {
     private String departmentPath;
     private Integer sortOrder;
     private String description;
+    private Long createdBy;
+    private Long modifiedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private boolean deleted;
@@ -65,6 +67,7 @@ public class Department {
      */
     public static Department fromPO(Long id, SchoolId schoolId, String name, Long parentId,
                                      String departmentPath, Integer sortOrder, String description,
+                                     Long createdBy, Long modifiedBy,
                                      LocalDateTime createdAt, LocalDateTime updatedAt, boolean deleted) {
         Department department = new Department();
         department.id = id != null ? DepartmentId.of(id) : null;
@@ -74,6 +77,8 @@ public class Department {
         department.departmentPath = departmentPath;
         department.sortOrder = sortOrder;
         department.description = description;
+        department.createdBy = createdBy;
+        department.modifiedBy = modifiedBy;
         department.createdAt = createdAt;
         department.updatedAt = updatedAt;
         department.deleted = deleted;
@@ -172,6 +177,14 @@ public class Department {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public void setCreatedBy(Long createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public void setModifiedBy(Long modifiedBy) {
+        this.modifiedBy = modifiedBy;
     }
 
     public void delete() {
