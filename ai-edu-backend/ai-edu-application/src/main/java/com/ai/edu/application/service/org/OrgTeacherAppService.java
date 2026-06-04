@@ -12,7 +12,8 @@ import com.ai.edu.domain.organization.model.valueobject.OrgTeacherId;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherQueryParam;
 import com.ai.edu.domain.organization.repository.OrgTeacherRepository;
 import com.ai.edu.domain.organization.repository.DepartmentRepository;
-import com.ai.edu.domain.organization.service.UserQueryService;
+import com.ai.edu.domain.user.service.UserQueryService;
+import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
@@ -64,12 +65,12 @@ public class OrgTeacherAppService {
         }
 
         // 2. 查询用户域是否存在该手机号的用户
-        Optional<UserQueryService.UserInfo> userOpt = userQueryService.findByPhone(command.getPhone());
+        Optional<User> userOpt = userQueryService.findByPhone(command.getPhone());
 
         Long userId;
         if (userOpt.isPresent()) {
             // 用户已存在，直接使用
-            userId = userOpt.get().userId();
+            userId = userOpt.get().getId();
             log.info("用户已存在: userId={}, phone={}", userId, command.getPhone());
         } else {
             // 用户不存在，创建新用户
@@ -126,11 +127,11 @@ public class OrgTeacherAppService {
                 .map(OrgTeacher::getUserId)
                 .toList();
 
-        List<UserQueryService.UserInfo> users = userQueryService.findByIds(userIds);
+        List<User> users = userQueryService.findByIds(userIds);
 
-        // 构建 userId -> UserInfo 映射
-        Map<Long, UserQueryService.UserInfo> userMap = users.stream()
-                .collect(Collectors.toMap(UserQueryService.UserInfo::userId, u -> u));
+        // 构建 userId -> User 映射
+        Map<Long, User> userMap = users.stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
 
         // 4. 批量查询部门名称
         List<Long> departmentIds = page.getRecords().stream()
@@ -147,7 +148,7 @@ public class OrgTeacherAppService {
         // 5. 合并返回完整信息
         List<OrgTeacherDTO> dtoList = page.getRecords().stream()
                 .map(teacher -> {
-                    UserQueryService.UserInfo user = userMap.get(teacher.getUserId());
+                    User user = userMap.get(teacher.getUserId());
                     String departmentName = departmentNameMap.get(teacher.getDepartmentId());
                     return buildDTO(teacher, user, departmentName);
                 })
@@ -179,8 +180,8 @@ public class OrgTeacherAppService {
         }
 
         // 3. 查询用户域基本信息
-        List<UserQueryService.UserInfo> users = userQueryService.findByIds(List.of(orgTeacher.getUserId()));
-        UserQueryService.UserInfo user = users.isEmpty() ? null : users.get(0);
+        List<User> users = userQueryService.findByIds(List.of(orgTeacher.getUserId()));
+        User user = users.isEmpty() ? null : users.get(0);
 
         // 4. 查询部门名称
         String departmentName = departmentRepository.findById(DepartmentId.of(orgTeacher.getDepartmentId()))
@@ -275,12 +276,12 @@ public class OrgTeacherAppService {
     /**
      * 构建 DTO（包含完整信息：关联关系 + 用户基本信息 + 部门名称）
      */
-    private OrgTeacherDTO buildDTO(OrgTeacher teacher, UserQueryService.UserInfo user, String departmentName) {
+    private OrgTeacherDTO buildDTO(OrgTeacher teacher, User user, String departmentName) {
         OrgTeacherDTO dto = buildDTO(teacher, departmentName);
 
         if (user != null) {
-            dto.setName(user.name());
-            dto.setPhone(user.phone());
+            dto.setName(user.getRealName());
+            dto.setPhone(user.getPhone());
         }
 
         return dto;

@@ -1,6 +1,7 @@
 package com.ai.edu.domain.user.repository;
 
 import com.ai.edu.domain.user.model.entity.User;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,4 +22,11 @@ public interface UserRepository {
     boolean existsByPhone(String phone);
 
     void deleteById(Long id);
+
+    /**
+     * 批量查询用户
+     * @param ids 用户ID列表
+     * @return 用户列表
+     */
+    List<User> findByIds(List<Long> ids);
 }

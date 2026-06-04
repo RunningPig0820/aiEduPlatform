@@ -3,9 +3,11 @@ package com.ai.edu.infrastructure.persistence.user.repository;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.infrastructure.persistence.user.mapper.UserMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -55,5 +57,16 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public void deleteById(Long id) {
         userMapper.deleteById(id);
+    }
+
+    @Override
+    public List<User> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(User::getId, ids);
+        return userMapper.selectList(wrapper);
     }
 }
