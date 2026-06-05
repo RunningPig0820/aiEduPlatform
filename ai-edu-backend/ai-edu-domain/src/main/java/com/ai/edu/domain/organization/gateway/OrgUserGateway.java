@@ -17,7 +17,7 @@ import java.util.List;
  * 2. 模型转换（用户域 User → 组织域 TeacherInfo）
  * 3. 技术细节封装（数据源切换等）
  */
-public interface UserServiceGateway {
+public interface OrgUserGateway {
 
     /**
      * 查询或创建教师用户

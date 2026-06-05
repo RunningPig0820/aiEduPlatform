@@ -8,7 +8,7 @@ import com.ai.edu.application.dto.org.PageResult;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.organization.acl.TeacherInfo;
-import com.ai.edu.domain.organization.gateway.UserServiceGateway;
+import com.ai.edu.domain.organization.gateway.OrgUserGateway;
 import com.ai.edu.domain.organization.model.entity.OrgTeacher;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherId;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherQueryParam;
@@ -17,7 +17,6 @@ import com.ai.edu.domain.organization.service.OrgTeacherDomainService;
 import com.ai.edu.domain.organization.repository.DepartmentRepository;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
-import com.ai.edu.domain.shared.valueobject.SchoolId;
 import com.baomidou.dynamic.datasource.annotation.DS;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.annotation.Resource;
@@ -55,7 +54,7 @@ public class OrgTeacherAppService {
     private OrgTeacherDomainService orgTeacherDomainService;
 
     @Resource
-    private UserServiceGateway userServiceGateway;  // 防腐层：跨域调用用户域
+    private OrgUserGateway userServiceGateway;  // 防腐层：跨域调用用户域
 
     /**
      * 创建教职工（关联关系）
