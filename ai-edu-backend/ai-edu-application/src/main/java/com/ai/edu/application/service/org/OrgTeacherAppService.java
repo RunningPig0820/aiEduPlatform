@@ -7,13 +7,14 @@ import com.ai.edu.application.dto.org.command.UpdateOrgTeacherCommand;
 import com.ai.edu.application.dto.org.PageResult;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
+import com.ai.edu.domain.organization.acl.TeacherInfo;
+import com.ai.edu.domain.organization.gateway.UserServiceGateway;
 import com.ai.edu.domain.organization.model.entity.OrgTeacher;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherId;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherQueryParam;
 import com.ai.edu.domain.organization.repository.OrgTeacherRepository;
 import com.ai.edu.domain.organization.service.OrgTeacherDomainService;
 import com.ai.edu.domain.organization.repository.DepartmentRepository;
-import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
@@ -31,8 +32,14 @@ import java.util.stream.Collectors;
 
 /**
  * 教职工应用服务
- * 处理教职工的添加、查询、修改、删除等用例
- * 通过聚合查询整合用户域基本信息，返回完整教职工信息
+ *
+ * 处理教职工的添加、查询、修改、删除等用例。
+ * 负责跨域聚合协调：通过 Gateway 获取用户域数据，合并返回完整信息。
+ *
+ * Application Service 职责：
+ * - 编排 Domain Service 处理本域业务
+ * - 通过 Gateway 调用其他域
+ * - 聚合多域数据返回 DTO
  */
 @Slf4j
 @Service
@@ -47,14 +54,16 @@ public class OrgTeacherAppService {
     @Resource
     private OrgTeacherDomainService orgTeacherDomainService;
 
+    @Resource
+    private UserServiceGateway userServiceGateway;  // 防腐层：跨域调用用户域
+
     /**
      * 创建教职工（关联关系）
-     * 流程：查询用户 → 不存在则创建用户 → 创建组织关联关系
      *
-     * 注意：此方法跨域调用（用户域 + 组织域），不能使用单一事务
-     * 通过 Domain Service 处理每个域的事务：
-     * - OrgTeacherDomainService 使用 @DS("org") + @Transactional
-     * - UserService（用户域）使用 @DS("user")
+     * AppService 负责跨域协调：
+     * 1. 调用 Domain Service 验证部门（组织域）
+     * 2. 通过 Gateway 查询或创建教师用户（用户域）
+     * 3. 调用 Domain Service 创建关联关系（组织域）
      */
     public OrgTeacherDTO createOrgTeacher(Long schoolId, Long currentUserId, CreateOrgTeacherCommand command) {
         log.info("创建教职工: schoolId={}, phone={}, departmentId={}", schoolId, command.getPhone(), command.getDepartmentId());
@@ -62,22 +71,26 @@ public class OrgTeacherAppService {
         // 1. 验证部门是否存在且属于该学校（组织域）
         Department department = orgTeacherDomainService.validateDepartment(schoolId, command.getDepartmentId());
 
-        // 2. 查询或创建用户（用户域，通过 DomainService 封装跨域调用）
-        Long userId = orgTeacherDomainService.getOrCreateUser(command.getName(), command.getPhone());
+        // 2. 查询或创建教师用户（用户域，通过 Gateway，返回 TeacherInfo）
+        TeacherInfo teacherInfo = userServiceGateway.findOrCreateTeacher(command.getName(), command.getPhone());
 
         // 3. 创建教职工关联关系（组织域）
         OrgTeacher savedTeacher = orgTeacherDomainService.createTeacherRelation(
-                schoolId, userId, command.getDepartmentId(), currentUserId);
+                schoolId, teacherInfo.getUserId(), command.getDepartmentId(), currentUserId);
 
-        log.info("教职工创建成功: id={}, userId={}, departmentId={}", savedTeacher.getIdValue(), userId, command.getDepartmentId());
+        log.info("教职工创建成功: id={}, userId={}, departmentId={}", savedTeacher.getIdValue(), teacherInfo.getUserId(), command.getDepartmentId());
 
         // 4. 聚合返回完整信息
-        return buildDTO(savedTeacher, department.getName());
+        return buildDTO(savedTeacher, teacherInfo, department.getName());
     }
 
     /**
      * 聚合查询教职工列表
-     * 查询组织域关联关系 → 批量查询用户域基本信息 → 合并返回完整信息
+     *
+     * AppService 负责跨域聚合：
+     * 1. 查询组织域关联关系
+     * 2. 通过 Gateway 批量查询教师信息（用户域 → TeacherInfo）
+     * 3. 合并返回完整信息
      */
     public PageResult<OrgTeacherDTO> listOrgTeachers(Long schoolId, OrgTeacherQueryParamDTO queryDTO) {
         log.info("查询教职工列表: schoolId={}, departmentId={}, userId={}, pageNum={}, pageSize={}",
@@ -96,16 +109,16 @@ public class OrgTeacherAppService {
 
         IPage<OrgTeacher> page = orgTeacherRepository.queryPage(param, pageNum, pageSize);
 
-        // 3. 批量查询用户域基本信息
+        // 3. 批量查询教师信息（通过 Gateway，返回 TeacherInfo）
         List<Long> userIds = page.getRecords().stream()
                 .map(OrgTeacher::getUserId)
                 .toList();
 
-        List<User> users = orgTeacherDomainService.findUsersByIds(userIds);
+        List<TeacherInfo> teacherInfos = userServiceGateway.findTeachersByIds(userIds);
 
-        // 构建 userId -> User 映射
-        Map<Long, User> userMap = users.stream()
-                .collect(Collectors.toMap(User::getId, u -> u));
+        // 构建 userId -> TeacherInfo 映射
+        Map<Long, TeacherInfo> teacherInfoMap = teacherInfos.stream()
+                .collect(Collectors.toMap(TeacherInfo::getUserId, t -> t));
 
         // 4. 批量查询部门名称
         List<Long> departmentIds = page.getRecords().stream()
@@ -122,9 +135,9 @@ public class OrgTeacherAppService {
         // 5. 合并返回完整信息
         List<OrgTeacherDTO> dtoList = page.getRecords().stream()
                 .map(teacher -> {
-                    User user = userMap.get(teacher.getUserId());
+                    TeacherInfo info = teacherInfoMap.get(teacher.getUserId());
                     String departmentName = departmentNameMap.get(teacher.getDepartmentId());
-                    return buildDTO(teacher, user, departmentName);
+                    return buildDTO(teacher, info, departmentName);
                 })
                 .toList();
 
@@ -153,9 +166,9 @@ public class OrgTeacherAppService {
             throw new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "教职工不属于该学校");
         }
 
-        // 3. 查询用户域基本信息（通过 DomainService 封装跨域调用）
-        List<User> users = orgTeacherDomainService.findUsersByIds(List.of(orgTeacher.getUserId()));
-        User user = users.isEmpty() ? null : users.get(0);
+        // 3. 查询教师信息（通过 Gateway，返回 TeacherInfo）
+        List<TeacherInfo> teacherInfos = userServiceGateway.findTeachersByIds(List.of(orgTeacher.getUserId()));
+        TeacherInfo teacherInfo = teacherInfos.isEmpty() ? null : teacherInfos.get(0);
 
         // 4. 查询部门名称
         String departmentName = departmentRepository.findById(DepartmentId.of(orgTeacher.getDepartmentId()))
@@ -163,7 +176,7 @@ public class OrgTeacherAppService {
                 .orElse(null);
 
         // 5. 聚合返回完整信息
-        return buildDTO(orgTeacher, user, departmentName);
+        return buildDTO(orgTeacher, teacherInfo, departmentName);
     }
 
     /**
@@ -249,14 +262,16 @@ public class OrgTeacherAppService {
     }
 
     /**
-     * 构建 DTO（包含完整信息：关联关系 + 用户基本信息 + 部门名称）
+     * 构建 DTO（包含完整信息：关联关系 + 教师信息 + 部门名称）
+     *
+     * 使用 TeacherInfo（组织域模型），而不是 User（用户域实体）
      */
-    private OrgTeacherDTO buildDTO(OrgTeacher teacher, User user, String departmentName) {
+    private OrgTeacherDTO buildDTO(OrgTeacher teacher, TeacherInfo teacherInfo, String departmentName) {
         OrgTeacherDTO dto = buildDTO(teacher, departmentName);
 
-        if (user != null) {
-            dto.setName(user.getRealName());
-            dto.setPhone(user.getPhone());
+        if (teacherInfo != null) {
+            dto.setName(teacherInfo.getName());
+            dto.setPhone(teacherInfo.getPhone());
         }
 
         return dto;
