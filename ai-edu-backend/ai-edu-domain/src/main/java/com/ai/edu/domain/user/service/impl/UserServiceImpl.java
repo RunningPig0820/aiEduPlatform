@@ -2,7 +2,7 @@ package com.ai.edu.domain.user.service.impl;
 
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
-import com.ai.edu.domain.user.service.UserQueryService;
+import com.ai.edu.domain.user.service.UserService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 用户查询服务实现（领域服务）
+ * 用户服务实现（领域服务）
  *
  * DDD领域服务：
  * 1. 属于用户域
@@ -20,7 +20,7 @@ import java.util.Optional;
  */
 @Slf4j
 @Service
-public class UserQueryServiceImpl implements UserQueryService {
+public class UserServiceImpl implements UserService {
 
     @Resource
     private UserRepository userRepository;

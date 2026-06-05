@@ -1,6 +1,7 @@
 package com.ai.edu.infrastructure.persistence.user.mapper;
 
 import com.ai.edu.domain.user.model.entity.User;
+import com.baomidou.dynamic.datasource.annotation.DS;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -10,7 +11,9 @@ import java.util.Optional;
 
 /**
  * 用户Mapper接口
+ * 使用 user 数据源（用户域数据库）
  */
+@DS("user")
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
 

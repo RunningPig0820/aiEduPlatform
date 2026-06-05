@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.user.repository;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.infrastructure.persistence.user.mapper.UserMapper;
+import com.baomidou.dynamic.datasource.annotation.DS;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
@@ -12,8 +13,10 @@ import java.util.Optional;
 
 /**
  * 用户仓储实现
+ * 使用 user 数据源（用户域数据库）
  */
 @Repository
+@DS("user")
 public class UserRepositoryImpl implements UserRepository {
 
     @Resource

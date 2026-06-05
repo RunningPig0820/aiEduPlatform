@@ -11,8 +11,8 @@ import com.ai.edu.domain.organization.model.entity.OrgTeacher;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherId;
 import com.ai.edu.domain.organization.model.valueobject.OrgTeacherQueryParam;
 import com.ai.edu.domain.organization.repository.OrgTeacherRepository;
+import com.ai.edu.domain.organization.service.OrgTeacherDomainService;
 import com.ai.edu.domain.organization.repository.DepartmentRepository;
-import com.ai.edu.domain.user.service.UserQueryService;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
@@ -45,59 +45,33 @@ public class OrgTeacherAppService {
     private DepartmentRepository departmentRepository;
 
     @Resource
-    private UserQueryService userQueryService;
+    private OrgTeacherDomainService orgTeacherDomainService;
 
     /**
      * 创建教职工（关联关系）
      * 流程：查询用户 → 不存在则创建用户 → 创建组织关联关系
+     *
+     * 注意：此方法跨域调用（用户域 + 组织域），不能使用单一事务
+     * 通过 Domain Service 处理每个域的事务：
+     * - OrgTeacherDomainService 使用 @DS("org") + @Transactional
+     * - UserService（用户域）使用 @DS("user")
      */
-    @DS("org")
-    @Transactional
     public OrgTeacherDTO createOrgTeacher(Long schoolId, Long currentUserId, CreateOrgTeacherCommand command) {
         log.info("创建教职工: schoolId={}, phone={}, departmentId={}", schoolId, command.getPhone(), command.getDepartmentId());
 
-        // 1. 验证部门是否存在且属于该学校
-        Department department = departmentRepository.findById(DepartmentId.of(command.getDepartmentId()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "部门不存在"));
+        // 1. 验证部门是否存在且属于该学校（组织域）
+        Department department = orgTeacherDomainService.validateDepartment(schoolId, command.getDepartmentId());
 
-        if (!department.getSchoolIdValue().equals(schoolId)) {
-            throw new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "部门不属于该学校");
-        }
+        // 2. 查询或创建用户（用户域，通过 DomainService 封装跨域调用）
+        Long userId = orgTeacherDomainService.getOrCreateUser(command.getName(), command.getPhone());
 
-        // 2. 查询用户域是否存在该手机号的用户
-        Optional<User> userOpt = userQueryService.findByPhone(command.getPhone());
-
-        Long userId;
-        if (userOpt.isPresent()) {
-            // 用户已存在，直接使用
-            userId = userOpt.get().getId();
-            log.info("用户已存在: userId={}, phone={}", userId, command.getPhone());
-        } else {
-            // 用户不存在，创建新用户
-            userId = userQueryService.createUser(command.getName(), command.getPhone());
-            log.info("创建新用户: userId={}, name={}, phone={}", userId, command.getName(), command.getPhone());
-        }
-
-        // 3. 检查该用户是否已在该学校有教职工记录
-        Optional<OrgTeacher> existingTeacher = orgTeacherRepository.findBySchoolIdAndUserId(SchoolId.of(schoolId), userId);
-        if (existingTeacher.isPresent()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "该用户已在本学校有教职工记录");
-        }
-
-        // 4. 创建教职工关联关系
-        OrgTeacher orgTeacher = OrgTeacher.create(
-                SchoolId.of(schoolId),
-                userId,
-                command.getDepartmentId(),
-                currentUserId
-        );
-
-        // 5. 保存
-        OrgTeacher savedTeacher = orgTeacherRepository.save(orgTeacher);
+        // 3. 创建教职工关联关系（组织域）
+        OrgTeacher savedTeacher = orgTeacherDomainService.createTeacherRelation(
+                schoolId, userId, command.getDepartmentId(), currentUserId);
 
         log.info("教职工创建成功: id={}, userId={}, departmentId={}", savedTeacher.getIdValue(), userId, command.getDepartmentId());
 
-        // 6. 聚合返回完整信息
+        // 4. 聚合返回完整信息
         return buildDTO(savedTeacher, department.getName());
     }
 
@@ -127,7 +101,7 @@ public class OrgTeacherAppService {
                 .map(OrgTeacher::getUserId)
                 .toList();
 
-        List<User> users = userQueryService.findByIds(userIds);
+        List<User> users = orgTeacherDomainService.findUsersByIds(userIds);
 
         // 构建 userId -> User 映射
         Map<Long, User> userMap = users.stream()
@@ -179,8 +153,8 @@ public class OrgTeacherAppService {
             throw new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "教职工不属于该学校");
         }
 
-        // 3. 查询用户域基本信息
-        List<User> users = userQueryService.findByIds(List.of(orgTeacher.getUserId()));
+        // 3. 查询用户域基本信息（通过 DomainService 封装跨域调用）
+        List<User> users = orgTeacherDomainService.findUsersByIds(List.of(orgTeacher.getUserId()));
         User user = users.isEmpty() ? null : users.get(0);
 
         // 4. 查询部门名称
@@ -195,8 +169,9 @@ public class OrgTeacherAppService {
     /**
      * 更新教职工所属部门
      * 组织域只支持修改所属部门，用户基本信息修改在用户中心处理
+     *
+     * 此方法只操作组织域数据，可以指定 @DS("org")
      */
-    @DS("org")
     @Transactional
     public OrgTeacherDTO updateOrgTeacher(Long schoolId, Long id, Long currentUserId, UpdateOrgTeacherCommand command) {
         log.info("更新教职工所属部门: schoolId={}, id={}, newDepartmentId={}", schoolId, id, command.getDepartmentId());

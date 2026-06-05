@@ -6,12 +6,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 用户查询服务（领域服务）
- * 提供用户查询能力，供其他域调用
+ * 用户服务（领域服务）
+ * 提供用户查询与创建能力，供其他域调用
  *
  * DDD领域服务：处理需要协调Repository的业务逻辑
  */
-public interface UserQueryService {
+public interface UserService {
 
     /**
      * 根据手机号查询用户
