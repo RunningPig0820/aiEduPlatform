@@ -11,16 +11,16 @@ import com.ai.edu.domain.shared.valueobject.SchoolId;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 /**
  * 教职工领域服务
  *
- * 只处理组织域内的业务逻辑，保持纯净：
- * - 验证部门
- * - 创建教职工关联关系
+ * 只处理组织域内的业务逻辑。
+ * 不标注 @DS 和 @Transactional（领域层保持纯粹）：
+ * - @DS 由 AppService 或 Repository 层控制
+ * - 事务由 AppService 或 Repository 层控制
  *
  * 跨域调用（用户域）由 AppService 通过 Gateway 处理
  */
@@ -52,8 +52,9 @@ public class OrgTeacherDomainService {
 
     /**
      * 创建教职工关联关系
+     *
+     * 检查已存在 + 创建保存，由 AppService 层控制 @DS("org") + @Transactional
      */
-    @Transactional
     public OrgTeacher createTeacherRelation(Long schoolId, Long userId, Long departmentId, Long currentUserId) {
         log.info("创建教职工关联关系: schoolId={}, userId={}, departmentId={}", schoolId, userId, departmentId);
 

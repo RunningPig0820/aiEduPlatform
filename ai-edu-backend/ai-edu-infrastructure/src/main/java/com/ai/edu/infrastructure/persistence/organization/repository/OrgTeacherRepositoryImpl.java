@@ -107,11 +107,10 @@ public class OrgTeacherRepositoryImpl implements OrgTeacherRepository {
 
     @Override
     public void deleteById(OrgTeacherId id) {
-        OrgTeacherPO po = orgTeacherMapper.selectById(id.getValue());
-        if (po != null) {
-            po.setDeleted(true);
-            orgTeacherMapper.updateById(po);
-        }
+        // MyBatis Plus 逻辑删除插件：
+        // deleteById 会自动转为 UPDATE SET is_deleted=1 WHERE id=? AND is_deleted=0
+        // 不能用 updateById，因为插件会跳过逻辑删除字段的更新
+        orgTeacherMapper.deleteById(id.getValue());
     }
 
     @Override
@@ -160,6 +159,8 @@ public class OrgTeacherRepositoryImpl implements OrgTeacherRepository {
         po.setDepartmentId(orgTeacher.getDepartmentId());
         po.setCreatedBy(orgTeacher.getCreatedBy());
         po.setModifiedBy(orgTeacher.getModifiedBy());
+        po.setCreatedAt(orgTeacher.getCreatedAt());
+        po.setUpdatedAt(orgTeacher.getUpdatedAt());
         po.setDeleted(orgTeacher.isDeleted());
 
         return po;

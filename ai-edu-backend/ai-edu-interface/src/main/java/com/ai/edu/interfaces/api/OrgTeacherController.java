@@ -93,18 +93,17 @@ public class OrgTeacherController {
      * 组织域只支持修改所属部门，用户基本信息修改在用户中心处理
      */
     @Operation(summary = "更新教职工所属部门", description = "修改教职工的所属行政部门。注意：用户基本信息修改请到用户中心处理。")
-    @PostMapping("/{schoolId}/updateTeacher/{id}")
+    @PostMapping("/{schoolId}/updateTeacher")
     public ApiResponse<OrgTeacherDTO> updateTeacherDepartment(
             @Parameter(description = "学校ID") @PathVariable Long schoolId,
-            @Parameter(description = "教职工ID") @PathVariable Long id,
             @Valid @RequestBody UpdateOrgTeacherCommand command) {
-        log.info("更新教职工所属部门: schoolId={}, teacherId={}, newDepartmentId={}",
-                schoolId, id, command.getDepartmentId());
+        log.info("更新教职工所属部门: schoolId={}, orgTeacherId={}, newDepartmentId={}",
+                schoolId, command.getOrgTeacherId(), command.getDepartmentId());
 
         // TODO: 从登录上下文获取当前用户ID
         Long currentUserId = 1L; // 暂时使用固定值
 
-        OrgTeacherDTO teacher = orgTeacherAppService.updateOrgTeacher(schoolId, id, currentUserId, command);
+        OrgTeacherDTO teacher = orgTeacherAppService.updateOrgTeacher(schoolId, currentUserId, command);
         return ApiResponse.success(teacher);
     }
 

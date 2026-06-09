@@ -62,7 +62,9 @@ public class OrgTeacherAppService {
      * AppService 负责跨域协调：
      * 1. 调用 Domain Service 验证部门（组织域）
      * 2. 通过 Gateway 查询或创建教师用户（用户域）
-     * 3. 调用 Domain Service 创建关联关系（组织域）
+     * 3. 创建关联关系（组织域，在独立事务中）
+     *
+     * 注意：步骤2和3不在同一事务（不同域/不同数据库），这是刻意为之。
      */
     public OrgTeacherDTO createOrgTeacher(Long schoolId, Long currentUserId, CreateOrgTeacherCommand command) {
         log.info("创建教职工: schoolId={}, phone={}, departmentId={}", schoolId, command.getPhone(), command.getDepartmentId());
@@ -70,17 +72,28 @@ public class OrgTeacherAppService {
         // 1. 验证部门是否存在且属于该学校（组织域）
         Department department = orgTeacherDomainService.validateDepartment(schoolId, command.getDepartmentId());
 
-        // 2. 查询或创建教师用户（用户域，通过 Gateway，返回 TeacherInfo）
+        // 2. 查询或创建教师用户（用户域，通过 Gateway）
         TeacherInfo teacherInfo = userServiceGateway.findOrCreateTeacher(command.getName(), command.getPhone());
 
-        // 3. 创建教职工关联关系（组织域）
-        OrgTeacher savedTeacher = orgTeacherDomainService.createTeacherRelation(
+        // 3. 创建教职工关联关系（组织域，独立事务）
+        OrgTeacher savedTeacher = createTeacherRelationInTx(
                 schoolId, teacherInfo.getUserId(), command.getDepartmentId(), currentUserId);
 
         log.info("教职工创建成功: id={}, userId={}, departmentId={}", savedTeacher.getIdValue(), teacherInfo.getUserId(), command.getDepartmentId());
 
         // 4. 聚合返回完整信息
         return buildDTO(savedTeacher, teacherInfo, department.getName());
+    }
+
+    /**
+     * 在组织域事务中创建教职工关联关系
+     *
+     * @DS("org") 确保事务绑定 org 数据源，避免默认走 user 库
+     */
+    @DS("org")
+    @Transactional
+    public OrgTeacher createTeacherRelationInTx(Long schoolId, Long userId, Long departmentId, Long currentUserId) {
+        return orgTeacherDomainService.createTeacherRelation(schoolId, userId, departmentId, currentUserId);
     }
 
     /**
@@ -153,11 +166,11 @@ public class OrgTeacherAppService {
     /**
      * 查询教职工详情（聚合查询）
      */
-    public OrgTeacherDTO getOrgTeacher(Long schoolId, Long id) {
-        log.info("查询教职工详情: schoolId={}, id={}", schoolId, id);
+    public OrgTeacherDTO getOrgTeacher(Long schoolId, Long orgTeacherId) {
+        log.info("查询教职工详情: schoolId={}, orgTeacherId={}", schoolId, orgTeacherId);
 
         // 1. 查询组织域关联关系
-        OrgTeacher orgTeacher = orgTeacherRepository.findById(OrgTeacherId.of(id))
+        OrgTeacher orgTeacher = orgTeacherRepository.findById(OrgTeacherId.of(orgTeacherId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "教职工不存在"));
 
         // 2. 校验教职工属于该学校
@@ -180,13 +193,24 @@ public class OrgTeacherAppService {
 
     /**
      * 更新教职工所属部门
-     * 组织域只支持修改所属部门，用户基本信息修改在用户中心处理
      *
-     * 此方法只操作组织域数据，可以指定 @DS("org")
+     * 组织域只支持修改所属部门，用户基本信息修改在用户中心处理。
+     * 事务只包裹写操作，读回数据时跨域查询不受事务限制。
      */
+    public OrgTeacherDTO updateOrgTeacher(Long schoolId, Long currentUserId, UpdateOrgTeacherCommand command) {
+        // 写操作在 org 数据源事务中
+        updateTeacherInTx(schoolId, command.getOrgTeacherId(), currentUserId, command.getDepartmentId());
+        // 读回数据（事务外，允许跨域查询）
+        return getOrgTeacher(schoolId, command.getOrgTeacherId());
+    }
+
+    /**
+     * 更新教职工部门（org 数据源事务）
+     */
+    @DS("org")
     @Transactional
-    public OrgTeacherDTO updateOrgTeacher(Long schoolId, Long id, Long currentUserId, UpdateOrgTeacherCommand command) {
-        log.info("更新教职工所属部门: schoolId={}, id={}, newDepartmentId={}", schoolId, id, command.getDepartmentId());
+    public void updateTeacherInTx(Long schoolId, Long id, Long currentUserId, Long newDepartmentId) {
+        log.info("更新教职工所属部门: schoolId={}, id={}, newDepartmentId={}", schoolId, id, newDepartmentId);
 
         // 1. 查询教职工关联关系
         OrgTeacher orgTeacher = orgTeacherRepository.findById(OrgTeacherId.of(id))
@@ -198,7 +222,7 @@ public class OrgTeacherAppService {
         }
 
         // 3. 验证新部门是否存在且属于该学校
-        Department newDepartment = departmentRepository.findById(DepartmentId.of(command.getDepartmentId()))
+        Department newDepartment = departmentRepository.findById(DepartmentId.of(newDepartmentId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "部门不存在"));
 
         if (!newDepartment.getSchoolIdValue().equals(schoolId)) {
@@ -206,15 +230,12 @@ public class OrgTeacherAppService {
         }
 
         // 4. 更新所属部门
-        orgTeacher.updateDepartment(command.getDepartmentId(), currentUserId);
+        orgTeacher.updateDepartment(newDepartmentId, currentUserId);
 
         // 5. 保存
         orgTeacherRepository.save(orgTeacher);
 
-        log.info("教职工部门更新成功: id={}, newDepartmentId={}", id, command.getDepartmentId());
-
-        // 6. 聚合返回完整信息
-        return getOrgTeacher(schoolId, id);
+        log.info("教职工部门更新成功: id={}, newDepartmentId={}", id, newDepartmentId);
     }
 
     /**

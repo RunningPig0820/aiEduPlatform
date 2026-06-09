@@ -53,7 +53,7 @@ public class UserServiceImpl implements UserService {
         }
 
         // 生成用户名（基于手机号）
-        String username = "user_" + phone.substring(phone.length() - 4);
+        String username = phone;
         // 默认密码
         String password = "password123";
 

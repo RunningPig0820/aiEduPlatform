@@ -78,6 +78,7 @@ public class OrgTeacher {
     public void updateDepartment(Long newDepartmentId, Long modifiedBy) {
         this.departmentId = newDepartmentId;
         this.modifiedBy = modifiedBy;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {
