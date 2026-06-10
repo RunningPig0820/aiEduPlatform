@@ -1,9 +1,9 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.Class;
-import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatus;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatusEnum;
 import com.ai.edu.domain.shared.valueobject.ClassId;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 
@@ -27,7 +27,7 @@ public interface ClassRepository {
 
     List<Class> findBySchoolYear(SchoolYear schoolYear);
 
-    List<Class> findByStatus(ClassStatus status);
+    List<Class> findByStatus(ClassStatusEnum status);
 
     List<Class> findActiveBySchoolId(SchoolId schoolId);
 
@@ -35,7 +35,7 @@ public interface ClassRepository {
 
     boolean existsByNameAndSchoolYear(String name, SchoolYear schoolYear);
 
-    int countBySchoolIdAndStatus(SchoolId schoolId, ClassStatus status);
+    int countBySchoolIdAndStatus(SchoolId schoolId, ClassStatusEnum status);
 
     void deleteById(ClassId id);
 

@@ -1,9 +1,9 @@
 package com.ai.edu.domain.organization.model.entity;
 
-import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatus;
-import com.ai.edu.domain.organization.model.valueobject.enums.ClassType;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatusEnum;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassTypeEnum;
 import com.ai.edu.domain.shared.valueobject.ClassId;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
@@ -20,8 +20,8 @@ public class Class {
     private String code;
     private GradeLevel grade;
     private SchoolYear schoolYear;
-    private ClassType classType;
-    private ClassStatus status;
+    private ClassTypeEnum classType;
+    private ClassStatusEnum status;
     private String description;
     private Long createdBy;
     private Long modifiedBy;
@@ -34,7 +34,7 @@ public class Class {
         cls.name = name;
         cls.grade = grade;
         cls.schoolYear = schoolYear;
-        cls.status = ClassStatus.active();
+        cls.status = ClassStatusEnum.ACTIVE;
         cls.createdBy = 0L;
         cls.modifiedBy = 0L;
         cls.deleted = false;
@@ -73,24 +73,24 @@ public class Class {
         this.code = code;
     }
 
-    public void setClassType(ClassType classType) {
+    public void setClassType(ClassTypeEnum classType) {
         this.classType = classType;
     }
 
-    public void setStatus(ClassStatus status) {
+    public void setStatus(ClassStatusEnum status) {
         this.status = status;
     }
 
     public void activate() {
-        this.status = ClassStatus.active();
+        this.status = ClassStatusEnum.ACTIVE;
     }
 
     public void graduate() {
-        this.status = ClassStatus.graduated();
+        this.status = ClassStatusEnum.GRADUATED;
     }
 
     public void archive() {
-        this.status = ClassStatus.archived();
+        this.status = ClassStatusEnum.ACTIVE;
     }
 
     public void delete() {

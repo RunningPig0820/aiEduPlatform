@@ -1,10 +1,10 @@
 package com.ai.edu.infrastructure.persistence.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.Class;
-import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatus;
-import com.ai.edu.domain.organization.model.valueobject.enums.ClassType;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatusEnum;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassTypeEnum;
 import com.ai.edu.domain.organization.repository.ClassRepository;
 import com.ai.edu.domain.shared.valueobject.ClassId;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
@@ -70,7 +70,7 @@ public class ClassRepositoryImpl implements ClassRepository {
     }
 
     @Override
-    public List<Class> findByStatus(ClassStatus status) {
+    public List<Class> findByStatus(ClassStatusEnum status) {
         List<ClassPO> poList = classMapper.selectByStatus(status.getValue());
         return poList.stream().map(this::toEntity).toList();
     }
@@ -93,7 +93,7 @@ public class ClassRepositoryImpl implements ClassRepository {
     }
 
     @Override
-    public int countBySchoolIdAndStatus(SchoolId schoolId, ClassStatus status) {
+    public int countBySchoolIdAndStatus(SchoolId schoolId, ClassStatusEnum status) {
         return classMapper.countBySchoolIdAndStatus(schoolId.getValue(), status.getValue());
     }
 
@@ -154,11 +154,11 @@ public class ClassRepositoryImpl implements ClassRepository {
         }
 
         if (po.getStatus() != null) {
-            cls.setStatus(ClassStatus.of(po.getStatus()));
+            cls.setStatus(ClassStatusEnum.of(po.getStatus()));
         }
 
         if (po.getClassType() != null) {
-            cls.setClassType(ClassType.of(po.getClassType()));
+            cls.setClassType(ClassTypeEnum.of(po.getClassType()));
         }
 
         return cls;
