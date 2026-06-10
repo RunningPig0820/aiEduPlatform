@@ -31,6 +31,12 @@ public interface DepartmentMapper extends BaseMapper<DepartmentPO> {
     List<DepartmentPO> selectBySchoolId(@Param("schoolId") Long schoolId);
 
     /**
+     * 根据学校ID和部门类型查询部门
+     */
+    @Select("SELECT * FROM t_department WHERE school_id = #{schoolId} AND department_type = #{departmentType} AND is_deleted = false ORDER BY sort_order, id")
+    List<DepartmentPO> selectBySchoolIdAndType(@Param("schoolId") Long schoolId, @Param("departmentType") String departmentType);
+
+    /**
      * 查询学校的根部门
      */
     @Select("SELECT * FROM t_department WHERE school_id = #{schoolId} AND parent_id IS NULL AND is_deleted = false ORDER BY sort_order, id")

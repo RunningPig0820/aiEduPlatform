@@ -1,7 +1,7 @@
 package com.ai.edu.domain.organization.model.entity;
 
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
-import com.ai.edu.domain.organization.model.valueobject.SchoolStatus;
+import com.ai.edu.domain.organization.model.valueobject.enums.SchoolStatusEnum;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
 
@@ -23,7 +23,7 @@ public class School {
     private String description;
     private String iconUrl;
     private String stages;
-    private SchoolStatus status;
+    private SchoolStatusEnum status;
     private Long createdBy;
     private Long modifiedBy;
     private LocalDateTime createdAt;
@@ -49,7 +49,7 @@ public class School {
         school.district = district;
         school.address = address;
         school.description = description;
-        school.status = SchoolStatus.ACTIVE;
+        school.status = SchoolStatusEnum.ACTIVE;
         school.createdBy = 0L;
         school.modifiedBy = 0L;
         school.deleted = false;
@@ -96,7 +96,7 @@ public class School {
         }
     }
 
-    public void setStatus(SchoolStatus status) {
+    public void setStatus(SchoolStatusEnum status) {
         this.status = status;
     }
 
@@ -109,11 +109,11 @@ public class School {
     }
 
     public void archive() {
-        this.status = SchoolStatus.ARCHIVE;
+        this.status = SchoolStatusEnum.ARCHIVE;
     }
 
     public void markAsFail() {
-        this.status = SchoolStatus.FAIL;
+        this.status = SchoolStatusEnum.FAIL;
     }
 
     public void delete() {
@@ -149,15 +149,15 @@ public class School {
     }
 
     public boolean isActive() {
-        return status == SchoolStatus.ACTIVE;
+        return status == SchoolStatusEnum.ACTIVE;
     }
 
     public boolean isArchive() {
-        return status == SchoolStatus.ARCHIVE;
+        return status == SchoolStatusEnum.ARCHIVE;
     }
 
     public boolean isFail() {
-        return status == SchoolStatus.FAIL;
+        return status == SchoolStatusEnum.FAIL;
     }
 
     public boolean isDeleted() {

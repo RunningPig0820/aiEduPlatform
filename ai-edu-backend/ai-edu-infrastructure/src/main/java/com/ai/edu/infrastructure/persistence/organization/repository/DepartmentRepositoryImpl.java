@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.persistence.organization.repository;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentQueryParam;
+import com.ai.edu.domain.organization.model.valueobject.enums.DepartmentTypeEnum;
 import com.ai.edu.domain.shared.valueobject.PageResult;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import com.ai.edu.domain.organization.repository.DepartmentRepository;
@@ -31,7 +32,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
     private DepartmentMapper departmentMapper;
 
     @Override
-    public Department save(Department department) {
+    public Department saveOrUpdate(Department department) {
         DepartmentPO po = toPO(department);
 
         if (department.getId() == null) {
@@ -64,6 +65,13 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
     @Override
     public List<Department> findBySchoolId(SchoolId schoolId) {
         List<DepartmentPO> poList = departmentMapper.selectBySchoolId(schoolId.getValue());
+        return poList.stream().map(this::toEntity).toList();
+    }
+
+    @Override
+    public List<Department> findBySchoolIdAndType(SchoolId schoolId, DepartmentTypeEnum departmentType) {
+        List<DepartmentPO> poList = departmentMapper.selectBySchoolIdAndType(
+                schoolId.getValue(), departmentType.getValue());
         return poList.stream().map(this::toEntity).toList();
     }
 
@@ -190,12 +198,16 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
     // ==================== 转换方法 ====================
 
     private Department toEntity(DepartmentPO po) {
+        DepartmentTypeEnum departmentType = po.getDepartmentType() != null
+                ? DepartmentTypeEnum.of(po.getDepartmentType())
+                : DepartmentTypeEnum.ORG;
         return Department.fromPO(
                 po.getId(),
                 SchoolId.of(po.getSchoolId()),
                 po.getName(),
                 po.getParentId(),
                 po.getDepartmentPath(),
+                departmentType,
                 po.getSortOrder(),
                 po.getDescription(),
                 po.getCreatedBy(),
@@ -217,6 +229,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
         po.setName(department.getName());
         po.setParentId(department.getParentId());
         po.setDepartmentPath(department.getDepartmentPath());
+        po.setDepartmentType(department.getDepartmentTypeValue());
         po.setSortOrder(department.getSortOrder());
         po.setDescription(department.getDescription());
         po.setCreatedBy(department.getCreatedBy());

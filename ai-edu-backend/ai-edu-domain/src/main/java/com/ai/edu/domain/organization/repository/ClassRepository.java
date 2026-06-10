@@ -1,7 +1,7 @@
 package com.ai.edu.domain.organization.repository;
 
 import com.ai.edu.domain.organization.model.entity.Class;
-import com.ai.edu.domain.organization.model.valueobject.ClassStatus;
+import com.ai.edu.domain.organization.model.valueobject.enums.ClassStatus;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
 import com.ai.edu.domain.shared.valueobject.ClassId;

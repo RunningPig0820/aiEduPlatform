@@ -2,7 +2,7 @@ package com.ai.edu.domain.organization.model.aggregate;
 
 import com.ai.edu.domain.organization.model.entity.SchoolUserAssociation;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
-import com.ai.edu.domain.organization.model.valueobject.SchoolStage;
+import com.ai.edu.domain.organization.model.valueobject.enums.SchoolStageEnum;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
 
@@ -21,7 +21,7 @@ public class SchoolOrganizationAggregate {
     private String name;
     private String iconUrl;
     private SchoolInstitutionalType institutionalType;
-    private List<SchoolStage> stages;
+    private List<SchoolStageEnum> stages;
     private List<SchoolUserAssociation> userAssociations;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -39,7 +39,7 @@ public class SchoolOrganizationAggregate {
             String name,
             String iconUrl,
             SchoolInstitutionalType institutionalType,
-            List<SchoolStage> stages) {
+            List<SchoolStageEnum> stages) {
 
         // 业务规则验证
         if (name == null || name.isBlank()) {
@@ -77,7 +77,7 @@ public class SchoolOrganizationAggregate {
     /**
      * 更新学校信息
      */
-    public void update(String name, String iconUrl, SchoolInstitutionalType institutionalType, List<SchoolStage> stages) {
+    public void update(String name, String iconUrl, SchoolInstitutionalType institutionalType, List<SchoolStageEnum> stages) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("学校名称不能为空");
         }
@@ -180,7 +180,7 @@ public class SchoolOrganizationAggregate {
     /**
      * 检查是否包含指定学段
      */
-    public boolean hasStage(SchoolStage stage) {
+    public boolean hasStage(SchoolStageEnum stage) {
         return stages.contains(stage);
     }
 

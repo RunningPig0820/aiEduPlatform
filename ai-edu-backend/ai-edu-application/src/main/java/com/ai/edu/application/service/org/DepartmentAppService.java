@@ -1,6 +1,5 @@
 package com.ai.edu.application.service.org;
 
-import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.org.DepartmentDTO;
 import com.ai.edu.application.dto.org.command.CreateDepartmentCommand;
 import com.ai.edu.application.dto.org.command.DepartmentQueryCommand;
@@ -79,7 +78,7 @@ public class DepartmentAppService {
         }
 
         // 3. 保存
-        Department savedDepartment = departmentRepository.save(department);
+        Department savedDepartment = departmentRepository.saveOrUpdate(department);
 
         log.info("部门创建成功: id={}, name={}", savedDepartment.getIdValue(), savedDepartment.getName());
         return toDTO(savedDepartment, null);
@@ -139,7 +138,7 @@ public class DepartmentAppService {
         );
 
         // 6. 保存
-        departmentRepository.save(department);
+        departmentRepository.saveOrUpdate(department);
 
         // 7. 获取父部门名称
         String parentName = null;

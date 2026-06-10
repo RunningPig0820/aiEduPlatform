@@ -1,4 +1,4 @@
-package com.ai.edu.interfaces.api;
+package com.ai.edu.interfaces.api.org;
 
 import cn.hutool.json.JSONUtil;
 import com.ai.edu.application.dto.ApiResponse;

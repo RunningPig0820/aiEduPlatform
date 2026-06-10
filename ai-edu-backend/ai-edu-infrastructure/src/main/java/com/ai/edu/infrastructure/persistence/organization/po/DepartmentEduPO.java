@@ -8,47 +8,47 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 部门持久化对象
+ * 教育部门扩展属性持久化对象
  */
 @Data
-@TableName("t_department")
-public class DepartmentPO {
+@TableName("t_department_edu")
+public class DepartmentEduPO {
 
     @com.baomidou.mybatisplus.annotation.TableId(type = IdType.AUTO)
     private Long id;
 
+    @TableField("dept_id")
+    private Long deptId;
+
     @TableField("school_id")
     private Long schoolId;
 
-    @TableField("name")
-    private String name;
+    @TableField("dept_type")
+    private Integer deptType;
 
-    @TableField("parent_id")
-    private Long parentId;
+    @TableField("stage_code")
+    private String stageCode;
 
-    @TableField("department_path")
-    private String departmentPath;
+    @TableField("stage_year_code")
+    private String stageYearCode;
 
-    @TableField("department_type")
-    private String departmentType;
+    @TableField("grade_code")
+    private String gradeCode;
 
-    @TableField("sort_order")
-    private Integer sortOrder;
-
-    @TableField("description")
-    private String description;
+    @TableField("enrollment_year")
+    private String enrollmentYear;
 
     @TableField("created_by")
     private Long createdBy;
 
+    @TableField("created_on")
+    private LocalDateTime createdOn;
+
     @TableField("modified_by")
     private Long modifiedBy;
 
-    @TableField("created_at")
-    private LocalDateTime createdAt;
-
-    @TableField("updated_at")
-    private LocalDateTime updatedAt;
+    @TableField("modified_on")
+    private LocalDateTime modifiedOn;
 
     @TableField("is_deleted")
     private Boolean deleted = false;

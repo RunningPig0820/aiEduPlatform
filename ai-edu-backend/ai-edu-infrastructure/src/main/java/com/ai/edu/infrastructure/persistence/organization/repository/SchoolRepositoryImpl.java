@@ -3,7 +3,7 @@ package com.ai.edu.infrastructure.persistence.organization.repository;
 import com.ai.edu.domain.organization.model.entity.School;
 import com.ai.edu.domain.organization.model.valueobject.SchoolInstitutionalType;
 import com.ai.edu.domain.organization.model.valueobject.SchoolQueryParam;
-import com.ai.edu.domain.organization.model.valueobject.SchoolStatus;
+import com.ai.edu.domain.organization.model.valueobject.enums.SchoolStatusEnum;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.shared.valueobject.PageResult;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
@@ -163,9 +163,9 @@ public class SchoolRepositoryImpl implements SchoolRepository {
             institutionalType = SchoolInstitutionalType.of(po.getSchoolType());
         }
 
-        SchoolStatus status = SchoolStatus.ACTIVE;
+        SchoolStatusEnum status = SchoolStatusEnum.ACTIVE;
         if (po.getStatus() != null && !po.getStatus().isEmpty()) {
-            status = SchoolStatus.of(po.getStatus());
+            status = SchoolStatusEnum.of(po.getStatus());
         }
 
         School school = School.create(

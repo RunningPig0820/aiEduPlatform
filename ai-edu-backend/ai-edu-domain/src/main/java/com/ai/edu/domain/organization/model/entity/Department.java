@@ -1,6 +1,7 @@
 package com.ai.edu.domain.organization.model.entity;
 
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
+import com.ai.edu.domain.organization.model.valueobject.enums.DepartmentTypeEnum;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 import lombok.Getter;
 
@@ -18,6 +19,7 @@ public class Department {
     private String name;
     private Long parentId;
     private String departmentPath;
+    private DepartmentTypeEnum departmentType;
     private Integer sortOrder;
     private String description;
     private Long createdBy;
@@ -37,9 +39,19 @@ public class Department {
         department.name = name;
         department.parentId = null;
         department.departmentPath = null;  // 根节点路径为空，保存后需要更新为自己的ID
+        department.departmentType = DepartmentTypeEnum.ORG;
         department.sortOrder = sortOrder != null ? sortOrder : 0;
         department.description = description;
         department.deleted = false;
+        return department;
+    }
+
+    /**
+     * 创建根级行政班部门
+     */
+    public static Department createAdminClassRoot(SchoolId schoolId, String name, Integer sortOrder, String description) {
+        Department department = createRoot(schoolId, name, sortOrder, description);
+        department.departmentType = DepartmentTypeEnum.ADMIN_CLASS;
         return department;
     }
 
@@ -56,6 +68,7 @@ public class Department {
         // department_path = 父部门的路径（已包含父部门ID）
         // 子部门的路径会在保存后更新为：父路径_子ID
         department.departmentPath = parentDepartment.getDepartmentPath();
+        department.departmentType = DepartmentTypeEnum.ORG;
         department.sortOrder = sortOrder != null ? sortOrder : 0;
         department.description = description;
         department.deleted = false;
@@ -63,10 +76,21 @@ public class Department {
     }
 
     /**
+     * 创建行政班子部门
+     */
+    public static Department createAdminClassChild(SchoolId schoolId, String name, Department parentDepartment,
+                                                    Integer sortOrder, String description) {
+        Department department = createChild(schoolId, name, parentDepartment, sortOrder, description);
+        department.departmentType = DepartmentTypeEnum.ADMIN_CLASS;
+        return department;
+    }
+
+    /**
      * 从 PO 重建部门实体（用于 Repository 层）
      */
     public static Department fromPO(Long id, SchoolId schoolId, String name, Long parentId,
-                                     String departmentPath, Integer sortOrder, String description,
+                                     String departmentPath, DepartmentTypeEnum departmentType,
+                                     Integer sortOrder, String description,
                                      Long createdBy, Long modifiedBy,
                                      LocalDateTime createdAt, LocalDateTime updatedAt, boolean deleted) {
         Department department = new Department();
@@ -75,6 +99,7 @@ public class Department {
         department.name = name;
         department.parentId = parentId;
         department.departmentPath = departmentPath;
+        department.departmentType = departmentType != null ? departmentType : DepartmentTypeEnum.ORG;
         department.sortOrder = sortOrder;
         department.description = description;
         department.createdBy = createdBy;
@@ -185,6 +210,22 @@ public class Department {
 
     public void setModifiedBy(Long modifiedBy) {
         this.modifiedBy = modifiedBy;
+    }
+
+    public void setDepartmentType(DepartmentTypeEnum departmentType) {
+        this.departmentType = departmentType;
+    }
+
+    public String getDepartmentTypeValue() {
+        return departmentType != null ? departmentType.getValue() : null;
+    }
+
+    public boolean isAdminClass() {
+        return departmentType != null && departmentType.isAdminClass();
+    }
+
+    public boolean isOrg() {
+        return departmentType == null || departmentType.isOrg();
     }
 
     public void delete() {

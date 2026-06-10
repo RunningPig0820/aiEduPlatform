@@ -3,6 +3,7 @@ package com.ai.edu.domain.organization.repository;
 import com.ai.edu.domain.organization.model.entity.Department;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentId;
 import com.ai.edu.domain.organization.model.valueobject.DepartmentQueryParam;
+import com.ai.edu.domain.organization.model.valueobject.enums.DepartmentTypeEnum;
 import com.ai.edu.domain.shared.valueobject.PageResult;
 import com.ai.edu.domain.shared.valueobject.SchoolId;
 
@@ -18,7 +19,7 @@ public interface DepartmentRepository {
     /**
      * 保存部门
      */
-    Department save(Department department);
+    Department saveOrUpdate(Department department);
 
     /**
      * 根据ID查找部门
@@ -34,6 +35,11 @@ public interface DepartmentRepository {
      * 查找学校的所有部门
      */
     List<Department> findBySchoolId(SchoolId schoolId);
+
+    /**
+     * 根据学校ID和部门类型查找部门
+     */
+    List<Department> findBySchoolIdAndType(SchoolId schoolId, DepartmentTypeEnum departmentType);
 
     /**
      * 查找学校的根部门（parent_id 为空）

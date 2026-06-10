@@ -3,7 +3,6 @@ package com.ai.edu.domain.organization.service;
 import com.ai.edu.domain.organization.model.aggregate.ClassAggregate;
 import com.ai.edu.domain.organization.model.entity.Class;
 import com.ai.edu.domain.organization.model.entity.StudentClass;
-import com.ai.edu.domain.organization.model.valueobject.ClassStatus;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
 import com.ai.edu.domain.organization.model.valueobject.StudentClassStatus;

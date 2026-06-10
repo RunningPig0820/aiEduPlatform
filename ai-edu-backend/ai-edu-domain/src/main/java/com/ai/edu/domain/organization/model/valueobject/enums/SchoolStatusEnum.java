@@ -1,4 +1,4 @@
-package com.ai.edu.domain.organization.model.valueobject;
+package com.ai.edu.domain.organization.model.valueobject.enums;
 
 import lombok.Getter;
 
@@ -6,7 +6,7 @@ import lombok.Getter;
  * 学校状态枚举
  */
 @Getter
-public enum SchoolStatus {
+public enum SchoolStatusEnum {
 
     ACTIVE("ACTIVE", "正常"),
     ARCHIVE("ARCHIVE", "归档"),
@@ -15,12 +15,12 @@ public enum SchoolStatus {
     private final String value;
     private final String description;
 
-    SchoolStatus(String value, String description) {
+    SchoolStatusEnum(String value, String description) {
         this.value = value;
         this.description = description;
     }
 
-    public static SchoolStatus of(String value) {
+    public static SchoolStatusEnum of(String value) {
         if (value == null || value.isBlank()) {
             return ACTIVE;
         }
@@ -28,7 +28,7 @@ public enum SchoolStatus {
         if ("NORMAL".equalsIgnoreCase(value)) {
             return ACTIVE;
         }
-        for (SchoolStatus status : values()) {
+        for (SchoolStatusEnum status : values()) {
             if (status.value.equalsIgnoreCase(value)) {
                 return status;
             }
