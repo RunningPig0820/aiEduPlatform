@@ -164,20 +164,13 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
 
     @Override
     public void deleteById(DepartmentId id) {
-        DepartmentPO po = departmentMapper.selectById(id.getValue());
-        if (po != null) {
-            po.setDeleted(true);
-            departmentMapper.updateById(po);
-        }
+        // 使用 MyBatis-Plus 内置逻辑删除，避免 is_deleted 被插件过滤
+        departmentMapper.deleteById(id.getValue());
     }
 
     @Override
     public void restoreById(DepartmentId id) {
-        DepartmentPO po = departmentMapper.selectById(id.getValue());
-        if (po != null) {
-            po.setDeleted(false);
-            departmentMapper.updateById(po);
-        }
+        departmentMapper.restoreById(id.getValue());
     }
 
     @Override

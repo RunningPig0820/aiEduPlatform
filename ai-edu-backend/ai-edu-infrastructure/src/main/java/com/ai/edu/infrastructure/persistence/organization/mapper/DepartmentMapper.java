@@ -69,6 +69,12 @@ public interface DepartmentMapper extends BaseMapper<DepartmentPO> {
     boolean hasChildren(@Param("id") Long id);
 
     /**
+     * 根据ID恢复部门（绕过逻辑删除插件）
+     */
+    @Update("UPDATE t_department SET is_deleted = 0 WHERE id = #{id}")
+    void restoreById(@Param("id") Long id);
+
+    /**
      * 批量更新子孙部门的路径
      * 将 oldPath 开头的路径替换为 newPath
      */

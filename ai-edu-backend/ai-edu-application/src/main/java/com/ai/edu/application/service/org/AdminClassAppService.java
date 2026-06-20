@@ -174,8 +174,10 @@ public class AdminClassAppService {
         log.info("获取学段配置列表");
 
         return List.of(
+                buildStageConfig(SchoolStageEnum.PRIMARY, StageYearCodeEnum.PRIMARY_FIVE),
                 buildStageConfig(SchoolStageEnum.PRIMARY, StageYearCodeEnum.PRIMARY_SIX),
                 buildStageConfig(SchoolStageEnum.JUNIOR_HIGH, StageYearCodeEnum.JUNIOR_THREE),
+                buildStageConfig(SchoolStageEnum.JUNIOR_HIGH, StageYearCodeEnum.JUNIOR_FOUR),
                 buildStageConfig(SchoolStageEnum.SENIOR_HIGH, StageYearCodeEnum.SENIOR_THREE)
         );
     }
@@ -186,15 +188,10 @@ public class AdminClassAppService {
     public List<GradeOptionDTO> getGradeOptions(String stageCode, String stageYearCode) {
         log.info("获取年级选项: stageCode={}, stageYearCode={}", stageCode, stageYearCode);
 
-        SchoolStageEnum stage = SchoolStageEnum.of(stageCode);
         StageYearCodeEnum yearCode = StageYearCodeEnum.of(stageYearCode);
 
-        int startGrade = stage.getStartGradeLevel();
-        int yearCount = yearCode.getYearCount();
-
         List<GradeOptionDTO> grades = new ArrayList<>();
-        for (int i = 0; i < yearCount; i++) {
-            int gradeLevel = startGrade + i;
+        for (Integer gradeLevel : yearCode.getGradeCodes()) {
             GradeLevel gl = GradeLevel.of(gradeLevel);
             grades.add(GradeOptionDTO.builder()
                     .gradeCode(gradeLevel)
@@ -230,13 +227,8 @@ public class AdminClassAppService {
     }
 
     private StageConfigDTO buildStageConfig(SchoolStageEnum stage, StageYearCodeEnum yearCode) {
-        int startGrade = stage.getStartGradeLevel();
-        int yearCount = yearCode.getYearCount();
-        int endGrade = stage.getEndGradeLevel(yearCount);
-
         List<GradeOptionDTO> grades = new ArrayList<>();
-        for (int i = 0; i < yearCount; i++) {
-            int gradeLevel = startGrade + i;
+        for (Integer gradeLevel : yearCode.getGradeCodes()) {
             GradeLevel gl = GradeLevel.of(gradeLevel);
             grades.add(GradeOptionDTO.builder()
                     .gradeCode(gradeLevel)
@@ -249,9 +241,9 @@ public class AdminClassAppService {
                 .stageName(stage.getDescription())
                 .stageYearCode(yearCode.getValue())
                 .stageYearName(yearCode.getDescription())
-                .yearCount(yearCount)
-                .startGrade(startGrade)
-                .endGrade(endGrade)
+                .yearCount(yearCode.getYearCount())
+                .startGrade(yearCode.getStartGrade())
+                .endGrade(yearCode.getEndGrade())
                 .grades(grades)
                 .build();
     }
