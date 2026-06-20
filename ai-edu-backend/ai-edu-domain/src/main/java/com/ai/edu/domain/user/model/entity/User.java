@@ -34,6 +34,9 @@ public class User {
     @TableField("email")
     private String email;
 
+    @TableField("id_card")
+    private String idCard;
+
     @TableField("role")
     private String role;
 
@@ -56,6 +59,20 @@ public class User {
         user.realName = realName;
         user.phone = phone;
         user.role = role;
+        return user;
+    }
+
+    /**
+     * 创建学生用户（含加密后的身份证号）
+     */
+    public static User createStudent(String username, String password, String realName, String phone, String idCard) {
+        User user = new User();
+        user.username = username;
+        user.password = password;
+        user.realName = realName;
+        user.phone = phone;
+        user.idCard = idCard;
+        user.role = "STUDENT";
         return user;
     }
 

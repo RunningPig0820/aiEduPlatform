@@ -11,6 +11,7 @@ import com.ai.edu.domain.organization.model.entity.StudentClass;
 import com.ai.edu.domain.organization.model.entity.TeacherClass;
 import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
 import com.ai.edu.domain.organization.model.valueobject.SchoolYear;
+import com.ai.edu.domain.organization.model.valueobject.StudentClassStatus;
 import com.ai.edu.domain.organization.repository.ClassRepository;
 import com.ai.edu.domain.organization.repository.SchoolRepository;
 import com.ai.edu.domain.organization.repository.StudentClassRepository;
@@ -104,7 +105,7 @@ public class ClassAppService {
         // 获取学生数量
         int studentCount = studentClassRepository.countByClassIdAndStatus(
                 ClassId.of(id),
-                com.ai.edu.domain.organization.model.valueobject.StudentClassStatus.active()
+                StudentClassStatus.active()
         );
         dto.setStudentCount(studentCount);
 

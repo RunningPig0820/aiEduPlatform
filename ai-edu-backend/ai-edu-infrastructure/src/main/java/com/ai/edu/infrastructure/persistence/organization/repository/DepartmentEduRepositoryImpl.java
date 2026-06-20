@@ -59,7 +59,11 @@ public class DepartmentEduRepositoryImpl implements DepartmentEduRepository {
 
     @Override
     public void deleteByDeptId(Long deptId) {
-        departmentEduMapper.deleteByDeptId(deptId);
+        // 先查主键 ID，再用 MyBatis-Plus 内置逻辑删除
+        DepartmentEduPO po = departmentEduMapper.selectByDeptId(deptId);
+        if (po != null) {
+            departmentEduMapper.deleteById(po.getId());
+        }
     }
 
     // ==================== 转换方法 ====================

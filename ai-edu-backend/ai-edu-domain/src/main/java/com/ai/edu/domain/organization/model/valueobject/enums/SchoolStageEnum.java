@@ -4,31 +4,28 @@ import lombok.Getter;
 
 /**
  * 学校学段枚举
- * 小学、初中、高中、大学
  */
 @Getter
 public enum SchoolStageEnum {
 
     /** 小学 */
-    PRIMARY("PRIMARY", "小学", 1),
+    PRIMARY("1","PRIMARY", "小学"),
 
     /** 初中 */
-    JUNIOR_HIGH("JUNIOR_HIGH", "初中", 7),
+    JUNIOR_HIGH("2","JUNIOR_HIGH", "初中"),
 
     /** 高中 */
-    SENIOR_HIGH("SENIOR_HIGH", "高中", 10),
+    SENIOR_HIGH("3","SENIOR_HIGH", "高中")
+    ;
 
-    /** 大学 */
-    UNIVERSITY("UNIVERSITY", "大学", 1);
-
+    private final String code;
     private final String value;
     private final String description;
-    private final int startGradeLevel;
 
-    SchoolStageEnum(String value, String description, int startGradeLevel) {
+    SchoolStageEnum(String code , String value, String description) {
+        this.code = code;
         this.value = value;
         this.description = description;
-        this.startGradeLevel = startGradeLevel;
     }
 
     public static SchoolStageEnum of(String value) {
@@ -55,15 +52,4 @@ public enum SchoolStageEnum {
         return this == SENIOR_HIGH;
     }
 
-    public boolean isUniversity() {
-        return this == UNIVERSITY;
-    }
-
-    /**
-     * 获取该学段的结束年级级别
-     * @param yearCount 年制年数（由 StageYearCode 提供）
-     */
-    public int getEndGradeLevel(int yearCount) {
-        return startGradeLevel + yearCount - 1;
-    }
 }

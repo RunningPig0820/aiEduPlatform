@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS t_user (
     real_name VARCHAR(50) NOT NULL,
     phone VARCHAR(20) UNIQUE,
     email VARCHAR(100),
+    id_card VARCHAR(512) COMMENT '身份证号(AES加密存储)',
     role VARCHAR(20) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -147,6 +148,8 @@ CREATE TABLE IF NOT EXISTS t_department (
     department_type VARCHAR(20) DEFAULT 'ORG',
     sort_order INT DEFAULT 0,
     description VARCHAR(500),
+    created_by BIGINT DEFAULT 0,
+    modified_by BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE
@@ -173,17 +176,37 @@ CREATE TABLE IF NOT EXISTS t_department_edu (
 INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (1, '测试学校', 'PRIMARY', FALSE);
 INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (2, '空学校', 'PRIMARY', FALSE);
 
--- 初始化测试用户数据（用于教职工关联）
+-- 初始化测试用户数据
 INSERT INTO t_user (id, username, password, real_name, phone, role, enabled) VALUES
 (1, 'teacher001', 'password123', '张三', '13800138001', 'TEACHER', TRUE),
 (2, 'teacher002', 'password123', '李四', '13800138002', 'TEACHER', TRUE),
-(3, 'teacher003', 'password123', '王五', '13800138003', 'TEACHER', TRUE);
+(3, 'teacher003', 'password123', '王五', '13800138003', 'TEACHER', TRUE),
+-- 测试学生用户
+(10, 'student001', 'password123', '测试学生A', '13800000001', 'STUDENT', TRUE),
+(11, 'student002', 'password123', '测试学生B', '13800000002', 'STUDENT', TRUE),
+-- 测试家长用户
+(20, 'parent001', 'password123', '测试家长X', '13900000001', 'PARENT', TRUE),
+(21, 'parent002', 'password123', '测试家长Y', '13900000002', 'PARENT', TRUE);
 
 -- 初始化测试部门数据
-INSERT INTO t_department (id, school_id, name, parent_id, department_path, sort_order, is_deleted) VALUES
-(1, 1, '教务处', NULL, '1', 1, FALSE),
-(2, 1, '语文教研组', 1, '1_2', 1, FALSE),
-(3, 1, '数学教研组', 1, '1_3', 2, FALSE);
+INSERT INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, created_by, modified_by, is_deleted) VALUES
+(1, 1, '教务处', NULL, '1', 'ORG', 1, 0, 0, FALSE),
+(2, 1, '语文教研组', 1, '1_2', 'ORG', 1, 0, 0, FALSE),
+(3, 1, '数学教研组', 1, '1_3', 'ORG', 2, 0, 0, FALSE);
+
+-- 行政班测试数据：小学部 → 一年级 → 一班/二班
+INSERT INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, is_deleted) VALUES
+(10, 1, '小学部', NULL, '10', 'ADMIN_CLASS', 1, FALSE),
+(11, 1, '一年级', 10, '10_11', 'ADMIN_CLASS', 1, FALSE),
+(12, 1, '一班', 11, '10_11_12', 'ADMIN_CLASS', 1, FALSE),
+(13, 1, '二班', 11, '10_11_13', 'ADMIN_CLASS', 2, FALSE);
+
+-- 行政班扩展属性
+INSERT INTO t_department_edu (id, dept_id, school_id, dept_type, stage_code, stage_year_code, grade_code, enrollment_year, is_deleted) VALUES
+(10, 10, 1, 3, 'PRIMARY', '4', '', '', FALSE),
+(11, 11, 1, 4, 'PRIMARY', '4', '1', '2024', FALSE),
+(12, 12, 1, 5, 'PRIMARY', '4', '1', '2024', FALSE),
+(13, 13, 1, 5, 'PRIMARY', '4', '1', '2024', FALSE);
 
 -- 教职工关联关系表
 CREATE TABLE IF NOT EXISTS t_org_teacher (
@@ -198,9 +221,26 @@ CREATE TABLE IF NOT EXISTS t_org_teacher (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
+-- 家长信息扩展表
+CREATE TABLE IF NOT EXISTS t_parent_profile (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_user_id BIGINT NOT NULL,
+    parent_user_id BIGINT NOT NULL,
+    relationship VARCHAR(32) NOT NULL DEFAULT '',
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by BIGINT NOT NULL DEFAULT 0,
+    modified_by BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+);
+
 -- 索引
 CREATE INDEX idx_department_school ON t_department(school_id);
 CREATE INDEX idx_department_parent ON t_department(parent_id);
 CREATE INDEX idx_department_path ON t_department(department_path);
 CREATE UNIQUE INDEX idx_org_teacher_school_user ON t_org_teacher(school_id, user_id);
 CREATE INDEX idx_org_teacher_department ON t_org_teacher(department_id);
+CREATE INDEX idx_parent_profile_student ON t_parent_profile(student_user_id);
+CREATE INDEX idx_parent_profile_parent ON t_parent_profile(parent_user_id);
+CREATE UNIQUE INDEX idx_parent_profile_unique ON t_parent_profile(student_user_id, parent_user_id);

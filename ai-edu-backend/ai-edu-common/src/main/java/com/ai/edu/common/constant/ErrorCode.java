@@ -65,4 +65,6 @@ public final class ErrorCode {
     public static final String CLASS_NOT_ACTIVE = "80007";
     public static final String STUDENT_ALREADY_IN_CLASS = "80008";
     public static final String GRADE_NOT_FOUND = "80009";
+    public static final String ADMIN_CLASS_NODE_INVALID = "80010";
+    public static final String STUDENT_ALREADY_IN_ADMIN_CLASS = "80011";
 }

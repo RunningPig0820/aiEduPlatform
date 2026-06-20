@@ -28,9 +28,4 @@ public interface DepartmentEduMapper extends BaseMapper<DepartmentEduPO> {
     @Select("SELECT * FROM t_department_edu WHERE school_id = #{schoolId} AND is_deleted = 0 ORDER BY dept_id")
     List<DepartmentEduPO> selectBySchoolId(@Param("schoolId") Long schoolId);
 
-    /**
-     * 根据部门ID逻辑删除
-     */
-    @Select("UPDATE t_department_edu SET is_deleted = 1 WHERE dept_id = #{deptId} AND is_deleted = 0")
-    int deleteByDeptId(@Param("deptId") Long deptId);
 }

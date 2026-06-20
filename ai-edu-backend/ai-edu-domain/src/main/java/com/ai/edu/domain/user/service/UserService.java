@@ -36,9 +36,11 @@ public interface UserService {
 
     /**
      * 创建用户
-     * @param name 姓名
-     * @param phone 手机号
+     * @param name   姓名
+     * @param phone  手机号
+     * @param role   角色（如 STUDENT, PARENT, TEACHER）
+     * @param idCard 身份证号（AES 加密后的密文，非学生角色传 null）
      * @return 用户ID
      */
-    Long createUser(String name, String phone);
+    Long createUser(String name, String phone, String role, String idCard);
 }

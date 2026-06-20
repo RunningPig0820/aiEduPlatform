@@ -44,8 +44,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public Long createUser(String name, String phone) {
-        log.info("用户域查询服务：创建用户 name={}, phone={}", name, phone);
+    public Long createUser(String name, String phone, String role, String idCard) {
+        log.info("用户域查询服务：创建用户 name={}, phone={}, role={}", name, phone, role);
 
         // 检查手机号是否已存在
         if (userRepository.existsByPhone(phone)) {
@@ -57,8 +57,13 @@ public class UserServiceImpl implements UserService {
         // 默认密码
         String password = "password123";
 
-        // 创建用户实体
-        User user = User.create(username, password, name, phone, "TEACHER");
+        // 根据角色创建用户实体
+        User user;
+        if ("STUDENT".equals(role) && idCard != null) {
+            user = User.createStudent(username, password, name, phone, idCard);
+        } else {
+            user = User.create(username, password, name, phone, role);
+        }
 
         // 保存用户
         User savedUser = userRepository.save(user);

@@ -55,12 +55,36 @@ public class UserDataProvider {
     }
 
     /**
-     * 创建用户
+     * 创建教师用户
      */
     @DS("user")
     public User createUser(String name, String phone) {
-        Long userId = userService.createUser(name, phone);
+        Long userId = userService.createUser(name, phone, "TEACHER", null);
         return userService.findById(userId).orElseThrow(() ->
             new IllegalStateException("用户创建后查询失败: userId=" + userId));
+    }
+
+    /**
+     * 创建学生用户（含身份证加密）
+     *
+     * 加密逻辑在此处处理：EncryptUtil.encrypt(idCard) 后传入 UserService
+     */
+    @DS("user")
+    public User createStudent(String name, String phone, String idCard) {
+        String encryptedIdCard = com.ai.edu.common.util.EncryptUtil.encrypt(idCard);
+        log.info("学生身份证已加密存储");
+        Long userId = userService.createUser(name, phone, "STUDENT", encryptedIdCard);
+        return userService.findById(userId).orElseThrow(() ->
+            new IllegalStateException("学生用户创建后查询失败: userId=" + userId));
+    }
+
+    /**
+     * 创建家长用户
+     */
+    @DS("user")
+    public User createParent(String name, String phone) {
+        Long userId = userService.createUser(name, phone, "PARENT", null);
+        return userService.findById(userId).orElseThrow(() ->
+            new IllegalStateException("家长用户创建后查询失败: userId=" + userId));
     }
 }
