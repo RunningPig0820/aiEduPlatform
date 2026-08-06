@@ -20,6 +20,14 @@ public interface KgKnowledgePointMapper extends BaseMapper<KgKnowledgePointPo> {
     @Select("SELECT * FROM t_kg_knowledge_point WHERE uri = #{uri} AND is_deleted = false")
     KgKnowledgePointPo selectByUri(@Param("uri") String uri);
 
+    /** 按知识点名精确匹配（答疑 label→URI 解析，limit 1 取最先收录）。 */
+    @Select("SELECT * FROM t_kg_knowledge_point WHERE label = #{label} AND is_deleted = false LIMIT 1")
+    KgKnowledgePointPo selectByLabel(@Param("label") String label);
+
+    /** 按知识点名模糊匹配（答疑 label→URI 解析兜底，limit 1）。 */
+    @Select("SELECT * FROM t_kg_knowledge_point WHERE label LIKE CONCAT('%', #{label}, '%') AND is_deleted = false LIMIT 1")
+    KgKnowledgePointPo selectByLabelLike(@Param("label") String label);
+
     @Select("<script>" +
             "SELECT * FROM t_kg_knowledge_point WHERE uri IN " +
             "<foreach item='uri' collection='uris' open='(' separator=',' close=')'>#{uri}</foreach>" +

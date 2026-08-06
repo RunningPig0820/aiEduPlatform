@@ -44,6 +44,10 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // /api/auth/** 需要认证（知识图谱、LLM 等）
                         .requestMatchers("/api/auth/**").authenticated()
+                        // AI 答疑：SSE 流式 + 同步端点均需登录（会话内再校验 STUDENT 角色）
+                        .requestMatchers("/api/tutoring/**").authenticated()
+                        // 学生掌握度查询（图谱叠加数据源）需登录
+                        .requestMatchers("/api/students/**").authenticated()
                         // 演示/健康检查/错误页面
                         .requestMatchers("/demo/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()

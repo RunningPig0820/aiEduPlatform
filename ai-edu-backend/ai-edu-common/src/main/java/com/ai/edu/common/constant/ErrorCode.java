@@ -39,6 +39,13 @@ public final class ErrorCode {
     // 学习模块 5xxxx
     public static final String ERROR_RECORD_NOT_FOUND = "50001";
 
+    // AI 答疑（学习域功能模块，归 5xxxx 区间，不与作业模块 4xxxx 冲突）
+    public static final String TUTORING_SESSION_NOT_FOUND = "50002";
+    public static final String TUTORING_SESSION_ENDED = "50003";
+    public static final String TUTORING_CREATE_FREQUENT = "50004";
+    public static final String TUTORING_AGENT_FAILED = "50005";
+    public static final String TUTORING_OCR_INVALID = "50006";
+
     // LLM模块 6xxxx
     public static final String LLM_SERVICE_UNAVAILABLE = "60001";
     public static final String LLM_MODEL_NOT_ALLOWED = "60002";

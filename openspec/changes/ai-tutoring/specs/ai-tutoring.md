@@ -19,7 +19,7 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 
 #### Scenario: 确认后进入答疑
 - **WHEN** 学生确认（或修改后确认）识别出的题目文本
-- **THEN** 该文本作为 `current_question` 发起答疑会话，进入正常答疑流程
+- **THEN** 该文本作为**首条学生消息**发起答疑会话，进入正常答疑流程
 
 #### Scenario: OCR 识别质量差
 - **WHEN** OCR 识别结果可能错误（公式/上下标易错）
@@ -58,7 +58,7 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 
 #### Scenario: 分步推进
 - **WHEN** 会话 ACTIVE 且学生正常回答
-- **THEN** Java 组装上下文（历史 + counters + 当前题目 + 掌握度快照）→ 调 `decide` 输出 type=hint 及 eval/mastery_signals
+- **THEN** Java 组装上下文（历史 + counters + 掌握度快照；**不含当前题目**，后端不记录）→ 调 `decide` 输出 type=hint 及 eval/mastery_signals
 - **THEN** Java 护栏通过 → 落库副作用（掌握度/错误/情绪）→ `generate`（type=hint）流式返回一条引导
 - **THEN** 引导类动作 round_count+1；达 20 → 强制收尾
 
@@ -69,7 +69,7 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 #### Scenario: 回答错误
 - **WHEN** 学生回答错误
 - **THEN** `decide` 返回 eval（correct=false、error_type、emotion）
-- **THEN** Java 写 `t_error_event`（含 emotion）、按 mastery_signals 更新掌握度
+- **THEN** Java 写 `t_tutoring_error_event`（含 emotion）、按 mastery_signals 更新掌握度
 - **THEN** `generate`（type=hint）给出引导性反问（如"这一步的依据是什么？"），不直接评判
 
 ### Requirement: 答案护栏（第 1 次思路 / 第 2 次答案）
@@ -110,25 +110,25 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 
 ### Requirement: 换题与计数重置
 
-系统 SHALL 在学生换题时归档旧题并重置护栏计数，按新题重新计。
+系统 SHALL 在学生换题时重置护栏计数，按新题重新计；旧题知识点不按完成校正（不点亮）。**换题/当前题目判定链路在 Python decide**（从 history 语义判断）；后端不记录、不维护题目内容。
 
 #### Scenario: 中途换题
 - **WHEN** 学生贴出新题，`decide` 输出 type=switch + new_question
-- **THEN** Java 将当前题目更新为新题，round_count / answer_request_count 归零，旧题上下文标记 ABANDONED（不点亮）
+- **THEN** Java 仅 round_count / answer_request_count 归零（换题判定在 Python）；旧题知识点不校正（不点亮）
 - **THEN** 会话保持 ACTIVE，按新题继续引导
 
 ### Requirement: 会话收尾与归档
 
-系统 SHALL 在会话结束时按退出路径校正掌握度，生成总结并归档全文。
+系统 SHALL 在会话结束时按退出路径校正掌握度，生成总结并将对话终态写 COS。
 
 #### Scenario: 正常收尾
 - **WHEN** 会话收尾（独立解出 / 看过答案 / 20 轮到顶 / 主动结束）
 - **THEN** Java 按 end_reason 校正掌握度（COMPLETED → 提升到 75+；其余不提升）
-- **THEN** 生成总结（涉及知识点/薄弱点）→ 会话全文 JSON 写 COS（`tutoring/transcripts/{sessionId}.json`，脱敏、私有读）→ 回填 transcript_url → 置 ARCHIVED
+- **THEN** 生成总结（涉及知识点/薄弱点）→ 对话终态写 COS（`tutoring/transcripts/{sessionId}.json`，脱敏、私有读；对话全程已每轮实时整写，此处为终态）→ 置 ARCHIVED
 
 #### Scenario: 断点恢复
 - **WHEN** 学生通过 GET `/api/tutoring/sessions/{id}` 查询进行中的会话
-- **THEN** 系统返回会话状态、当前题目、计数、最近消息（来自 Redis），供前端续聊
+- **THEN** 系统返回会话状态、计数、最近消息（来自 Redis；当前题目后端不记录，前端从最近消息推断），供前端续聊
 - **THEN** 续聊后新消息在原会话继续推进，不新建会话
 
 ### Requirement: 掌握度查询供图谱叠加
@@ -168,11 +168,11 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
   "history": [{"role": "user", "content": "..."}, {"role": "ai", "content": "..."}],
   "round_count": 3,
   "answer_request_count": 0,
-  "current_question": "鸡兔同笼，共35头94脚，各几只？",
   "mastery_snapshot": [{"kp_key": "http://edukg.org/...", "label": "二元一次方程组", "mastery_level": 50}],
   "subject_hint": "math"
 }
 ```
+> **判定链路**：请求**不含 `current_question`**——换题 / 当前题目由 Python decide 从 `history` 语义判断（Java 不记录、不维护题目内容，记录易错）。Java 只认 `type=switch` 事件重置计数；`new_question` 为 Python 输出、Java 仅作展示可选、不落库。
 响应（action 元数据）：
 ```json
 {
@@ -195,7 +195,6 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 ```json
 {
   "history": [...],
-  "current_question": "鸡兔同笼，共35头94脚，各几只？",
   "subject_hint": "math",
   "action_type": "hint",
   "action_meta": {"eval": {"correct": true, "emotion": "NEUTRAL"}}
@@ -205,6 +204,6 @@ AI 答疑（能力受限 agent + 工具护栏）：学生提交题目后，Java 
 
 ### `POST /api/ocr/recognize`（OCR 前置）
 
-请求：`multipart file`（题目照片）；响应：`{text, confidence}`。Java 编排：前端 `POST /api/tutoring/ocr` 上传 → 代理本端点 → 识别文本供学生确认/修改 → 确认后作为 `current_question` 进答疑。不进 decide/generate 契约。
+请求：`multipart file`（题目照片）；响应：`{text, confidence}`。Java 编排：前端 `POST /api/tutoring/ocr` 上传 → 代理本端点 → 识别文本供学生确认/修改 → 确认后作为**首条学生消息**进答疑。不进 decide/generate 契约。
 
 > `decide` 建议用快模型（低成本、低延迟），`generate` 用强模型（流式质量）。两段式保证"类型先行"：任何内容流出前 type 已过 Java 护栏。

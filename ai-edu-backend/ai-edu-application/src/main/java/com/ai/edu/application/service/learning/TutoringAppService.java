@@ -1,0 +1,687 @@
+package com.ai.edu.application.service.learning;
+
+import com.ai.edu.application.assembler.learning.TutoringAssembler;
+import com.ai.edu.application.dto.learning.ChatMessageDTO;
+import com.ai.edu.application.dto.learning.GuardResult;
+import com.ai.edu.application.dto.learning.MasteryItemDTO;
+import com.ai.edu.application.dto.learning.StudentMasteryDTO;
+import com.ai.edu.application.dto.learning.SummaryDTO;
+import com.ai.edu.application.dto.learning.TutoringConfigDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.sse.SseDoneDTO;
+import com.ai.edu.application.dto.learning.sse.SseEvalDTO;
+import com.ai.edu.application.dto.learning.sse.SseMetaDTO;
+import com.ai.edu.common.constant.ErrorCode;
+import com.ai.edu.common.exception.BusinessException;
+import com.ai.edu.common.exception.TutoringAgentException;
+import com.ai.edu.domain.learning.model.contract.ActionMeta;
+import com.ai.edu.domain.learning.model.contract.DecideContext;
+import com.ai.edu.domain.learning.model.contract.EvalInfo;
+import com.ai.edu.domain.learning.model.contract.GenerateContext;
+import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
+import com.ai.edu.domain.learning.model.contract.OcrResult;
+import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
+import com.ai.edu.domain.learning.model.entity.ErrorEvent;
+import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.TutoringSession;
+import com.ai.edu.domain.learning.model.valueobject.ActionType;
+import com.ai.edu.domain.learning.model.valueobject.EndReason;
+import com.ai.edu.domain.learning.model.valueobject.KpKey;
+import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
+import com.ai.edu.domain.learning.model.valueobject.TutoringConstants;
+import com.ai.edu.domain.learning.model.valueobject.TutoringEmotion;
+import com.ai.edu.domain.learning.model.valueobject.TutoringState;
+import com.ai.edu.domain.learning.repository.ErrorEventRepository;
+import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
+import com.ai.edu.domain.learning.repository.TutoringSessionCache;
+import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
+import com.ai.edu.domain.learning.service.TutoringConfig;
+import com.ai.edu.domain.learning.service.TutoringKpResolver;
+import com.ai.edu.domain.learning.service.TutoringLlmPort;
+import com.ai.edu.domain.shared.service.FileStorageService;
+import com.ai.edu.domain.shared.service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
+import lombok.AccessLevel;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+
+/**
+ * 答疑编排服务（Java 网关主导，任务 7.3-7.9）。
+ *
+ * <p>一次学生消息 = 安全预检 → 组装上下文 → Python decide（非流式）→ Java 护栏校验 →
+ * 落库副作用（掌握度/错误/情绪/round）→ 每轮实时整写 COS → Python generate（流式）→ SSE 透传。
+ *
+ * <p>终止场景（无关/学习方法/非数学/安全）直接回复置 TERMINATED，无 generate；护栏拒绝时
+ * 按 fallbackType 降级（reveal 未授权 → approach），无 token 流的场景直接返回固定话术。
+ */
+@Slf4j
+@Service
+public class TutoringAppService {
+
+    /** 轮次上限强制收尾的提示 */
+    private static final String ROUND_LIMIT_REPLY = "本轮答疑已达 20 轮上限，先消化一下当前内容，有需要可以发起新一轮答疑。";
+    /** Python 调用失败重试后仍失败的降级提示（会话保持 ACTIVE 不断开） */
+    private static final String AGENT_ERROR_REPLY = "网络波动，请重试。";
+    /** 断点恢复返回的最近消息条数上限 */
+    private static final int RECENT_MESSAGES_LIMIT = 50;
+
+    /** 11.2 会话并发锁：Redis key 前缀 + 锁 TTL（覆盖 decide 重试窗口，超时自动释放） */
+    private static final String SESSION_LOCK_PREFIX = "learning:tutoring:lock:";
+    private static final long SESSION_LOCK_SECONDS = 45;
+
+    private static final ObjectMapper SSE_MAPPER = new ObjectMapper();
+
+    /** 字段名不用 {@code sessionRepository}——与 Spring Session 的 RedisSessionRepository bean 名冲突（@Resource 按名注入）。 */
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringSessionRepository tutoringSessionRepository;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private StudentKpMasteryRepository masteryRepository;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private ErrorEventRepository errorEventRepository;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringSessionCache sessionCache;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringLlmPort llmPort;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringKpResolver kpResolver;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringGuardrailService guardrail;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringContextAssembler contextAssembler;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringTranscriptArchiver transcriptArchiver;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringAssembler assembler;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private FileStorageService fileStorageService;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TutoringConfig tutoringConfig;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private RedisService redisService;
+
+    // ==================== 对外入口 ====================
+
+    /** 发起答疑（SSE，类型先行流式）：首条学生消息进历史 → decide → 护栏 → 建会话 → generate。 */
+    public Flux<ServerSentEvent<String>> start(Long studentId, String message) {
+        // 7.9 会话创建频率限制
+        ensureCreateAllowed(studentId);
+        TutoringSession session = TutoringSession.start(studentId, "math");
+        List<TutoringChatMessage> history = new ArrayList<>();
+        history.add(TutoringChatMessage.user(message));
+        return orchestrate(session, history);
+    }
+
+    /** 发送学生回答（SSE）：追加消息 → decide → 护栏 → 落库副作用 → COS 整写 → generate 透传。
+     *  <p>11.2 同一会话并发消息经 Redis 锁串行化（锁保护 decide+副作用临界区，流式在锁外）。 */
+    public Flux<ServerSentEvent<String>> sendMessage(Long studentId, Long sessionId, String content) {
+        return withSessionLock(sessionId, () -> {
+            TutoringSession session = loadActiveSession(sessionId, studentId);
+            sessionCache.appendMessage(sessionId, TutoringChatMessage.user(content));
+            List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
+            return orchestrate(session, history);
+        });
+    }
+
+    /** 请求答案（SSE）：合成"请把答案给我"消息，交由 decide + 答案护栏处理（第 1 次思路 / 第 2 次答案）。 */
+    public Flux<ServerSentEvent<String>> requestAnswer(Long studentId, Long sessionId) {
+        return withSessionLock(sessionId, () -> {
+            TutoringSession session = loadActiveSession(sessionId, studentId);
+            sessionCache.appendMessage(sessionId, TutoringChatMessage.user("请把答案给我"));
+            List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
+            return orchestrate(session, history);
+        });
+    }
+
+    /** 断点恢复：查询会话状态 + 最近消息（Redis 过期则提示学生重述题目，完整对话恒在 COS）。 */
+    public TutoringSessionDTO getSession(Long studentId, Long sessionId) {
+        TutoringSession session = loadSession(sessionId, studentId);
+        List<TutoringChatMessage> messages = sessionCache.listMessages(sessionId);
+        List<ChatMessageDTO> recent = messages.stream()
+                .skip(Math.max(0, messages.size() - RECENT_MESSAGES_LIMIT))
+                .map(m -> ChatMessageDTO.builder().role(m.getRole()).content(m.getContent())
+                        .createdAt(m.getCreatedAt()).build())
+                .toList();
+        TutoringSessionDTO dto = assembler.toSessionDTO(session, recent, null);
+        resolveTranscriptUrl(dto);
+        return dto;
+    }
+
+    /** 主动收尾：end_reason=ABANDONED，掌握度不提升 + COS 终态写 + 清 Redis。 */
+    public TutoringSessionDTO archive(Long studentId, Long sessionId) {
+        return withSessionLock(sessionId, () -> {
+            TutoringSession session = loadActiveSession(sessionId, studentId);
+            List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
+            guardrail.onEnd(session, EndReason.ABANDONED);
+            String objectKey = transcriptArchiver.archive(session.getStudentId(), session.getId(),
+                    session.getCreatedAt(), history, session.getStatus(), null);
+            session.updateTranscriptUrl(objectKey);
+            persistSession(session);
+            sessionCache.clear(sessionId);
+            TutoringSessionDTO dto = assembler.toSessionDTO(session, null, null);
+            resolveTranscriptUrl(dto);
+            return dto;
+        });
+    }
+
+    /** 查询学生知识点掌握度（图谱叠加数据源）。 */
+    public StudentMasteryDTO getStudentMastery(Long studentId) {
+        List<StudentKpMastery> list = masteryRepository.findByStudentId(studentId);
+        return StudentMasteryDTO.builder()
+                .studentId(studentId)
+                .items(list.stream()
+                        .map(m -> MasteryItemDTO.builder()
+                                .kpKey(m.getKpKey() == null ? null : m.getKpKey().getValue())
+                                .kpLabel(m.getKpLabel())
+                                .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
+                                .updatedAt(m.getUpdatedAt())
+                                .build())
+                        .toList())
+                .build();
+    }
+
+    // ==================== OCR 前置 ====================
+
+    /**
+     * 拍题识别（OCR 前置步骤）：图片 → Python /api/ocr/recognize → {text, confidence}。
+     *
+     * <p>仅校验图片有效性与格式（jpg/png），识别质量依赖识别服务，结果必须经学生确认/修改后再进答疑。
+     * 无效图片 → 50006；Python 调用失败且重试后仍失败 → 50005。
+     *
+     * @param imageData        图片字节
+     * @param originalFilename 原始文件名（jpg/jpeg/png）
+     */
+    public OcrResult ocr(byte[] imageData, String originalFilename) {
+        // 11.1 ocr.enabled 开关：关闭时拍照识别不可用（前端隐藏拍照入口，仅手打/粘贴）
+        if (!config().ocrEnabled()) {
+            throw new BusinessException(ErrorCode.TUTORING_OCR_INVALID, "拍照识别未开启，请手动输入题目");
+        }
+        if (imageData == null || imageData.length == 0) {
+            throw new BusinessException(ErrorCode.TUTORING_OCR_INVALID, "图片为空");
+        }
+        String name = originalFilename == null ? "" : originalFilename.toLowerCase();
+        // 与 Python /api/ocr/recognize 允许集对齐（jpg/png/webp/bmp）
+        if (!(name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
+                || name.endsWith(".webp") || name.endsWith(".bmp"))) {
+            throw new BusinessException(ErrorCode.TUTORING_OCR_INVALID, "仅支持 jpg/png/webp/bmp 图片");
+        }
+        try {
+            return llmPort.recognize(imageData, originalFilename);
+        } catch (TutoringAgentException e) {
+            throw e; // 50005 Python 调用失败（含重试后）
+        } catch (Exception e) {
+            log.error("OCR 识别异常: {}", e.getMessage(), e);
+            throw new BusinessException(ErrorCode.TUTORING_AGENT_FAILED, "识别失败，请重试");
+        }
+    }
+
+    /** 答疑配置端口（未注入时回退默认值，保持测试/默认行为一致）。 */
+    private TutoringConfig config() {
+        return tutoringConfig == null ? TutoringConfig.defaults() : tutoringConfig;
+    }
+
+    /** 前端能力开关（ocr.enabled → 前端据此显示/隐藏拍照入口）。 */
+    public TutoringConfigDTO getTutoringConfig() {
+        return TutoringConfigDTO.builder().ocrEnabled(config().ocrEnabled()).build();
+    }
+
+    // ==================== 11.2 会话并发锁 ====================
+
+    /**
+     * 同一会话串行化：Redis 锁（SET NX EX）包裹临界区（decide + 落库副作用），
+     * 防并发双发导致 round/消息计数错乱。流式 generate 在锁外执行（不持锁长流）。
+     *
+     * <p>锁未获取（并发）→ 抛"会话繁忙"；未注入 RedisService（纯单元测试）时直通。
+     */
+    private <T> T withSessionLock(Long sessionId, Supplier<T> action) {
+        if (redisService == null) {
+            return action.get();
+        }
+        String lockKey = SESSION_LOCK_PREFIX + sessionId;
+        String lockValue = UUID.randomUUID().toString();
+        if (!Boolean.TRUE.equals(redisService.tryLock(lockKey, lockValue, SESSION_LOCK_SECONDS, TimeUnit.SECONDS))) {
+            log.warn("[tutoring] 会话并发，拒绝本次消息, sessionId={}", sessionId);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "会话繁忙，请稍后再试");
+        }
+        try {
+            return action.get();
+        } finally {
+            redisService.unlock(lockKey, lockValue);
+        }
+    }
+
+    // ==================== 编排核心 ====================
+
+    /**
+     * decide → 护栏 → 副作用 → generate 的统一编排（start/sendMessage/requestAnswer 共用）。
+     *
+     * <p>流式路径：meta（护栏已放行 type）→ token（Python 正文流）→ done（终态）。终止/轮次上限无 token 流。
+     */
+    private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<TutoringChatMessage> history) {
+        try {
+            // 1. decide
+            List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
+            DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList);
+            ActionMeta action = llmPort.decide(ctx);
+
+            // 2. 安全终止（decide safety_flag）
+            if (Boolean.TRUE.equals(action.getSafetyFlag())) {
+                return terminate(session, action);
+            }
+
+            // 3. 护栏校验
+            GuardResult guard = guardrail.validate(action, session);
+
+            // 4. 终止类 end（无关/学习方法/非数学：type=end 且 end_reason 为空 → TERMINATED + 直接回复）
+            if (guard.isAllowed() && isTerminationEnd(action)) {
+                return terminate(session, action);
+            }
+
+            // 5. 轮次护栏拒绝（fallback=end）→ 强制收尾 ROUND_LIMIT，固定话术，无 generate
+            if (!guard.isAllowed() && guard.getFallbackType() == ActionType.END) {
+                return endByRoundLimit(session, action, history);
+            }
+
+            // 6. 放行 type（护栏拒绝时用 fallbackType，如 reveal→approach）
+            ActionType allowedType = guard.isAllowed()
+                    ? ActionType.fromCodeOrDefault(action.getType())
+                    : guard.getFallbackType();
+
+            // 7. 新会话落库 + 消息入缓存；已有会话复用
+            ensurePersisted(session, history);
+
+            // 8. 落库副作用（掌握度/错误/情绪/round/换题/收尾）
+            String lastUserContent = lastUserContent(history);
+            applySideEffects(session, action, allowedType, lastUserContent);
+            tutoringSessionRepository.save(session);
+            sessionCache.saveSession(session);
+
+            // 9. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）
+            archiveTranscript(session, history, action.getSummary());
+
+            // 10. 流式：meta → generate(token) → done；会话结束（ARCHIVED/TERMINATED）后清 Redis
+            return buildStream(session, action, allowedType, guard, history)
+                    .doOnComplete(() -> clearCacheIfEnded(session));
+        } catch (TutoringAgentException e) {
+            // Python 调用失败重试后仍失败：start 阶段不建会话（接口层映射 40004）；
+            // sendMessage 阶段回"网络波动"，会话保持 ACTIVE 不断开
+            if (session.getId() == null) {
+                throw e;
+            }
+            log.warn("[tutoring] Python agent 调用失败，回复网络波动, sessionId={}", session.getId());
+            return friendlyErrorStream(session);
+        }
+    }
+
+    // ==================== 副作用 ====================
+
+    /** 落库副作用：情绪/答案计数/换题/收尾/轮次 + 掌握度信号 + 错误事件。 */
+    private void applySideEffects(TutoringSession session, ActionMeta action,
+                                  ActionType allowedType, String lastUserContent) {
+        if (action.getEval() != null) {
+            session.setLastEmotion(TutoringEmotion.fromCode(action.getEval().getEmotion()));
+        }
+        // 答案计数：学生表达要答案（decide 输出 reveal）即计数，第 1 次被拦成思路 / 第 2 次放行
+        if (ActionType.REVEAL == ActionType.fromCode(action.getType())) {
+            session.requestAnswer();
+        }
+        if (allowedType == ActionType.SWITCH) {
+            session.switchQuestion();
+        }
+        if (allowedType == ActionType.END) {
+            guardrail.onEnd(session, EndReason.fromCode(action.getEndReason()));
+        }
+        // B2: 第 2 次要答案放行 reveal（count≥1）→ 给完整答案后收尾 ANSWER_REVEALED（api.md 契约，防止答案反复要）
+        if (allowedType == ActionType.REVEAL) {
+            guardrail.onEnd(session, EndReason.ANSWER_REVEALED);
+        }
+        // 引导类（hint/approach）消耗轮次
+        if (allowedType == ActionType.HINT || allowedType == ActionType.APPROACH) {
+            session.recordRound();
+        }
+        applyMasteryAndErrors(session, action, allowedType, lastUserContent);
+    }
+
+    /** 掌握度 UPSERT（label→URI，未命中记日志不点亮）+ eval.correct=false 写错误事件。 */
+    private void applyMasteryAndErrors(TutoringSession session, ActionMeta action,
+                                       ActionType allowedType, String lastUserContent) {
+        boolean completed = (allowedType == ActionType.END)
+                && EndReason.COMPLETED == EndReason.fromCode(action.getEndReason());
+        if (action.getMasterySignals() != null) {
+            for (MasterySignalItem item : action.getMasterySignals()) {
+                if (item.getKpLabel() == null || item.getKpLabel().isBlank()) {
+                    continue;
+                }
+                String uri = kpResolver.resolveLabelToUri(item.getKpLabel());
+                if (uri == null) {
+                    log.warn("[tutoring] 知识点 label 未命中 URI，不点亮: {}", item.getKpLabel());
+                    continue;
+                }
+                KpKey kpKey = KpKey.of(uri);
+                MasterySignal signal = MasterySignal.fromCode(item.getKpLabel(), item.getSignal());
+                StudentKpMastery mastery = masteryRepository.findByStudentAndKp(session.getStudentId(), kpKey)
+                        .orElseGet(() -> StudentKpMastery.create(session.getStudentId(), kpKey, item.getKpLabel()));
+                mastery.applySignal(signal);
+                if (completed) {
+                    mastery.raiseByCorrection();
+                }
+                // evidence 列是 JSON 类型，写入合法 JSON（原 "session_N" 非法 JSON 导致 MySQL 拒绝）
+                mastery.recordSession(session.getId(), "{\"session_id\":" + session.getId() + "}");
+                masteryRepository.upsert(mastery);
+            }
+        }
+        // B3: 错误事件门控——仅 decide 原始 type 为 hint/approach（真实评估学生作答）且
+        // 模型明确诊断出 error_type 才算学生错误。switch/end/reveal/concept 轮及首问 hint 轮
+        // 的 correct=false 是模型默认值（error_type=null），非真实学生错误，不写。
+        ActionType originalType = ActionType.fromCodeOrDefault(action.getType());
+        if (action.getEval() != null && Boolean.FALSE.equals(action.getEval().getCorrect())
+                && (originalType == ActionType.HINT || originalType == ActionType.APPROACH)
+                && action.getEval().getErrorType() != null) {
+            errorEventRepository.save(ErrorEvent.create(
+                    session.getStudentId(), session.getId(),
+                    firstKpUri(action),
+                    action.getEval().getErrorType(),
+                    TutoringEmotion.fromCode(action.getEval().getEmotion()),
+                    session.getRoundCount(),
+                    lastUserContent));
+        }
+    }
+
+    // ==================== 流式构建 ====================
+
+    private Flux<ServerSentEvent<String>> buildStream(TutoringSession session, ActionMeta action,
+                                                      ActionType allowedType, GuardResult guard,
+                                                      List<TutoringChatMessage> history) {
+        SseMetaDTO meta = buildMeta(session, action, allowedType, guard);
+        GenerateContext genCtx = contextAssembler.buildGenerateContext(history, allowedType, action);
+        StringBuilder aiReply = new StringBuilder();
+        Flux<ServerSentEvent<String>> tokenStream = llmPort.generate(genCtx)
+                // 只透传 Python 的 token 事件（其 meta/done 无 content，Java 自建 meta/done）
+                .filter(pyEvent -> "token".equals(pyEvent.event()))
+                .map(pyEvent -> {
+                    String content = extractTokenContent(pyEvent.data());
+                    if (content != null) {
+                        aiReply.append(content);
+                    }
+                    return ServerSentEvent.<String>builder()
+                            .event("token").data(pyEvent.data()).build();
+                })
+                .onErrorResume(e -> Flux.just(contentToken(AGENT_ERROR_REPLY)));
+        SseDoneDTO done = buildDone(session, action);
+        return Flux.concat(
+                Flux.just(metaEvent(meta)),
+                tokenStream,
+                Flux.just(doneEvent(done)))
+                // AI 回复落库：流结束后把完整回复追加到 Redis 消息列表，并重新整写 COS（恒为完整对话，含 AI 回复）
+                .doOnComplete(() -> {
+                    if (aiReply.length() > 0) {
+                        sessionCache.appendMessage(session.getId(), TutoringChatMessage.ai(aiReply.toString()));
+                        archiveTranscript(session, sessionCache.listMessages(session.getId()), action.getSummary());
+                    }
+                });
+    }
+
+    /** 从 token 事件 data（{"content":"..."}）提取正文；解析失败返回 null（跳过，不阻断透传）。 */
+    private String extractTokenContent(String data) {
+        if (data == null || data.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = SSE_MAPPER.readTree(data);
+            JsonNode content = node.get("content");
+            return content == null || content.isNull() ? null : content.asText();
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private SseMetaDTO buildMeta(TutoringSession session, ActionMeta action,
+                                 ActionType allowedType, GuardResult guard) {
+        SseMetaDTO meta = SseMetaDTO.builder()
+                .sessionId(session.getId())
+                .status(session.getStatus() == null ? null : session.getStatus().name())
+                .type(allowedType.name().toLowerCase())
+                .roundCount(session.getRoundCount())
+                .answerRequestCount(session.getAnswerRequestCount())
+                .newQuestion(action.getNewQuestion())
+                .degraded(Boolean.TRUE.equals(action.getDegraded()))
+                .build();
+        if (action.getEval() != null) {
+            meta.setEval(toSseEval(action.getEval()));
+        }
+        if (!guard.isAllowed()) {
+            meta.setDenied(ActionType.fromCodeOrDefault(action.getType()).name().toLowerCase());
+            meta.setReason(guard.getDeniedReason());
+        }
+        return meta;
+    }
+
+    private SseDoneDTO buildDone(TutoringSession session, ActionMeta action) {
+        return SseDoneDTO.builder()
+                .sessionId(session.getId())
+                .status(session.getStatus() == null ? null : session.getStatus().name())
+                .roundCount(session.getRoundCount())
+                .eval(action.getEval() == null ? null : toSseEval(action.getEval()))
+                .summary(assembler.toSummary(action.getSummary()))
+                .endReason(action.getEndReason())
+                .build();
+    }
+
+    private SseEvalDTO toSseEval(EvalInfo eval) {
+        return SseEvalDTO.builder()
+                .correct(eval.getCorrect())
+                .errorType(eval.getErrorType())
+                .emotion(eval.getEmotion())
+                .exerciseComplete(eval.getExerciseComplete())
+                .build();
+    }
+
+    // ==================== 终止 / 轮次上限 / 降级 ====================
+
+    /**
+     * 终止场景（无关/学习方法/非数学/安全）：置 TERMINATED，回复在 meta.reply，无 token 流。
+     * start() 阶段终止不建会话（避免无关内容污染会话表）；sendMessage 阶段置 TERMINATED + 清缓存。
+     */
+    private Flux<ServerSentEvent<String>> terminate(TutoringSession session, ActionMeta action) {
+        String reply = (action.getSummary() != null && !action.getSummary().isBlank())
+                ? action.getSummary() : "该内容超出答疑范围，请提出学习相关问题。";
+        log.info("[tutoring] 终止会话: sessionId={}, reason=terminated", session.getId());
+        if (session.getId() == null) {
+            return Flux.just(metaEvent(SseMetaDTO.builder()
+                    .status("TERMINATED").type("end").reply(reply).build()));
+        }
+        session.terminate(null);
+        persistSession(session);
+        sessionCache.clear(session.getId());
+        return Flux.just(metaEvent(SseMetaDTO.builder()
+                .sessionId(session.getId()).status("TERMINATED").type("end").reply(reply).build()));
+    }
+
+    /** 轮次护栏拒绝（round≥20）：强制收尾 ROUND_LIMIT，固定话术，无 generate。 */
+    private Flux<ServerSentEvent<String>> endByRoundLimit(TutoringSession session, ActionMeta action,
+                                                          List<TutoringChatMessage> history) {
+        guardrail.onEnd(session, EndReason.ROUND_LIMIT);
+        persistSession(session);
+        archiveTranscript(session, history, action.getSummary());
+        SseMetaDTO meta = SseMetaDTO.builder()
+                .sessionId(session.getId()).status(session.getStatus().name())
+                .type("end").roundCount(session.getRoundCount())
+                .answerRequestCount(session.getAnswerRequestCount())
+                .build();
+        SseDoneDTO done = SseDoneDTO.builder()
+                .sessionId(session.getId()).status(session.getStatus().name())
+                .roundCount(session.getRoundCount()).endReason(EndReason.ROUND_LIMIT.name())
+                .build();
+        sessionCache.clear(session.getId());
+        return Flux.just(metaEvent(meta), contentToken(ROUND_LIMIT_REPLY), doneEvent(done));
+    }
+
+    /** Python 调用失败（已有会话）：meta + "网络波动，请重试" token + done，会话保持 ACTIVE。 */
+    private Flux<ServerSentEvent<String>> friendlyErrorStream(TutoringSession session) {
+        SseMetaDTO meta = SseMetaDTO.builder()
+                .sessionId(session.getId()).status(session.getStatus().name())
+                .type("hint").roundCount(session.getRoundCount()).build();
+        SseDoneDTO done = SseDoneDTO.builder()
+                .sessionId(session.getId()).status(session.getStatus().name())
+                .roundCount(session.getRoundCount()).build();
+        return Flux.just(metaEvent(meta), contentToken(AGENT_ERROR_REPLY), doneEvent(done));
+    }
+
+    // ==================== 持久化 / 归档 / 频率 ====================
+
+    /** 新会话（start）落库 + 消息入缓存；已有会话（sendMessage）消息已在缓存中。 */
+    private void ensurePersisted(TutoringSession session, List<TutoringChatMessage> history) {
+        if (session.getId() != null) {
+            return;
+        }
+        tutoringSessionRepository.save(session);
+        sessionCache.saveSession(session);
+        if (history != null) {
+            for (TutoringChatMessage message : history) {
+                sessionCache.appendMessage(session.getId(), message);
+            }
+        }
+    }
+
+    private void persistSession(TutoringSession session) {
+        tutoringSessionRepository.save(session);
+        sessionCache.saveSession(session);
+    }
+
+    /** 每轮对话实时整写 COS（幂等整写，按学生分目录）；首次写即回填 transcript_url + 刷新 Redis 快照。 */
+    private void archiveTranscript(TutoringSession session, List<TutoringChatMessage> history, String summaryText) {
+        String objectKey = transcriptArchiver.archive(session.getStudentId(), session.getId(),
+                session.getCreatedAt(), history, session.getStatus(), summaryText);
+        if (session.getTranscriptUrl() == null) {
+            session.updateTranscriptUrl(objectKey);
+            tutoringSessionRepository.updateTranscriptUrl(session.getId(), objectKey);
+            // 刷新 Redis 快照，否则 ACTIVE 会话 GET 读到旧快照（transcriptUrl=null）
+            sessionCache.saveSession(session);
+        }
+    }
+
+    private void clearCacheIfEnded(TutoringSession session) {
+        if (session.getStatus() != null && session.getStatus() != TutoringState.ACTIVE) {
+            sessionCache.clear(session.getId());
+        }
+    }
+
+    /** 会话创建频率限制：窗口内 > 上限 → 50004（配置 ai-edu.tutoring.create-limit）。 */
+    private void ensureCreateAllowed(Long studentId) {
+        boolean allowed = sessionCache.tryIncrementCreateCount(studentId,
+                config().createWindowMinutes(), config().createLimit());
+        if (!allowed) {
+            throw new BusinessException(ErrorCode.TUTORING_CREATE_FREQUENT, "创建会话过于频繁，请稍后再试");
+        }
+    }
+
+    /** transcriptUrl 为 COS objectKey，对外经 FileStorageService 生成短时签名 URL（读时现生成，避免死链接）。 */
+    private void resolveTranscriptUrl(TutoringSessionDTO dto) {
+        if (dto.getTranscriptUrl() != null && fileStorageService != null) {
+            dto.setTranscriptUrl(fileStorageService.generatePresignedUrl(
+                    dto.getTranscriptUrl(), config().transcriptUrlExpireMinutes()));
+        }
+    }
+
+    // ==================== 会话加载 / 工具 ====================
+
+    private TutoringSession loadActiveSession(Long sessionId, Long studentId) {
+        TutoringSession session = loadSession(sessionId, studentId);
+        if (!session.isActive()) {
+            throw new BusinessException(ErrorCode.TUTORING_SESSION_ENDED, "会话已结束或已归档");
+        }
+        return session;
+    }
+
+    private TutoringSession loadSession(Long sessionId, Long studentId) {
+        TutoringSession session = sessionCache.findSession(sessionId)
+                .orElseGet(() -> tutoringSessionRepository.findById(sessionId).orElse(null));
+        if (session == null) {
+            throw new BusinessException(ErrorCode.TUTORING_SESSION_NOT_FOUND, "会话不存在");
+        }
+        if (!session.getStudentId().equals(studentId)) {
+            throw new BusinessException(ErrorCode.TUTORING_SESSION_NOT_FOUND, "会话不存在");
+        }
+        return session;
+    }
+
+    /** 终止类 end：type=end 且 end_reason 为空（无关/学习方法/非数学，回复在 summary）。 */
+    private boolean isTerminationEnd(ActionMeta action) {
+        return ActionType.END == ActionType.fromCode(action.getType())
+                && (action.getEndReason() == null || action.getEndReason().isBlank());
+    }
+
+    private KpKey firstKpUri(ActionMeta action) {
+        if (action.getMasterySignals() == null) {
+            return null;
+        }
+        for (MasterySignalItem item : action.getMasterySignals()) {
+            if (item.getKpLabel() != null && !item.getKpLabel().isBlank()) {
+                String uri = kpResolver.resolveLabelToUri(item.getKpLabel());
+                if (uri != null) {
+                    return KpKey.of(uri);
+                }
+            }
+        }
+        return null;
+    }
+
+    private String lastUserContent(List<TutoringChatMessage> history) {
+        if (history == null || history.isEmpty()) {
+            return null;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if ("user".equals(history.get(i).getRole())) {
+                return history.get(i).getContent();
+            }
+        }
+        return null;
+    }
+
+    // ==================== SSE 序列化 ====================
+
+    private ServerSentEvent<String> metaEvent(SseMetaDTO meta) {
+        return ServerSentEvent.<String>builder().event("meta").data(write(meta)).build();
+    }
+
+    private ServerSentEvent<String> doneEvent(SseDoneDTO done) {
+        return ServerSentEvent.<String>builder().event("done").data(write(done)).build();
+    }
+
+    private ServerSentEvent<String> contentToken(String content) {
+        return ServerSentEvent.<String>builder().event("token").data(write(Map.of("content", content))).build();
+    }
+
+    private String write(Object value) {
+        try {
+            return SSE_MAPPER.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("SSE 事件序列化失败: " + e.getMessage(), e);
+        }
+    }
+}

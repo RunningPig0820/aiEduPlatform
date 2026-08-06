@@ -2,9 +2,10 @@
 
 > 基础路径: `/api/tutoring`
 >
-> 更新日期: 2026-08-03
-> 认证: 全部接口需登录。`student_id`（即 userId）从 `HttpSession.getAttribute("userId")` 获取并校验 STUDENT 角色；请求体不传 student_id，服务端不信任客户端传入的身份。
+> 更新日期: 2026-08-04
+> 认证: 全部接口需登录。`studentId`（即 userId）从 `HttpSession.getAttribute("userId")` 获取并校验 STUDENT 角色；请求体不传 studentId，服务端不信任客户端传入的身份。
 > 拓扑: 前端 → Java 网关（认证/护栏/落库）→ Python 答疑 agent（decide/generate）。
+> **命名约定**：对外（前端）接口 JSON 键为 **camelCase**（与现有 app 一致）；Java↔Python 内部契约（末尾章节）为 snake_case。
 
 ---
 
@@ -20,7 +21,7 @@
 }
 ```
 
-错误码：`40001`（会话不存在）、`40002`（会话已结束）、`40003`（创建会话过于频繁）、`40004`（Python 调用失败且重试后仍失败）。
+错误码：`50002`（会话不存在）、`50003`（会话已结束）、`50004`（创建会话过于频繁）、`50005`（Python 调用失败且重试后仍失败）。
 
 ---
 
@@ -37,9 +38,9 @@
 
 响应（SSE 流式）：
 ```
-event: meta, data: {"session_id":1001, "status":"ACTIVE", "type":"hint", "round_count":0}
+event: meta, data: {"sessionId":1001, "status":"ACTIVE", "type":"hint", "roundCount":0}
 event: token, data: {"content":"先找一下题目里的已知条件，你能列出来吗？"}
-event: done,  data: {"session_id":1001, "status":"ACTIVE", "round_count":1}
+event: done,  data: {"sessionId":1001, "status":"ACTIVE", "roundCount":1}
 ```
 
 **终止场景**（`meta` 事件即携带最终回复，无 token 流）：
@@ -63,28 +64,28 @@ event: done,  data: {"session_id":1001, "status":"ACTIVE", "round_count":1}
 
 SSE 事件序列：
 ```
-event: meta, data: {"session_id":1001, "status":"ACTIVE", "type":"hint", "round_count":2,
-                    "eval":{"correct":true,"emotion":"NEUTRAL","mastery_signals":[{"kp_label":"二元一次方程组","signal":"practicing"}]}}
+event: meta, data: {"sessionId":1001, "status":"ACTIVE", "type":"hint", "roundCount":2,
+                    "eval":{"correct":true,"emotion":"NEUTRAL","masterySignals":[{"kpLabel":"二元一次方程组","signal":"practicing"}]}}
 event: token, data: {"content":"方程列出来了。如果考虑所有动物抬起两只脚，这个式子还成立吗？"}
-event: done,  data: {"session_id":1001, "status":"ACTIVE", "round_count":2}
+event: done,  data: {"sessionId":1001, "status":"ACTIVE", "roundCount":2}
 ```
 
 **护栏拒绝时**（无 token 流，meta 即降级结果）：
 ```
-event: meta, data: {"session_id":1001, "status":"ACTIVE", "type":"approach",
-                    "round_count":1, "denied":"reveal", "reason":"answer_count_insufficient"}
+event: meta, data: {"sessionId":1001, "status":"ACTIVE", "type":"approach",
+                    "roundCount":1, "denied":"reveal", "reason":"answerCountInsufficient"}
 event: token, data: {"content":"思路：先设鸡为x、兔为y，根据头数列一个方程，根据脚数列第二个，联立求解。"}
-event: done,  data: {"session_id":1001, "status":"ACTIVE", "round_count":2}
+event: done,  data: {"sessionId":1001, "status":"ACTIVE", "roundCount":2}
 ```
 
 **收尾场景**（`done` 事件附带总结）：
 ```
-event: done, data: {"session_id":1001, "status":"ARCHIVED",
-                    "summary":{"knowledge_points":["二元一次方程组"],"weak_points":["代入消元法"]},
-                    "end_reason":"COMPLETED"}
+event: done, data: {"sessionId":1001, "status":"ARCHIVED",
+                    "summary":{"knowledgePoints":["二元一次方程组"],"weakPoints":["代入消元法"]},
+                    "endReason":"COMPLETED"}
 ```
 
-**错误码**：`40001` 会话不存在；`40002` 会话已结束/已归档。
+**错误码**：`50002` 会话不存在；`50003` 会话已结束/已归档。
 
 ---
 
@@ -101,8 +102,8 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 - 第 2 次 → `meta.type=reveal`，`answer_request_count=2`，给完整答案后收尾（end_reason=ANSWER_REVEALED）
 
 **边界情况**：
-- 会话已 ARCHIVED / TERMINATED → 40002，不计数
-- 无活跃会话上下文 → 40001
+- 会话已 ARCHIVED / TERMINATED → 50003，不计数
+- 无活跃会话上下文 → 50002
 
 ---
 
@@ -110,7 +111,9 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 
 `GET /api/tutoring/sessions/{sessionId}`
 
-返回会话状态、当前题目、计数、最近消息，供中断后恢复续聊。
+返回会话状态、计数、最近消息，供中断后恢复续聊。
+
+> 当前题目**后端不记录**——前端从 `recent_messages` 推断；Redis 过期则前端提示学生重述题目——完整对话恒在 COS（每轮实时整写）。
 
 响应：
 ```json
@@ -118,16 +121,15 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
   "code": "00000",
   "message": "success",
   "data": {
-    "session_id": 1001,
+    "sessionId": 1001,
     "status": "ACTIVE",
     "subject": "math",
-    "question_content": "鸡兔同笼，共35头94脚，各几只？",
-    "question_type": "APPLICATION",
-    "round_count": 2,
-    "answer_request_count": 0,
-    "recent_messages": [
-      {"role": "user", "content": "设鸡有x只...", "created_at": "2026-08-03T10:00:00"},
-      {"role": "ai", "content": "方程列出来了。...", "created_at": "2026-08-03T10:00:05"}
+    "questionType": "APPLICATION",
+    "roundCount": 2,
+    "answerRequestCount": 0,
+    "recentMessages": [
+      {"role": "user", "content": "设鸡有x只...", "createdAt": "2026-08-03T10:00:00"},
+      {"role": "ai", "content": "方程列出来了。...", "createdAt": "2026-08-03T10:00:05"}
     ]
   }
 }
@@ -139,7 +141,7 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 
 `POST /api/tutoring/sessions/{sessionId}/archive`
 
-学生主动结束会话：按 end_reason（ABANDONED）校正掌握度（不提升）、全文归档 COS、置 ARCHIVED。
+学生主动结束会话：按 end_reason（ABANDONED）校正掌握度（不提升）、对话终态写 COS、置 ARCHIVED。
 
 请求体：`{}`
 
@@ -149,14 +151,14 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
   "code": "00000",
   "message": "success",
   "data": {
-    "session_id": 1001,
+    "sessionId": 1001,
     "status": "ARCHIVED",
-    "transcript_url": "https://cos-xxx.cos.ap-guangzhou.myqcloud.com/tutoring/transcripts/1001.json",
-    "summary": {"knowledge_points": ["二元一次方程组"], "weak_points": ["代入消元法"]}
+    "transcriptUrl": "https://cos-xxx.cos.ap-guangzhou.myqcloud.com/tutoring/transcripts/501/1001.json",
+    "summary": {"knowledgePoints": ["二元一次方程组"], "weakPoints": ["代入消元法"]}
   }
 }
 ```
-> `transcript_url` 为 COS 签名 URL（短时有效）。**存储约定**：`t_tutoring_session.transcript_url` 存 COS **objectKey**（如 `tutoring/transcripts/1001.json`），读时 `FileStorageService.getUrl(objectKey)` 现生成签名 URL，避免死链接。
+> `transcript_url` 为 COS 签名 URL（短时有效）。**存储约定**：`t_tutoring_session.transcript_url` 存 COS **objectKey**（如 `tutoring/transcripts/{studentId}/{sessionId}.json`——按学生分目录便于整理/清理），读时 `FileStorageService.getUrl(objectKey)` 现生成签名 URL，避免死链接。transcript JSON 含 `created_at`（会话开始）/`updated_at`（最近整写）/每条消息 `created_at`，供回放与按时间清理。
 
 ---
 
@@ -182,7 +184,7 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 
 前端流程：上传照片 → 拿到 `text` 展示给学生 → 学生确认/修改 → 将确认后的文本作为接口 1 的 `message` 发起会话。
 
-**错误码**：`40005`（无效图片）；Python 识别失败且重试后仍失败 → `40004`。
+**错误码**：`50006`（无效图片）；Python 识别失败且重试后仍失败 → `50005`。
 
 ---
 
@@ -198,9 +200,9 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
   "code": "00000",
   "message": "success",
   "data": {
-    "student_id": 501,
+    "studentId": 501,
     "items": [
-      {"kp_key": "http://edukg.org/knowledge/3.1/textbook/xxx", "kp_label": "二元一次方程组", "mastery_level": 75, "updated_at": "2026-08-03T10:05:00"}
+      {"kpKey": "http://edukg.org/knowledge/3.1/textbook/xxx", "kpLabel": "二元一次方程组", "masteryLevel": 75, "updatedAt": "2026-08-03T10:05:00"}
     ]
   }
 }
@@ -227,11 +229,11 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 | code | 含义 | 处理 |
 |------|------|------|
 | 00000 | 成功 | — |
-| 40001 | 会话不存在 | 前端提示会话已失效 |
-| 40002 | 会话已结束/已归档 | 引导发起新会话 |
-| 40003 | 会话创建过于频繁（5 分钟 > 3 个） | 提示先完成当前答疑 |
-| 40004 | Python decide/generate/OCR 调用失败且重试后仍失败 | 提示"网络波动，请重试"，会话状态不丢失 |
-| 40005 | OCR 无效图片 / 识别失败 | 提示重新上传清晰照片 |
+| 50002 | 会话不存在 | 前端提示会话已失效 |
+| 50003 | 会话已结束/已归档 | 引导发起新会话 |
+| 50004 | 会话创建过于频繁（5 分钟 > 3 个） | 提示先完成当前答疑 |
+| 50005 | Python decide/generate/OCR 调用失败且重试后仍失败 | 提示"网络波动，请重试"，会话状态不丢失 |
+| 50006 | OCR 无效图片 / 识别失败 | 提示重新上传清晰照片 |
 | 401 | 未登录 | 走统一认证 |
 
 ## 前端调用注意事项
@@ -240,4 +242,4 @@ event: done, data: {"session_id":1001, "status":"ARCHIVED",
 2. **护栏拒绝时无 token**：`meta` 带 `denied` 字段，前端按 meta 的 type 渲染即可，无需处理 token 中断。
 3. **不要自行计数答案次数**：`answer_request_count` 以服务端为准，前端仅渲染。
 4. **断点恢复**：进入页面先调接口 4 查进行中会话，有则续聊，无则新建。
-5. **图谱叠加**：知识图谱页调接口 6 拉取掌握度，按 `kp_key` 匹配节点 URI 渲染。
+5. **图谱叠加**：知识图谱页调接口 6 拉取掌握度，按 `kpKey` 匹配节点 URI 渲染。

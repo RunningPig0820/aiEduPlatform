@@ -16,7 +16,7 @@ AI 答疑是学生端核心体验：引导式解答而非直接给答案，答�
 - 知识点按 `TextbookKP URI` 为 key 落库，掌握度单源 MySQL，图谱前端叠加（不写 Neo4j）
 - 答案出口：第 1 次要答案给思路，第 2 次给答案（Java 硬拦）
 - 会话 20 轮上限；换题计数重置；仅数学（图谱完备）
-- **拍题 OCR 前置**：拍照 → OCR 识别题目文本 → 学生确认/修改 → 作为 `current_question` 进答疑（Java 编排，Python 实现识别）
+- **拍题 OCR 前置**：拍照 → OCR 识别题目文本 → 学生确认/修改 → 作为**首条学生消息**进答疑（Java 编排，Python 实现识别）
 
 **Non-Goals:**
 - MVP 不做 LangGraph 多步 agent（L1/L2）、自适应学习（查薄弱点/出变式题）——阶段 2
@@ -41,8 +41,7 @@ AI 答疑是学生端核心体验：引导式解答而非直接给答案，答�
 │ │                                                            │   │
 │ │  一次学生消息的编排（Java 主导）：                            │   │
 │ │  ① 安全预检（关键词）                                        │   │
-│ │  ② 组装上下文 {history, counters, 当前题目, 掌握度快照,        │   │
-│ │    subject=math}                                            │   │
+│ │  ② 组装上下文 {history, counters, 掌握度快照, subject=math}   │   │
 │ │  ③ 调 Python decide（非流式）→ action 元数据                  │   │
 │ │  ④ 护栏校验 action（答案/轮次/换题/收尾）→ 落库副作用          │   │
 │ │  ⑤ 调 Python generate（流式）→ SSE 透传前端                   │   │
@@ -114,8 +113,8 @@ AI 答疑是学生端核心体验：引导式解答而非直接给答案，答�
 | 答案 | `type=reveal` 且 `answer_request_count < 1` | 拒绝，重决策为 approach，count→1 |
 | 轮次 | 引导类（hint/approach/evaluate 判定）且 `round_count ≥ 20` | 拒绝，强制 `end(ROUND_LIMIT)` |
 | 安全 | 本地关键词命中（agent 启动前） | 终止，不启动 agent |
-| 换题 | `type=switch` | 归档旧题（end_reason=ABANDONED，不点亮），当前题目与计数重置 |
-| 收尾 | `type=end` | 按 end_reason 校正掌握度 + COS 归档 + 置 ARCHIVED |
+| 换题 | `type=switch` | 旧题知识点不校正（不点亮），仅计数重置（换题判定在 Python，后端不记录题目） |
+| 收尾 | `type=end` | 按 end_reason 校正掌握度 + COS 终态写 + 置 ARCHIVED |
 | 掌握度/错误 | action 带 `mastery_signals` / `eval.correct=false` | UPSERT 掌握度（label→URI）+ 写错误事件（含 emotion） |
 
 护栏是**测试重点**（确定性规则，可单测），agent 路径不追求全覆盖测试。
@@ -133,18 +132,18 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ```
 学生贴新题 → decide 输出 switch + new_question
-   → Java 更新当前题目，round_count/answer_request_count 归零（按新题重新计）
-   → 旧题上下文标记 ABANDONED（留档，不点亮）
+   → Java 仅 round_count/answer_request_count 归零（按新题重新计）
+   → 旧题知识点不校正（留档，不点亮）
 学生回旧题 → 又贴那道题 → decide 输出 switch 换回（或 concept）→ 同上
 ```
 
-因为没有流程状态机，换题/回旧题只是**上下文字段更新**，学生怎么跳 agent 都能接住（它读全量历史判断）。
+因为没有流程状态机，换题/回旧题只是**计数重置事件**；"当前题目"由 Python decide 每次从全量 history 推断，Java 不记录、不维护题目内容（记录易错：OCR 乱码、模型转述、陈旧快照）。学生怎么跳 agent 都能接住（它读全量历史判断）。
 
 ### 7. 会话状态：生命周期 + 计数器（不随内容增长）
 
 - 生命周期（3 个，固定）：`ACTIVE` / `ARCHIVED` / `TERMINATED`
 - 护栏计数器（数据，非状态）：`round_count`、`answer_request_count`
-- 当前题目 / 掌握度快照：上下文字段
+- 掌握度快照：上下文字段（**当前题目后端不记录**，由 Python 从 history 推断）
 
 状态数量固定为 3，不随题目数量、对话长度、换题次数增长。**"流程"由 agent 上下文承载（自然语言），Java 只留生命周期与计数器。**
 
@@ -154,7 +153,7 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ### 9. 掌握度规则
 
-（保留 + 出口路径）`mastery_level` 0–100，复用学习域 `MasteryLevel` 概念。每轮 eval 返回 `mastery_signals`：mastered→75 / practicing→50 / struggling→25，取 max 单调不减；学生显式纠正时允许下调；错误只记 `t_error_event` 不降分。**收尾按 end_reason 校正**：`COMPLETED`（独立解出）→ 提升到 75+；`ANSWER_REVEALED`（看过答案）/ `ABANDONED` / `ROUND_LIMIT` → 不提升。掌握度是**基础信号**，最终掌握靠举一反三 + 错题集（阶段 2+）校正。
+（保留 + 出口路径）`mastery_level` 0–100，复用学习域 `MasteryLevel` 概念。每轮 eval 返回 `mastery_signals`：mastered→75 / practicing→50 / struggling→25，取 max 单调不减；学生显式纠正时允许下调；错误只记 `t_tutoring_error_event` 不降分。**收尾按 end_reason 校正**：`COMPLETED`（独立解出）→ 提升到 75+；`ANSWER_REVEALED`（看过答案）/ `ABANDONED` / `ROUND_LIMIT` → 不提升。掌握度是**基础信号**，最终掌握靠举一反三 + 错题集（阶段 2+）校正。
 
 ### 10. 题型/题类独立枚举
 
@@ -162,7 +161,7 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ### 11. 存储三层：Redis（活跃）+ MySQL（业务）+ OSS/COS（归档）
 
-（保留）Redis 存活跃会话（状态、计数、完整消息列表，TTL 24h，供 decide 组装上下文与断点恢复）；MySQL 存 `t_tutoring_session` + `t_student_kp_mastery` + `t_error_event`（结构化业务数据，无原始消息）；会话结束全文 JSON 归档 COS（`FileStorageService`，`tutoring/transcripts/{sessionId}.json`，回填 `transcript_url`=objectKey，读时签名 URL）。归档前脱敏。
+（保留 + 实时写）Redis 存活跃会话（状态、计数、完整消息列表，TTL 24h，供 decide 组装上下文与断点恢复；**不记录题目内容**）；MySQL 存 `t_tutoring_session` + `t_student_kp_mastery` + `t_tutoring_error_event`（结构化业务数据，**无题目内容、无原始消息**）；**对话每轮实时整写 COS**（`FileStorageService`，`tutoring/transcripts/{studentId}/{sessionId}.json`，幂等整写、脱敏，**COS 恒为完整对话**），会话结束终态写一次；`transcript_url`=objectKey 首次实时写即回填，读时签名 URL。
 
 ### 12. 认证/会话桥接：Java 网关代理（方案 A）
 
@@ -185,7 +184,7 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ### 15. 拍题 OCR 前置（用户入口必需）
 
-**选择**: 拍照传题是用户唯一题目输入入口，本期做。Java 编排：前端 `POST /api/tutoring/ocr`（multipart 图片）→ Java 认证 → 调 Python `POST /api/ocr/recognize`（x-internal-token，复用 baidu-aip）→ 返回 `{text, confidence}` → 前端展示识别文本供**学生确认/修改** → 确认后的文本作为 `current_question` 发起答疑。
+**选择**: 拍照传题是用户唯一题目输入入口，本期做。Java 编排：前端 `POST /api/tutoring/ocr`（multipart 图片）→ Java 认证 → 调 Python `POST /api/ocr/recognize`（x-internal-token，复用 baidu-aip）→ 返回 `{text, confidence}` → 前端展示识别文本供**学生确认/修改** → 确认后的文本作为**首条学生消息**进入会话历史发起答疑。
 
 **原因**: OCR 是答疑前的独立预处理，不进 decide/generate 契约（不污染）。数学公式 OCR 质量是公认痛点，识别结果**必须**让学生确认/修改后才能进答疑。OCR 编排在 Java，识别实现（`core/ocr_service.py`）在 Python（复用已有 baidu-aip 依赖，当前是 stub）。
 
@@ -193,7 +192,7 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ### 16. 情绪枚举以 Python F7 为准
 
-**选择**: `eval.emotion` 使用 Python 侧权威的 **F7 七态**：`NEUTRAL / CONFUSED / FRUSTRATED / ANXIOUS / CONFIDENT / INTERESTED / BORED`。Java 答疑域定义 `TutoringEmotion` 值对象（7 态），`t_error_event.emotion` / `t_tutoring_session.last_emotion` 存 F7 字符串。
+**选择**: `eval.emotion` 使用 Python 侧权威的 **F7 七态**：`NEUTRAL / CONFUSED / FRUSTRATED / ANXIOUS / CONFIDENT / INTERESTED / BORED`。Java 学习域（答疑功能模块）定义 `TutoringEmotion` 值对象（7 态），`t_tutoring_error_event.emotion` / `t_tutoring_session.last_emotion` 存 F7 字符串。
 
 **原因**: Python 是情绪输出方，枚举以输出方为准。**不强制复用** learning 域 `EmotionState`（5 态：POSITIVE/NEUTRAL/FRUSTRATED/CONFUSED/ANXIOUS）——那是情绪识别功能自己的枚举，两套并存，后续再统一。
 
@@ -203,13 +202,15 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 |------|------|------|
 | 生命周期状态 | ACTIVE / ARCHIVED / TERMINATED | Java 会话表 |
 | 护栏计数器 | round_count（≤20）、answer_request_count | Java 会话表（Redis 缓存） |
-| 当前题目 | 题目文本 + question_type/question_kind | Java 会话表 |
+| 当前题目 | question_type/question_kind（MySQL）；**题目文本后端不记录**，Python 从 history 推断 | Java（MySQL）/ Python |
 | 掌握度 | t_student_kp_mastery（按 URI） | Java（Python 经 action 上报 signal） |
-| 错误事件 | t_error_event | Java |
-| 消息 | Redis（活跃期）→ COS（归档） | Java |
+| 错误事件 | t_tutoring_error_event | Java |
+| 消息 | Redis（活跃期热存）→ COS（每轮实时整写，恒完整） | Java |
 | 动作 | decide 输出的 type 闭集 | Python 决策 / Java 放行 |
 
 ## 数据模型（表结构）
+
+> **域归属**：AI 答疑作为**学习域（learning bounded context）内的功能模块**落地（掌握度 / 错误事件是学习域核心数据）。三张表物理位于 **`ai_edu_learning`** 数据库；持久化层 Mapper 需 `@DS("learning")` 路由（`application.yml` 需新增 `learning` 数据源，见 tasks 11.1）。实现代码放 `com.ai.edu.domain.learning` 下的答疑子模块。
 
 ### `t_tutoring_session`
 | 字段 | 类型 | 说明 |
@@ -220,16 +221,16 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 | question_type | VARCHAR(32) | 题型（答疑侧独立可扩展枚举，可空） |
 | question_kind | VARCHAR(32) | 题类（计算/应用/证明，可空） |
 | intent_category | VARCHAR(16) | ACADEMIC / GUIDANCE / UNRELATED（废弃？见下） |
-| question_content | TEXT | 当前题目文本 |
 | last_emotion | VARCHAR(16) | 最近一轮情绪（F7 七态，Python 输出方权威） |
 | status | VARCHAR(16) | ACTIVE / ARCHIVED / TERMINATED |
 | round_count | INT | 轮次（≤20） |
 | answer_request_count | INT | 要答案次数 |
 | end_reason | VARCHAR(32) | COMPLETED / ANSWER_REVEALED / ABANDONED / ROUND_LIMIT / null |
-| transcript_url | VARCHAR(512) | COS 归档 objectKey（会话结束后回填） |
-| started_at / updated_at / archived_at | DATETIME | 时间戳 |
+| transcript_url | VARCHAR(512) | COS 对话归档 objectKey（首次实时写时回填） |
+| created_at / updated_at / archived_at | DATETIME | created_at=会话开始（标准审计列）；archived_at=归档时间 |
+| created_by / modified_by / is_deleted | BIGINT / TINYINT(1) | 标准审计列（默认 0 / 逻辑删除，与全项目一致） |
 
-> 说明：**不建消息表**。消息热存 Redis（活跃会话期），会话归档时 JSON 全文写 COS。`intent_category` 在 agent 语境下由 decide 判断（无关/学习方法 直接在回复中处理），可暂不落库，或保留用于统计——MVP 建议保留但可空。
+> 说明：**不建消息表、不存题目内容**。对话每轮实时整写 COS（`tutoring/transcripts/{studentId}/{sessionId}.json`，恒为完整对话），Redis 为活跃期热存；**换题只作事件（仅计数重置）**，后端不记录、不维护题目文本——换题/当前题目判定全在 Python decide。`intent_category` 在 agent 语境下由 decide 判断（无关/学习方法 直接在回复中处理），可暂不落库，或保留用于统计——MVP 建议保留但可空。
 
 ### `t_student_kp_mastery`
 | 字段 | 类型 | 说明 |
@@ -241,10 +242,11 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 | mastery_level | INT | 0–100 |
 | evidence | JSON | 证据（命中步骤、错误事件 id 列表） |
 | last_session_id | BIGINT | 最近一次答疑会话 |
-| updated_at | DATETIME | |
+| created_at / updated_at | DATETIME | 标准审计列 |
+| created_by / modified_by / is_deleted | BIGINT / TINYINT(1) | 标准审计列（默认 0 / 逻辑删除） |
 | **UNIQUE(student_id, kp_key)** | | 幂等 |
 
-### `t_error_event`
+### `t_tutoring_error_event`
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | BIGINT PK AUTO | |
@@ -255,7 +257,8 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 | emotion | VARCHAR(16) | 该轮情绪（F7 七态） |
 | step_index | INT | |
 | student_answer | TEXT | 学生原答 |
-| created_at | DATETIME | |
+| created_at / updated_at | DATETIME | 标准审计列 |
+| created_by / modified_by / is_deleted | BIGINT / TINYINT(1) | 标准审计列（默认 0 / 逻辑删除） |
 
 ## Python 端点契约（L0 单次调用）
 
@@ -263,19 +266,20 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 ### `POST /api/tutoring/decide`（非流式，快模型）
 
-请求：`{history, round_count, answer_request_count, current_question, mastery_snapshot, subject_hint}`
+请求：`{history, round_count, answer_request_count, mastery_snapshot, subject_hint}`
+- **判定链路（关键）**：换题 / 当前题目由 **Python decide 从 `history` 语义判断**，Java **不发送、不记录、不维护题目内容**——记录易错（OCR 乱码、模型转述、陈旧快照），判定权全在 Python。Java 只认 `type=switch` 事件重置计数，`new_question` 为 Python 输出、Java 仅作展示可选、不落库。
 - `mastery_snapshot` 必须是 `[{kp_key, label, mastery_level}]`——**label 必带**，Python 侧用它做"label 接地"（优先复用已知知识点名，降低 Java label→URI 解析噪声）
 响应：决策 3 的 action 元数据（type 闭集 + eval + mastery_signals + new_question + end_reason + summary + safety_flag + degraded）。若学生消息过简无题目 → type=concept 带澄清问题（由 decide 决定，Java 按 type 放行）。结构化输出失败兜底返回 **200 + ActionMeta(type=hint, degraded=true)**，不返回 503。
 
 ### `POST /api/tutoring/generate`（流式 SSE，强模型）
 
-请求：`{history, current_question, subject_hint, action_type(已放行), action_meta}`（含已放行的 type 约束）
+请求：`{history, subject_hint, action_type(已放行), action_meta}`（含已放行的 type 约束）
 响应：SSE 流式正文，与 action_type 一致（approach 只给思路、reveal 给完整答案等）。
 
 ### `POST /api/ocr/recognize`（非流式，OCR 前置）
 
 请求：`multipart file`（题目照片）
-响应：`{text, confidence}`。Java 编排：前端上传 → Java 代理调此端点 → 返回识别文本供学生确认/修改 → 确认后作为 `current_question` 进答疑。**不进 decide/generate 契约。**
+响应：`{text, confidence}`。Java 编排：前端上传 → Java 代理调此端点 → 返回识别文本供学生确认/修改 → 确认后作为**首条学生消息**进答疑。**不进 decide/generate 契约。**
 
 ## 安全过滤
 

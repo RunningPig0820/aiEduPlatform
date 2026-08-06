@@ -16,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
+import java.net.URL;
+import java.util.Date;
 import java.util.UUID;
 
 /**
@@ -78,6 +80,31 @@ public class CosFileStorageServiceImpl implements FileStorageService {
     }
 
     @Override
+    public String uploadToObjectKey(String objectKey, byte[] content, String contentType) {
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentType(contentType);
+        metadata.setContentLength(content.length);
+
+        COSClient cosClient = createCOSClient();
+        try {
+            PutObjectRequest request = new PutObjectRequest(
+                    cosProperties.getBucketName(),
+                    objectKey,
+                    new ByteArrayInputStream(content),
+                    metadata
+            );
+            cosClient.putObject(request);
+            log.info("文件幂等整写成功: objectKey={}, size={}bytes", objectKey, content.length);
+            return objectKey;
+        } catch (Exception e) {
+            log.error("文件整写失败: objectKey={}", objectKey, e);
+            throw new BusinessException("FILE_UPLOAD_FAILED", "文件上传失败: " + e.getMessage());
+        } finally {
+            cosClient.shutdown();
+        }
+    }
+
+    @Override
     public void delete(String fileUrl) {
         String objectKey = extractObjectKey(fileUrl);
         if (objectKey == null) {
@@ -101,6 +128,21 @@ public class CosFileStorageServiceImpl implements FileStorageService {
     @Override
     public String getUrl(String objectKey) {
         return cosProperties.getBaseUrl() + "/" + objectKey;
+    }
+
+    @Override
+    public String generatePresignedUrl(String objectKey, int expiresMinutes) {
+        COSClient cosClient = createCOSClient();
+        try {
+            Date expiration = new Date(System.currentTimeMillis() + expiresMinutes * 60_000L);
+            URL url = cosClient.generatePresignedUrl(cosProperties.getBucketName(), objectKey, expiration);
+            return url.toString();
+        } catch (Exception e) {
+            log.error("生成签名 URL 失败: objectKey={}", objectKey, e);
+            throw new BusinessException("FILE_SIGNED_URL_FAILED", "生成文件访问链接失败: " + e.getMessage());
+        } finally {
+            cosClient.shutdown();
+        }
     }
 
     /**

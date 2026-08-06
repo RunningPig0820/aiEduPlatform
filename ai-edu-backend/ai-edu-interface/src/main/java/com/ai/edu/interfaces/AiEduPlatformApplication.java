@@ -17,7 +17,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
     "com.ai.edu.infrastructure.persistence.mapper",
     "com.ai.edu.infrastructure.persistence.user.mapper",
     "com.ai.edu.infrastructure.persistence.organization.mapper",
-    "com.ai.edu.infrastructure.persistence.edukg.mapper"
+    "com.ai.edu.infrastructure.persistence.edukg.mapper",
+    "com.ai.edu.infrastructure.persistence.learning.mapper"
 })
 @ComponentScan(basePackages = "com.ai.edu")
 public class AiEduPlatformApplication {

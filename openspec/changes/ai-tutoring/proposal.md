@@ -11,11 +11,11 @@
 ## What Changes
 
 - 新增 `tutoring` 有界上下文（Java Domain / Application / Infrastructure / Interface），核心是**护栏服务 + 编排服务**
-- 新增 3 张表（Flyway V9+）：`t_tutoring_session`（含 `end_reason`/`transcript_url`）、`t_student_kp_mastery`、`t_error_event`（**不建消息表**：消息热存 Redis，会话结束全文 JSON 归档 OSS/COS）
-- 会话全文归档：复用 `FileStorageService`（腾讯云 COS），写入 `tutoring/transcripts/{sessionId}.json`，用于训练数据闭环、审计、复盘
+- 新增 3 张表（Flyway V9+）：`t_tutoring_session`（含 `end_reason`/`transcript_url`，**不存题目内容**）、`t_student_kp_mastery`、`t_tutoring_error_event`（**不建消息表**：对话每轮实时整写 COS 恒完整，Redis 活跃期热存）
+- 会话对话全程实时写 COS：复用 `FileStorageService`（腾讯云 COS），写入 `tutoring/transcripts/{sessionId}.json`，COS 恒为完整对话，用于训练数据闭环、审计、复盘
 - 定义 Python **答疑 agent**（现有 `ai-edu-ai-service` 内的独立模块）2 个端点契约：`POST /api/tutoring/decide`（非流式，输出 action 元数据：type/eval/mastery_signals/new_question/end_reason/safety_flag）、`POST /api/tutoring/generate`（流式 SSE，按已放行 type 输出正文）。**本仓库只定契约与 prompt 设计；Python 实现在 `ai-edu-ai-service` 独立模块，另行排期**
 - **类型先行流式**（SSE）：`meta`（护栏已放行的 type）→ `token`（正文流）→ `done`（状态 + eval），护栏拒绝时**无 token 流**，保证任何内容流入学生前已完成校验
-- **拍题 OCR 前置**：前端上传照片 → Java 代理调 Python `/api/ocr/recognize` → 返回识别文本供学生确认/修改 → 确认后作为 `current_question` 进答疑（用户题目输入的唯一入口，本期必做）
+- **拍题 OCR 前置**：前端上传照片 → Java 代理调 Python `/api/ocr/recognize` → 返回识别文本供学生确认/修改 → 确认后作为**首条学生消息**进答疑（用户题目输入的唯一入口，本期必做）
 - 新增答疑 REST + SSE API：发起会话、发送学生回答、请求答案、会话状态/断点恢复、归档、掌握度查询、**OCR 识别**
 - **护栏（Java，确定性）**：答案出口（第 1 次思路 / 第 2 次答案，Java 硬拦）、轮次上限（20）、换题计数重置、安全过滤、收尾按 end_reason 校正掌握度
 - 学生知识点掌握度按 `TextbookKP URI` 为 key 落库；label→URI 解析复用 kg-sync 的 MySQL 镜像；图谱点亮采用**前端叠加掌握度**（掌握度单源 MySQL，不写 Neo4j）
@@ -23,7 +23,7 @@
 ## Capabilities
 
 ### New Capabilities
-- `ai-tutoring`: AI 答疑（能力受限 agent + 工具护栏）— Java 网关编排（安全 → decide → 护栏 → generate 流式）、动作闭集与护栏规则（答案出口/轮次/换题/收尾）、知识点渐进确认与掌握度落库（TextbookKP URI key）、错误事件、会话生命周期（ACTIVE/ARCHIVED/TERMINATED）、全文归档、图谱点亮联动
+- `ai-tutoring`: AI 答疑（能力受限 agent + 工具护栏）— Java 网关编排（安全 → decide → 护栏 → generate 流式）、动作闭集与护栏规则（答案出口/轮次/换题/收尾）、知识点渐进确认与掌握度落库（TextbookKP URI key）、错误事件、会话生命周期（ACTIVE/ARCHIVED/TERMINATED）、对话实时写 COS（恒完整）、图谱点亮联动
 
 ## Impact
 
