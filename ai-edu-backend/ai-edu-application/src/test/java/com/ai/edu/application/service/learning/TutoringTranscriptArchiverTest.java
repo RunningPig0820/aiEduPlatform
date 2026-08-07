@@ -4,6 +4,7 @@ import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.shared.service.FileStorageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ class TutoringTranscriptArchiverTest {
         fileStorageService = mock(FileStorageService.class);
         archiver = new TutoringTranscriptArchiver();
         archiver.setFileStorageService(fileStorageService);
-        archiver.setObjectMapper(new ObjectMapper());
+        // 生产用 Spring ObjectMapper（含 JSR310）；测试需注册 JavaTimeModule 才能序列化消息 createdAt
+        archiver.setObjectMapper(new ObjectMapper().registerModule(new JavaTimeModule()));
     }
 
     @Test

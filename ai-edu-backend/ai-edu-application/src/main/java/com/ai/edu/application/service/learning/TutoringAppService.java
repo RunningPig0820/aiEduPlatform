@@ -51,6 +51,8 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -127,24 +129,57 @@ public class TutoringAppService {
 
     // ==================== 对外入口 ====================
 
-    /** 发起答疑（SSE，类型先行流式）：首条学生消息进历史 → decide → 护栏 → 建会话 → generate。 */
+    /** 发起答疑（SSE，类型先行流式）：首条学生消息进历史 → decide → 护栏 → 建会话 → generate（文字题）。 */
     public Flux<ServerSentEvent<String>> start(Long studentId, String message) {
+        return start(studentId, message, null, null);
+    }
+
+    /**
+     * 发起答疑（SSE）：文字或图片题目。图片上传 COS 作为首条消息（图片消息带 image_url 进 history）。
+     * <p>首条消息恒非换题（is_new_question=false）——会话开始无旧题可换，Python 绝不能判 switch。
+     */
+    public Flux<ServerSentEvent<String>> start(Long studentId, String message, byte[] imageData, String originalFilename) {
         // 7.9 会话创建频率限制
         ensureCreateAllowed(studentId);
         TutoringSession session = TutoringSession.start(studentId, "math");
+        if (imageData != null && imageData.length > 0) {
+            // 图片发起：先落库拿 sessionId，题目图按会话路径组织（tutoring/questions/{studentId}/{sessionId}/）。
+            // decide 终止/失败由编排处理（TERMINATED 或保持 ACTIVE 可续），不留 pending 临时目录。
+            tutoringSessionRepository.save(session);
+            sessionCache.saveSession(session);
+        }
         List<TutoringChatMessage> history = new ArrayList<>();
-        history.add(TutoringChatMessage.user(message));
-        return orchestrate(session, history);
+        history.add(buildUserMessage(studentId, session.getId(), message, imageData, originalFilename));
+        return orchestrate(session, history, false);
     }
 
-    /** 发送学生回答（SSE）：追加消息 → decide → 护栏 → 落库副作用 → COS 整写 → generate 透传。
-     *  <p>11.2 同一会话并发消息经 Redis 锁串行化（锁保护 decide+副作用临界区，流式在锁外）。 */
+    /** 发送学生回答（SSE）：追加消息 → decide → 护栏 → 落库副作用 → COS 整写 → generate 透传（文字）。 */
     public Flux<ServerSentEvent<String>> sendMessage(Long studentId, Long sessionId, String content) {
+        return sendMessage(studentId, sessionId, content, null, null);
+    }
+
+    /**
+     * 发送学生消息（SSE）：文字或图片。
+     * <p><b>换题信号</b>：本轮上传了新的题目图片（新 URL 首次出现在 history）→ decide 请求带
+     * is_new_question=true（仅"新上传"这一轮；后续答题轮不置）。Python 见 true 直接返回 switch，Java 重置计数。
+     * <p>11.2 同一会话并发消息经 Redis 锁串行化（锁保护 decide+副作用临界区，流式在锁外）。
+     */
+    public Flux<ServerSentEvent<String>> sendMessage(Long studentId, Long sessionId, String content,
+                                                     byte[] imageData, String originalFilename) {
         return withSessionLock(sessionId, () -> {
             TutoringSession session = loadActiveSession(sessionId, studentId);
-            sessionCache.appendMessage(sessionId, TutoringChatMessage.user(content));
-            List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
-            return orchestrate(session, history);
+            boolean isNewQuestion = false;
+            if (imageData != null && imageData.length > 0) {
+                List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
+                String url = uploadQuestionImage(session.getStudentId(), sessionId, imageData, originalFilename);
+                // 换题判定（Java 侧权威）：新图 URL 未在 history 中出现 = 本轮新增题目图 → 换题信号
+                isNewQuestion = !historyContainsImageUrl(history, url);
+                sessionCache.appendMessage(sessionId, TutoringChatMessage.userWithImage(content, url));
+            } else {
+                sessionCache.appendMessage(sessionId, TutoringChatMessage.user(content));
+            }
+            List<TutoringChatMessage> newHistory = sessionCache.listMessages(sessionId);
+            return orchestrate(session, newHistory, isNewQuestion);
         });
     }
 
@@ -154,7 +189,7 @@ public class TutoringAppService {
             TutoringSession session = loadActiveSession(sessionId, studentId);
             sessionCache.appendMessage(sessionId, TutoringChatMessage.user("请把答案给我"));
             List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
-            return orchestrate(session, history);
+            return orchestrate(session, history, false);
         });
     }
 
@@ -281,12 +316,15 @@ public class TutoringAppService {
      * decide → 护栏 → 副作用 → generate 的统一编排（start/sendMessage/requestAnswer 共用）。
      *
      * <p>流式路径：meta（护栏已放行 type）→ token（Python 正文流）→ done（终态）。终止/轮次上限无 token 流。
+     *
+     * @param isNewQuestion 本轮学生是否上传了新的题目图片（换题信号，见 DecideContext.is_new_question）
      */
-    private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<TutoringChatMessage> history) {
+    private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<TutoringChatMessage> history,
+                                                      boolean isNewQuestion) {
         try {
             // 1. decide
             List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
-            DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList);
+            DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList, isNewQuestion);
             ActionMeta action = llmPort.decide(ctx);
 
             // 2. 安全终止（decide safety_flag）
@@ -661,6 +699,79 @@ public class TutoringAppService {
             }
         }
         return null;
+    }
+
+    // ==================== 图片消息 / 换题信号 ====================
+
+    /** 学生消息构建：文字或图片（图片上传 COS 取 URL；sessionId 为空 = start 未落库，用 pending 目录）。 */
+    private TutoringChatMessage buildUserMessage(Long studentId, Long sessionId, String content,
+                                                 byte[] imageData, String originalFilename) {
+        if (imageData == null || imageData.length == 0) {
+            return TutoringChatMessage.user(content);
+        }
+        String url = uploadQuestionImage(studentId, sessionId, imageData, originalFilename);
+        return TutoringChatMessage.userWithImage(content, url);
+    }
+
+    /**
+     * 题目图片上传 COS：按学生/会话组织 + 时间戳命名
+     * {@code tutoring/questions/{studentId}/{sessionId}/{yyyyMMdd-HHmmss-SSS}.ext}，
+     * 便于按时间排序/清理、与对话 transcript 同会话结构。返回可访问 URL（存进消息 image_url）。
+     */
+    private String uploadQuestionImage(Long studentId, Long sessionId, byte[] imageData, String originalFilename) {
+        validateImageFormat(originalFilename);
+        if (fileStorageService == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "文件存储未配置");
+        }
+        if (sessionId == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "图片上传需先建立会话");
+        }
+        String objectKey = "tutoring/questions/" + studentId + "/" + sessionId + "/"
+                + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").format(LocalDateTime.now())
+                + fileExtension(originalFilename);
+        fileStorageService.uploadToObjectKey(objectKey, imageData, imageContentType(originalFilename));
+        return fileStorageService.getUrl(objectKey);
+    }
+
+    /** 取扩展名（含点，如 .png）；无扩展名回退 .png。 */
+    private String fileExtension(String originalFilename) {
+        String name = originalFilename == null ? "" : originalFilename.toLowerCase();
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot) : ".png";
+    }
+
+    /** 图片格式白名单（与 OCR 允许集一致：jpg/jpeg/png/webp/bmp）。 */
+    private void validateImageFormat(String originalFilename) {
+        String name = originalFilename == null ? "" : originalFilename.toLowerCase();
+        if (!(name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
+                || name.endsWith(".webp") || name.endsWith(".bmp"))) {
+            throw new BusinessException(ErrorCode.TUTORING_OCR_INVALID, "仅支持 jpg/png/webp/bmp 图片");
+        }
+    }
+
+    private String imageContentType(String originalFilename) {
+        String name = originalFilename == null ? "" : originalFilename.toLowerCase();
+        if (name.endsWith(".png")) {
+            return "image/png";
+        }
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (name.endsWith(".webp")) {
+            return "image/webp";
+        }
+        if (name.endsWith(".bmp")) {
+            return "image/bmp";
+        }
+        return "application/octet-stream";
+    }
+
+    /** 换题信号判定（Java 侧权威）：该图 URL 是否已在历史中出现过。新 URL = 本轮新增题目图。 */
+    private boolean historyContainsImageUrl(List<TutoringChatMessage> history, String url) {
+        if (history == null || url == null) {
+            return false;
+        }
+        return history.stream().anyMatch(m -> url.equals(m.getImageUrl()));
     }
 
     // ==================== SSE 序列化 ====================

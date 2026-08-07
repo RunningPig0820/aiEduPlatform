@@ -86,12 +86,12 @@
 
 ## 10. Python 答疑 agent 契约（本仓库文档，实现另排期）
 
-- [ ] 10.1 `docs/ai-tutoring-agent.md`：Python 独立答疑 agent 的 decide/generate 契约、action 元数据 schema、prompt 设计要点（苏格拉底原则、hint 禁答案、approach 只给思路、reveal 才给答案、换题/收尾识别）、type 先行流式协议（generate SSE：token/done）、decide 用快模型 / generate 用强模型的建议
-- [ ] 10.2 Python 侧实现（`ai-edu-ai-service` 独立答疑模块，另行排期，不在本仓库）
+- [x] 10.1 `docs/ai-tutoring-agent.md`：Python 独立答疑 agent 的 decide/generate 契约、action 元数据 schema、prompt 设计要点（苏格拉底原则、hint 禁答案、approach 只给思路、reveal 才给答案、换题/收尾识别）、type 先行流式协议（generate SSE：token/done）、decide 用快模型 / generate 用强模型的建议（2026-08-06 完成，含图像优先/is_new_question 短路/豆包视觉模型）
+- [x] 10.2 Python 侧实现（`ai-edu-ai-service` 独立答疑模块，另行排期，不在本仓库）——**已在 Python 仓库实现并实测验证**：`decider.py` is_new_question 短路 switch、豆包 `doubao-seed-2-0-lite` 视觉模型、`ChatTurn.image_url`；E2E 闭环实测通过（图片答疑 + 换题计数重置）
 
 ## 11. 配置与收尾
 
 - [x] 11.1 `application.yml` 新增 `ai-edu.tutoring` 配置（轮次/答案/频率/超时、Python decide/generate/OCR 端点地址、internal token、**`ocr.enabled` 开关**——关闭时前端隐藏拍照入口，仅手打/粘贴）；**新增 `learning` 数据源**（指向 `ai_edu_learning`，答疑 Mapper 经 `@DS("learning")` 使用）
 - [x] 11.2 幂等与会话并发：同一会话并发消息的处理策略（Redis 锁或乐观锁）
-- [ ] 11.3 确认 kg-ui 图谱叠加层新增掌握度数据源（读 `GET /api/students/{id}/mastery`）
-- [ ] 11.4 确认认证网关对前端流式接口的登录态校验（Spring Security 放行 `/api/tutoring/**` 但校验 session）
+- [x] 11.3 确认 kg-ui 图谱叠加层新增掌握度数据源（读 `GET /api/students/{id}/mastery`）——**后端已就绪并实测**（`GET /api/students/1/mastery` 返回 `kpKey/kpLabel/masteryLevel/updatedAt`）；kg-ui 前端叠加待前端仓库（`aiEduPlatformFront`）接入，API 契约见 api.md 接口 7
+- [x] 11.4 确认认证网关对前端流式接口的登录态校验（Spring Security 放行 `/api/tutoring/**` 但校验 session）——**已实测**：未登录访问 `POST /api/tutoring/sessions` 返回 401 `{"code":"10004","message":"未登录"}`（SecurityConfig `/api/tutoring/**` → authenticated + 控制器 authError 双保险）

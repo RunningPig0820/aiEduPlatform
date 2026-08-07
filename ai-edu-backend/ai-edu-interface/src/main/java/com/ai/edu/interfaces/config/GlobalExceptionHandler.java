@@ -9,6 +9,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -61,6 +63,26 @@ public class GlobalExceptionHandler {
         Map<String, Object> result = new HashMap<>();
         result.put("code", "10001");
         result.put("message", message);
+        return result;
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleMaxUploadSizeException(MaxUploadSizeExceededException e) {
+        log.warn("图片超过大小限制: {}", e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", "50006");
+        result.put("message", "图片超过大小限制（10MB）");
+        return result;
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleMultipartException(MultipartException e) {
+        log.warn("非 multipart 请求（OCR 上传需 multipart/form-data）: {}", e.getMessage());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", "10003");
+        result.put("message", "请以 multipart/form-data 上传图片文件");
         return result;
     }
 

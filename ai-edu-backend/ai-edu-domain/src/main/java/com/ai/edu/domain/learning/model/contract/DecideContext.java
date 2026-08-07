@@ -43,4 +43,12 @@ public class DecideContext implements Serializable {
     /** 学科提示（本期恒 math） */
     @JsonProperty("subject_hint")
     private String subjectHint;
+
+    /**
+     * 换题信号：本轮学生上传了新的题目图片（新 URL 出现）→ true。
+     * <p>仅 Java 知道（Java 收到上传、往 history 追加）；Python 见 true 直接返回 type=switch
+     * （不调 LLM，省调用且 100% 准）。缺省 false = 正常轮，Python 走 LLM 决策。
+     */
+    @JsonProperty("is_new_question")
+    private boolean isNewQuestion;
 }

@@ -163,6 +163,8 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 （保留 + 实时写）Redis 存活跃会话（状态、计数、完整消息列表，TTL 24h，供 decide 组装上下文与断点恢复；**不记录题目内容**）；MySQL 存 `t_tutoring_session` + `t_student_kp_mastery` + `t_tutoring_error_event`（结构化业务数据，**无题目内容、无原始消息**）；**对话每轮实时整写 COS**（`FileStorageService`，`tutoring/transcripts/{studentId}/{sessionId}.json`，幂等整写、脱敏，**COS 恒为完整对话**），会话结束终态写一次；`transcript_url`=objectKey 首次实时写即回填，读时签名 URL。
 
+**题目图片存储（2026-08-06，image-first）**：题目/示例图按学生+会话组织 + 时间戳命名——`tutoring/questions/{studentId}/{sessionId}/{yyyyMMdd-HHmmss-SSS}.{ext}`。图片 URL 作为消息 `image_url` 进对话历史（Redis + COS transcript 均含），与对话天然关联；图片发起会话时 Java 先落库拿 sessionId 再传图（不留 pending 临时目录）。**换题=学生发新图**：Java 检测新 URL 首次出现 → decide 带 `is_new_question=true` → Python 短路 `type=switch` → Java 重置计数（判定权在 Java，Python 无状态不依赖 history 图片推断）。
+
 ### 12. 认证/会话桥接：Java 网关代理（方案 A）
 
 前端统一走 Java 网关；Java 校验 `HttpSession.getAttribute("userId")`（STUDENT 角色）后，调 Python 时携带**内部 token + userId + sessionId**（复用 llm-gateway 的 `internalToken` 模式）。Python 不自己做认证，只信网关注入的身份。请求体不传 student_id。
@@ -182,13 +184,13 @@ count=1 学生再要答案 → decide 输出 reveal → Java 放行（count≥1�
 
 **演进（阶段 2）**：升级 L1/L2 LangGraph 多步 agent——增加工具集（查薄弱点、出变式题等，工具 = Java 内部接口），agent 在循环中自然处理护栏拒绝重规划。工具接口在 MVP 已按 Java 内部 API 预留，升级为低摩擦。
 
-### 15. 拍题 OCR 前置（用户入口必需）
+### 15. 拍题入口：图像优先（2026-08-06 反转原 OCR 决策）
 
-**选择**: 拍照传题是用户唯一题目输入入口，本期做。Java 编排：前端 `POST /api/tutoring/ocr`（multipart 图片）→ Java 认证 → 调 Python `POST /api/ocr/recognize`（x-internal-token，复用 baidu-aip）→ 返回 `{text, confidence}` → 前端展示识别文本供**学生确认/修改** → 确认后的文本作为**首条学生消息**进入会话历史发起答疑。
+**选择（反转）**: 题目本身是图片（含受力分析图/实例图），答疑分析必须看到原图 → **不做传统 OCR 文本提取**，改用**视觉模型直接看图**。链路：前端 `POST /api/tutoring/sessions`（multipart 图片，可选 content）→ Java 认证 + 存 COS（`tutoring/questions/{studentId}/{sessionId}/{时间戳}.png`）→ 图片 URL 作为首条消息 `image_url` 进历史 → decide/generate 均携带 `image_url` 给**视觉模型**（豆包 `doubao-seed-2-0-lite`，全模态）看图作答。
 
-**原因**: OCR 是答疑前的独立预处理，不进 decide/generate 契约（不污染）。数学公式 OCR 质量是公认痛点，识别结果**必须**让学生确认/修改后才能进答疑。OCR 编排在 Java，识别实现（`core/ocr_service.py`）在 Python（复用已有 baidu-aip 依赖，当前是 stub）。
+**换题=学生发新图**: `POST /api/tutoring/sessions/{sessionId}/messages`（multipart 新图）→ **Java 检测新图 URL 首次出现** → decide 请求带 `is_new_question=true` → **Python 短路返回 `type=switch`（不调 LLM，确定性 100% 准）** → Java 重置轮次计数。判定权在 Java（只有 Java 知道"本轮新上传了图"），Python 无状态不依赖 history 图片结构推断（该做法有 bug：换题后每轮 history 都带旧图+新图，会被误判成连续换题）。
 
-**可上可下（独立开关）**: OCR 编排做成**独立可开关**——配置 `ai-edu.tutoring.ocr.enabled`（默认 true）。关闭时前端隐藏拍照入口，学生走手打/粘贴题目，答疑核心（decide/generate）完全不受影响。若 OCR 质量不过关，可先只开手打/粘贴上线，OCR 验证通过后再开拍照，**两头都不堵**。
+**原因（为什么不用传统 OCR）**: ① 数学公式/符号 OCR 质量是公认痛点，丢符号；② 受力分析图/实例图是图片本身的信息，文本提取必然有损，答疑分析必须引用原图；③ 视觉模型读图成本与 OCR 同数量级（~0.2–1 分/图），质量远优。**保留 `POST /api/tutoring/ocr` + `ai-edu.tutoring.ocr.enabled` 开关**作为兼容/降级路径（关闭时仅手打/粘贴，答疑核心不受阻）。
 
 ### 16. 情绪枚举以 Python F7 为准
 

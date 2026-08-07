@@ -159,6 +159,26 @@ event: done, data: {"sessionId":1001, "status":"ARCHIVED",
 }
 ```
 > `transcript_url` 为 COS 签名 URL（短时有效）。**存储约定**：`t_tutoring_session.transcript_url` 存 COS **objectKey**（如 `tutoring/transcripts/{studentId}/{sessionId}.json`——按学生分目录便于整理/清理），读时 `FileStorageService.getUrl(objectKey)` 现生成签名 URL，避免死链接。transcript JSON 含 `created_at`（会话开始）/`updated_at`（最近整写）/每条消息 `created_at`，供回放与按时间清理。
+>
+> **题目图片存储约定（2026-08-06）**：题目/示例图按学生+会话组织、**时间戳命名**：
+> `tutoring/questions/{studentId}/{sessionId}/{yyyyMMdd-HHmmss-SSS}.{ext}`（如 `tutoring/questions/501/1001/20260806-191428-614.png`）。
+> 图片 URL 作为消息 `image_url` 进入对话历史（Redis/COS transcript 均含），与对话天然关联；按时间排序便于清理。
+> 图片发起会话时 Java 先落库拿 sessionId 再传图（不留 pending 临时目录）。
+
+---
+
+## 5.1 图片题目输入（image-first，替代 OCR 文本确认）
+
+题目是图片（含受力分析图/实例图），**图片直接进答疑**，不做"识别文本→学生确认"：
+
+- `POST /api/tutoring/sessions`（multipart `file`，可选 `content`）：题目图片作为首条消息发起会话
+- `POST /api/tutoring/sessions/{sessionId}/messages`（multipart `file`，可选 `content`）：上传新题目图片 = **换题信号**
+- 换题判定：**Java 检测到新图 URL 首次出现 → decide 请求带 `is_new_question=true`** → Python 直接返回 `type=switch`（不调 LLM）→ Java 重置轮次计数。仅"新上传"这一轮置 true，首条消息恒 false
+- 图片经 Java 存 COS（路径见上），URL 作为消息 `image_url` 传给 Python；答疑引擎为**视觉模型**（豆包 doubao-seed-2-0-lite），decide/generate 均携带 `image_url` 看图作答
+
+---
+
+## 6. 拍照识别题目（OCR，前置步骤）
 
 ---
 
@@ -216,9 +236,9 @@ event: done, data: {"sessionId":1001, "status":"ARCHIVED",
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/tutoring/decide` | 非流式，输出 action 元数据（type/reason/eval/mastery_signals/new_question/end_reason/summary/safety_flag） |
-| POST | `/api/tutoring/generate` | 流式 SSE，按已放行 action_type 输出正文 |
-| POST | `/api/ocr/recognize` | 非流式，题目照片识别为 `{text, confidence}`（Java `POST /api/tutoring/ocr` 代理） |
+| POST | `/api/tutoring/decide` | 非流式，输出 action 元数据（type/reason/eval/mastery_signals/new_question/end_reason/summary/safety_flag）。**请求带 `is_new_question`**（换题信号：Java 检测到新题图 URL → true，Python 短路返回 `type=switch` 不调 LLM）；history 消息带 `image_url`（题目/示例图，视觉模型读图） |
+| POST | `/api/tutoring/generate` | 流式 SSE，按已放行 action_type 输出正文（同样携带 history `image_url`，生成可引用图中元素） |
+| POST | `/api/ocr/recognize` | 非流式，题目照片识别为 `{text, confidence}`（Java `POST /api/tutoring/ocr` 代理；image-first 后为废弃兼容路径） |
 
 契约细节见 `specs/ai-tutoring.md` 的 Python 端点契约章节。
 

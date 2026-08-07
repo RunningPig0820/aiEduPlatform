@@ -8,6 +8,7 @@ import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
+import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.EvalInfo;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
@@ -36,6 +37,7 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -227,6 +229,74 @@ class TutoringAppServiceTest {
         assertEquals(0, session.getRoundCount());
         assertEquals(TutoringState.ACTIVE, session.getStatus());
         verify(masteryRepository, never()).upsert(any()); // 旧题知识点不点亮
+    }
+
+    @Test
+    @DisplayName("sendMessage: 上传新题目图片（新 URL）→ 换题信号 is_new_question=true + 消息带 image_url")
+    void sendMessage_newImage_setsIsNewQuestion() {
+        activeSessionInCache();
+        when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        when(fileStorageService.getUrl(anyString())).thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
+        AtomicReference<DecideContext> captured = new AtomicReference<>();
+        when(llmPort.decide(any())).thenAnswer(inv -> {
+            captured.set(inv.getArgument(0));
+            return meta("hint");
+        });
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"新题开始\"}")));
+
+        service.sendMessage(STUDENT_ID, SESSION_ID, null, new byte[]{1, 2, 3}, "math.png").subscribe();
+
+        assertNotNull(captured.get());
+        assertTrue(captured.get().isNewQuestion(), "新图上传轮 is_new_question 应为 true");
+        // 时间戳 objectKey：按学生/会话组织
+        verify(fileStorageService).uploadToObjectKey(
+                argThat(k -> k.startsWith("tutoring/questions/501/1001/") && k.endsWith(".png")),
+                any(), eq("image/png"));
+        verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
+                "user".equals(m.getRole())
+                        && m.getImageUrl() != null
+                        && m.getImageUrl().startsWith("https://cos/tutoring/questions/501/1001/")));
+    }
+
+    @Test
+    @DisplayName("sendMessage: 文字消息 → is_new_question=false（不触发换题，不传图）")
+    void sendMessage_text_isNewQuestionFalse() {
+        activeSessionInCache();
+        AtomicReference<DecideContext> captured = new AtomicReference<>();
+        when(llmPort.decide(any())).thenAnswer(inv -> {
+            captured.set(inv.getArgument(0));
+            return meta("hint");
+        });
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"继续\"}")));
+
+        service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94").subscribe();
+
+        assertNotNull(captured.get());
+        assertFalse(captured.get().isNewQuestion(), "文字消息轮 is_new_question 应为 false");
+        verify(fileStorageService, never()).uploadToObjectKey(anyString(), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("start: 首条图片消息 → is_new_question=false，先落库拿 sessionId，图片存会话路径")
+    void start_withImage_isNewQuestionFalse() {
+        when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        when(fileStorageService.getUrl(anyString())).thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
+        AtomicReference<DecideContext> captured = new AtomicReference<>();
+        when(llmPort.decide(any())).thenAnswer(inv -> {
+            captured.set(inv.getArgument(0));
+            return meta("hint");
+        });
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
+
+        service.start(STUDENT_ID, null, new byte[]{1, 2, 3}, "math.png").subscribe();
+
+        assertNotNull(captured.get());
+        assertFalse(captured.get().isNewQuestion(), "首条消息绝不判换题");
+        // 图片发起：先落库拿 sessionId（1001）→ 图片按会话路径存，不再用 pending
+        verify(sessionRepository, atLeastOnce()).save(any());
+        verify(fileStorageService).uploadToObjectKey(
+                argThat(k -> k.startsWith("tutoring/questions/501/1001/") && k.endsWith(".png")),
+                any(), eq("image/png"));
     }
 
     @Test

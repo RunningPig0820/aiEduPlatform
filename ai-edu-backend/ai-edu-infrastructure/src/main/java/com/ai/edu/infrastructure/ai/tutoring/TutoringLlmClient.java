@@ -39,9 +39,9 @@ public class TutoringLlmClient implements TutoringLlmPort {
 
     @Override
     public ActionMeta decide(DecideContext context) {
-        log.info("[tutoring] decide 调用, history={}, round={}, answerReq={}",
+        log.info("[tutoring] decide 调用, history={}, round={}, answerReq={}, isNewQuestion={}",
                 context.getHistory() == null ? 0 : context.getHistory().size(),
-                context.getRoundCount(), context.getAnswerRequestCount());
+                context.getRoundCount(), context.getAnswerRequestCount(), context.isNewQuestion());
         try {
             return Mono.defer(() -> tutoringWebClient.post()
                     .uri(config().decidePath())

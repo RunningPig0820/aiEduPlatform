@@ -25,16 +25,30 @@ public class TutoringContextAssembler {
 
     /**
      * 组装 decide 请求上下文（history 从 Redis 热存、counters 来自会话、掌握度快照带 label）。
+     * 缺省换题信号 false（文本/普通轮，向后兼容）。
      */
     public DecideContext buildDecideContext(TutoringSession session,
                                             List<TutoringChatMessage> history,
                                             List<StudentKpMastery> masteryList) {
+        return buildDecideContext(session, history, masteryList, false);
+    }
+
+    /**
+     * 组装 decide 请求上下文（含换题信号）。
+     *
+     * @param isNewQuestion 本轮学生是否上传了新题目图片（换题信号，见 DecideContext.is_new_question）
+     */
+    public DecideContext buildDecideContext(TutoringSession session,
+                                            List<TutoringChatMessage> history,
+                                            List<StudentKpMastery> masteryList,
+                                            boolean isNewQuestion) {
         return DecideContext.builder()
                 .history(history == null ? List.of() : history)
                 .roundCount(session.getRoundCount())
                 .answerRequestCount(session.getAnswerRequestCount())
                 .masterySnapshot(toKpSnapshot(masteryList))
                 .subjectHint(SUBJECT_HINT)
+                .isNewQuestion(isNewQuestion)
                 .build();
     }
 

@@ -65,6 +65,21 @@ class TutoringContextAssemblerTest {
     }
 
     @Test
+    @DisplayName("buildDecideContext 换题信号透传：4 参置 true / 3 参缺省 false")
+    void buildDecideContext_isNewQuestion() {
+        TutoringSession session = TutoringSession.start(501L, "math");
+        session.setId(1001L);
+        List<TutoringChatMessage> history = List.of(
+                TutoringChatMessage.user("鸡兔同笼"), TutoringChatMessage.ai("先找已知条件"));
+
+        DecideContext withSignal = assembler.buildDecideContext(session, history, null, true);
+        DecideContext defaultCtx = assembler.buildDecideContext(session, history, null);
+
+        assertTrue(withSignal.isNewQuestion(), "新图上传轮 is_new_question 应为 true");
+        assertFalse(defaultCtx.isNewQuestion(), "缺省轮 is_new_question 应为 false");
+    }
+
+    @Test
     @DisplayName("buildGenerateContext 用已放行 type（小写）+ 原 action 元数据")
     void buildGenerateContext_usesAllowedType() {
         List<TutoringChatMessage> history = List.of(TutoringChatMessage.user("设鸡x只"));

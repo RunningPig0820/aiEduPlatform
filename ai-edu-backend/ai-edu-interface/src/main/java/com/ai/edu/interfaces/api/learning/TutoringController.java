@@ -47,7 +47,7 @@ public class TutoringController {
     @Resource
     private TutoringAppService tutoringAppService;
 
-    /** 发起答疑会话（SSE：meta → token → done）。 */
+    /** 发起答疑会话（SSE：meta → token → done，文字题）。 */
     @Operation(summary = "发起答疑会话", description = "首条消息进答疑，SSE 类型先行流式返回引导")
     @PostMapping(value = "/sessions", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> start(@Valid @RequestBody StartTutoringCommand command, HttpSession session) {
@@ -56,6 +56,24 @@ public class TutoringController {
             return authError;
         }
         return tutoringAppService.start(TutoringAuth.currentStudentId(session), command.getMessage());
+    }
+
+    /** 发起答疑会话（SSE，图片题，multipart）：上传题目照片直接建会话，图片作为首条消息进答疑。 */
+    @Operation(summary = "发起答疑会话（图片）", description = "multipart 上传题目照片，图片作为首条消息进答疑，SSE 流式返回引导")
+    @PostMapping(value = "/sessions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> startWithImage(@RequestParam(value = "content", required = false) String content,
+                                                        @RequestParam("file") MultipartFile file, HttpSession session) {
+        Flux<ServerSentEvent<String>> authError = authError(session);
+        if (authError != null) {
+            return authError;
+        }
+        try {
+            return tutoringAppService.start(TutoringAuth.currentStudentId(session), content,
+                    file.getBytes(), file.getOriginalFilename());
+        } catch (IOException e) {
+            log.warn("读取题目图片失败: {}", e.getMessage());
+            return sseError(ErrorCode.INVALID_PARAMS, "读取图片失败");
+        }
     }
 
     /** 发送学生回答（SSE）。sessionId 以路径为准，body 只取 content。 */
@@ -71,6 +89,28 @@ public class TutoringController {
             return sseError(ErrorCode.INVALID_PARAMS, "消息不能为空");
         }
         return tutoringAppService.sendMessage(TutoringAuth.currentStudentId(session), sessionId, command.getContent());
+    }
+
+    /**
+     * 发送学生消息（SSE，图片，multipart）：上传新题目图片 = 换题信号 → decide 带 is_new_question=true。
+     * Java 收到新图、检测新 URL 未在 history 中出现，该轮 Python 直接返回 switch，Java 重置轮次计数。
+     */
+    @Operation(summary = "发送学生消息（图片/换题）", description = "multipart 上传新题目图片（换题）或配图消息，SSE 流式返回")
+    @PostMapping(value = "/sessions/{sessionId}/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> sendImageMessage(@PathVariable Long sessionId,
+                                                          @RequestParam(value = "content", required = false) String content,
+                                                          @RequestParam("file") MultipartFile file, HttpSession session) {
+        Flux<ServerSentEvent<String>> authError = authError(session);
+        if (authError != null) {
+            return authError;
+        }
+        try {
+            return tutoringAppService.sendMessage(TutoringAuth.currentStudentId(session), sessionId, content,
+                    file.getBytes(), file.getOriginalFilename());
+        } catch (IOException e) {
+            log.warn("读取图片失败: {}", e.getMessage());
+            return sseError(ErrorCode.INVALID_PARAMS, "读取图片失败");
+        }
     }
 
     /** 请求答案（SSE，走答案护栏：第 1 次思路 / 第 2 次答案）。 */
