@@ -54,6 +54,7 @@ import reactor.core.publisher.Flux;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -77,6 +78,12 @@ public class TutoringAppService {
     private static final String ROUND_LIMIT_REPLY = "本轮答疑已达 20 轮上限，先消化一下当前内容，有需要可以发起新一轮答疑。";
     /** Python 调用失败重试后仍失败的降级提示（会话保持 ACTIVE 不断开） */
     private static final String AGENT_ERROR_REPLY = "网络波动，请重试。";
+
+    /** agent 事件协议阶段/文案（tutoring-agent-protocol 契约，level 恒 sub） */
+    private static final String AGENT_STAGE_GUARDRAIL = "guardrail";
+    private static final String AGENT_LABEL_GUARDRAIL = "安全把关";
+    private static final String AGENT_STAGE_MEMORY = "memory";
+    private static final String AGENT_LABEL_MEMORY = "记忆更新";
     /** 断点恢复返回的最近消息条数上限 */
     private static final int RECENT_MESSAGES_LIMIT = 50;
 
@@ -150,6 +157,14 @@ public class TutoringAppService {
         }
         List<TutoringChatMessage> history = new ArrayList<>();
         history.add(buildUserMessage(studentId, session.getId(), message, imageData, originalFilename));
+        if (session.getId() != null) {
+            // [BUG-A] 图片路径已提前落库拿 sessionId，orchestrate 的 ensurePersisted 因 id 非空会跳过补缓存；
+            // 首条消息须显式入 Redis，否则后续 transcript 整写 / decide 上下文（sendMessage 用 Redis 组装 history）
+            // 会丢失首条题目图。文字路径 id 为空走 ensurePersisted，不在此分支。
+            for (TutoringChatMessage msg : history) {
+                sessionCache.appendMessage(session.getId(), msg);
+            }
+        }
         return orchestrate(session, history, false);
     }
 
@@ -200,7 +215,7 @@ public class TutoringAppService {
         List<ChatMessageDTO> recent = messages.stream()
                 .skip(Math.max(0, messages.size() - RECENT_MESSAGES_LIMIT))
                 .map(m -> ChatMessageDTO.builder().role(m.getRole()).content(m.getContent())
-                        .createdAt(m.getCreatedAt()).build())
+                        .imageUrl(m.getImageUrl()).thinking(m.getThinking()).createdAt(m.getCreatedAt()).build())
                 .toList();
         TutoringSessionDTO dto = assembler.toSessionDTO(session, recent, null);
         resolveTranscriptUrl(dto);
@@ -362,8 +377,11 @@ public class TutoringAppService {
             // 9. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）
             archiveTranscript(session, history, action.getSummary());
 
-            // 10. 流式：meta → generate(token) → done；会话结束（ARCHIVED/TERMINATED）后清 Redis
-            return buildStream(session, action, allowedType, guard, history)
+            // 10. 流式（agent 事件协议）：agent(guardrail) → meta → agent(generate) → token* → agent(memory) → done
+            //     guardrail 事件在护栏通过后、generate 前；会话结束（ARCHIVED/TERMINATED）后清 Redis
+            return Flux.concat(
+                    Flux.just(agentEvent(AGENT_STAGE_GUARDRAIL, AGENT_LABEL_GUARDRAIL, "done", guardDetail(guard, action))),
+                    buildStream(session, action, allowedType, guard, history))
                     .doOnComplete(() -> clearCacheIfEnded(session));
         } catch (TutoringAgentException e) {
             // Python 调用失败重试后仍失败：start 阶段不建会话（接口层映射 40004）；
@@ -458,27 +476,50 @@ public class TutoringAppService {
         SseMetaDTO meta = buildMeta(session, action, allowedType, guard);
         GenerateContext genCtx = contextAssembler.buildGenerateContext(history, allowedType, action);
         StringBuilder aiReply = new StringBuilder();
+        StringBuilder thinkingBuf = new StringBuilder();
         Flux<ServerSentEvent<String>> tokenStream = llmPort.generate(genCtx)
-                // 只透传 Python 的 token 事件（其 meta/done 无 content，Java 自建 meta/done）
-                .filter(pyEvent -> "token".equals(pyEvent.event()))
+                // 透传 Python 的 token（正文，累积 AI 回复）+ agent 事件（如 generate 阶段）
+                // + thinking 事件（模型推理分片，前端"思考过程"面板按 chunk 拼接，同时累积落库）；
+                // 其 meta/done 丢弃（Java 自建 meta/done）
+                .filter(pyEvent -> "token".equals(pyEvent.event()) || "agent".equals(pyEvent.event())
+                        || "thinking".equals(pyEvent.event()))
                 .map(pyEvent -> {
-                    String content = extractTokenContent(pyEvent.data());
-                    if (content != null) {
-                        aiReply.append(content);
+                    if ("token".equals(pyEvent.event())) {
+                        String content = extractTokenContent(pyEvent.data());
+                        if (content != null) {
+                            aiReply.append(content);
+                        }
+                        return ServerSentEvent.<String>builder()
+                                .event("token").data(pyEvent.data()).build();
                     }
+                    if ("thinking".equals(pyEvent.event())) {
+                        // thinking 推理分片：原样中继给前端 + 累积进 thinkingBuf（历史消息落库用）
+                        String content = extractTokenContent(pyEvent.data());
+                        if (content != null) {
+                            thinkingBuf.append(content);
+                        }
+                        return ServerSentEvent.<String>builder()
+                                .event("thinking").data(pyEvent.data()).build();
+                    }
+                    // agent 事件原样中继（event: agent, data 为协议 JSON）
                     return ServerSentEvent.<String>builder()
-                            .event("token").data(pyEvent.data()).build();
+                            .event("agent").data(pyEvent.data()).build();
                 })
                 .onErrorResume(e -> Flux.just(contentToken(AGENT_ERROR_REPLY)));
         SseDoneDTO done = buildDone(session, action);
         return Flux.concat(
                 Flux.just(metaEvent(meta)),
                 tokenStream,
+                // Java 落库已完成（applySideEffects + archiveTranscript 在 buildStream 前执行），发"记忆更新"收尾信号
+                Flux.just(agentEvent(AGENT_STAGE_MEMORY, AGENT_LABEL_MEMORY, "done", memoryDetail(action))),
                 Flux.just(doneEvent(done)))
-                // AI 回复落库：流结束后把完整回复追加到 Redis 消息列表，并重新整写 COS（恒为完整对话，含 AI 回复）
+                // AI 回复落库：流结束后把完整回复（+ 推理过程 thinking）追加到 Redis 消息列表，
+                // 并重新整写 COS（恒为完整对话，含 AI 回复与思考过程）
                 .doOnComplete(() -> {
                     if (aiReply.length() > 0) {
-                        sessionCache.appendMessage(session.getId(), TutoringChatMessage.ai(aiReply.toString()));
+                        String thinking = thinkingBuf.length() > 0 ? thinkingBuf.toString() : null;
+                        sessionCache.appendMessage(session.getId(),
+                                TutoringChatMessage.ai(aiReply.toString(), thinking));
                         archiveTranscript(session, sessionCache.listMessages(session.getId()), action.getSummary());
                     }
                 });
@@ -786,6 +827,39 @@ public class TutoringAppService {
 
     private ServerSentEvent<String> contentToken(String content) {
         return ServerSentEvent.<String>builder().event("token").data(write(Map.of("content", content))).build();
+    }
+
+    /** agent 事件（tutoring-agent-protocol 协议：{level, stage, label, status, detail}，level 恒 sub）。 */
+    private ServerSentEvent<String> agentEvent(String stage, String label, String status, String detail) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("level", "sub");
+        data.put("stage", stage);
+        data.put("label", label);
+        data.put("status", status);
+        if (detail != null) {
+            data.put("detail", detail);
+        }
+        return ServerSentEvent.<String>builder().event("agent").data(write(data)).build();
+    }
+
+    /** guardrail 事件 detail：放行类型或拒绝降级摘要。 */
+    private String guardDetail(GuardResult guard, ActionMeta action) {
+        String type = ActionType.fromCodeOrDefault(action.getType()).name().toLowerCase();
+        if (guard.isAllowed()) {
+            return "放行: " + type;
+        }
+        return "拒绝: " + type + " → 降级 " + guard.getFallbackType().name().toLowerCase();
+    }
+
+    /** memory 事件 detail：汇总本轮 mastery 信号（如 "二元一次方程组 → 练习中"）；无信号为 null。 */
+    private String memoryDetail(ActionMeta action) {
+        if (action.getMasterySignals() == null || action.getMasterySignals().isEmpty()) {
+            return null;
+        }
+        return action.getMasterySignals().stream()
+                .map(s -> s.getKpLabel() + " → " + s.getSignal())
+                .reduce((a, b) -> a + "；" + b)
+                .orElse(null);
     }
 
     private String write(Object value) {

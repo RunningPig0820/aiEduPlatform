@@ -121,13 +121,41 @@ class TutoringAppServiceTest {
         Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "鸡兔同笼，共35头94脚，各几只？");
 
         StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail) 前置
                 .assertNext(ev -> assertEquals("meta", ev.event()))
                 .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory) 流尾
                 .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
         verify(sessionRepository, atLeastOnce()).save(any()); // 建会话 + 更新计数
         verify(transcriptArchiver, atLeastOnce()).archive(any(), eq(SESSION_ID), any(), anyList(), any(), any());
         verify(sessionCache, never()).clear(eq(SESSION_ID)); // ACTIVE 不清理
+    }
+
+    @Test
+    @DisplayName("[BUG-A] start 图片: 首条图片消息须入 Redis 缓存（ensurePersisted 因 id 非空跳过，靠 start 显式补录）")
+    void start_imageFirstMessagePersistedToCache() {
+        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先看图\"}")));
+        when(fileStorageService.uploadToObjectKey(anyString(), any(byte[].class), anyString())).thenReturn(null);
+        when(fileStorageService.getUrl(anyString()))
+                .thenReturn("https://cos/tutoring/questions/501/1001/20260807-000000-000.png");
+
+        Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, null,
+                new byte[]{1, 2, 3}, "question.png");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail)
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory)
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+        // 关键断言：图片首条消息带 image_url 入 Redis 缓存（否则后续 transcript 整写 / decide 上下文丢首条题目图）
+        verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
+                "user".equals(m.getRole()) && m.getImageUrl() != null
+                        && m.getImageUrl().startsWith("https://cos/tutoring/questions/501/1001/")));
+        verify(sessionRepository, atLeastOnce()).save(any()); // 图片路径提前落库拿 sessionId
     }
 
     @Test
@@ -182,8 +210,10 @@ class TutoringAppServiceTest {
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94");
 
         StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail) 前置
                 .assertNext(ev -> assertEquals("meta", ev.event()))
                 .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory) 流尾
                 .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
         assertEquals(1, session.getRoundCount()); // round 0→1
@@ -201,11 +231,18 @@ class TutoringAppServiceTest {
 
         StepVerifier.create(stream)
                 .assertNext(ev -> {
+                    // guardrail 前置，detail 含拒绝降级摘要
+                    assertEquals("agent", ev.event());
+                    assertTrue(ev.data().contains("\"stage\":\"guardrail\""), ev.data());
+                    assertTrue(ev.data().contains("拒绝: reveal → 降级 approach"), ev.data());
+                })
+                .assertNext(ev -> {
                     assertEquals("meta", ev.event());
                     assertTrue(ev.data().contains("\"type\":\"approach\""), ev.data());
                     assertTrue(ev.data().contains("\"denied\":\"reveal\""), ev.data());
                 })
                 .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory)
                 .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
         assertEquals(1, session.getAnswerRequestCount());
@@ -223,8 +260,9 @@ class TutoringAppServiceTest {
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "换一题");
 
         StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail)
                 .assertNext(ev -> assertEquals("meta", ev.event()))
-                .expectNextCount(2)
+                .expectNextCount(3)  // token + agent(memory) + done
                 .verifyComplete();
         assertEquals(0, session.getRoundCount());
         assertEquals(TutoringState.ACTIVE, session.getStatus());
@@ -413,8 +451,9 @@ class TutoringAppServiceTest {
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "这一步怎么算");
 
         StepVerifier.create(stream)
-                .assertNext(ev -> assertTrue(ev.data().contains("\"type\":\"hint\""), ev.data()))
-                .expectNextCount(2)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail) 前置
+                .assertNext(ev -> assertTrue(ev.data().contains("\"type\":\"hint\""), ev.data()))  // meta 默认 hint
+                .expectNextCount(3)  // token + agent(memory) + done
                 .verifyComplete();
     }
 
@@ -448,14 +487,100 @@ class TutoringAppServiceTest {
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
 
         StepVerifier.create(stream)
-                .assertNext(ev -> assertEquals("meta", ev.event())) // Java 自建 meta
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail) 前置
+                .assertNext(ev -> assertEquals("meta", ev.event()))     // Java 自建 meta
                 .assertNext(ev -> {
                     assertEquals("token", ev.event());
                     assertTrue(ev.data().contains("\"content\""), ev.data());
                     assertFalse(ev.data().contains("action_type"), ev.data());
                     assertFalse(ev.data().contains("model_used"), ev.data());
                 })
-                .assertNext(ev -> assertEquals("done", ev.event())) // Java 自建 done
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory) 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))     // Java 自建 done
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("sendMessage: 中继 Python generate 的 agent 事件（原样透传，不当作 token）")
+    void sendMessage_relaysGenerateAgentEvents() {
+        TutoringSession session = activeSessionInCache();
+        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.generate(any())).thenReturn(Flux.just(
+                sse("agent", "{\"level\":\"sub\",\"stage\":\"generate\",\"label\":\"生成中\",\"status\":\"processing\"}"),
+                sse("token", "{\"content\":\"先找已知条件\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // Java guardrail 前置
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> {
+                    assertEquals("agent", ev.event());                  // Python generate 事件中继
+                    assertTrue(ev.data().contains("\"stage\":\"generate\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // Java memory 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("sendMessage: 中继 Python generate 的 thinking 事件（推理分片原样透传，不当作 token 累积）")
+    void sendMessage_relaysGenerateThinkingEvents() {
+        TutoringSession session = activeSessionInCache();
+        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.generate(any())).thenReturn(Flux.just(
+                sse("agent", "{\"level\":\"sub\",\"stage\":\"generate\",\"label\":\"生成中\",\"status\":\"processing\"}"),
+                sse("thinking", "{\"content\":\"先考虑头数\"}"),
+                sse("thinking", "{\"content\":\"再算脚数差值\"}"),
+                sse("token", "{\"content\":\"先找已知条件\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // Java guardrail 前置
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // Python generate 事件
+                .assertNext(ev -> {
+                    assertEquals("thinking", ev.event());               // thinking 推理分片原样中继
+                    assertTrue(ev.data().contains("\"content\""), ev.data());
+                })
+                .assertNext(ev -> {
+                    assertEquals("thinking", ev.event());               // 第二条 thinking
+                    assertTrue(ev.data().contains("\"再算脚数差值\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // Java memory 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+        // thinking 不算 AI 正文：AI 回复落库 content 只含 token 拼接，thinking 单独落库为推理分片拼接
+        verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
+                "ai".equals(m.getRole()) && "先找已知条件".equals(m.getContent())
+                        && "先考虑头数再算脚数差值".equals(m.getThinking())));
+    }
+
+    @Test
+    @DisplayName("sendMessage: memory 事件 detail 含本轮掌握度信号")
+    void sendMessage_memoryEventDetail() {
+        TutoringSession session = activeSessionInCache();
+        ActionMeta action = meta("hint");
+        action.setMasterySignals(List.of(
+                MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
+        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"很好\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> {
+                    assertEquals("agent", ev.event());
+                    assertTrue(ev.data().contains("\"stage\":\"memory\""), ev.data());
+                    assertTrue(ev.data().contains("二元一次方程组 → practicing"), ev.data());
+                })
+                .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
     }
 
@@ -530,13 +655,16 @@ class TutoringAppServiceTest {
         TutoringSession session = activeSessionInCache();
         session.updateTranscriptUrl("tutoring/transcripts/1001.json");
         when(sessionCache.listMessages(SESSION_ID)).thenReturn(List.of(
-                TutoringChatMessage.user("鸡兔同笼"), TutoringChatMessage.ai("先找已知条件")));
+                TutoringChatMessage.user("鸡兔同笼"),
+                TutoringChatMessage.ai("先找已知条件", "先考虑头数再算脚数差值")));
 
         TutoringSessionDTO dto = service.getSession(STUDENT_ID, SESSION_ID);
 
         assertEquals(SESSION_ID, dto.getSessionId());
         assertEquals(2, dto.getRecentMessages().size());
         assertEquals("https://cos/tutoring/transcripts/1001.json", dto.getTranscriptUrl());
+        // 断点恢复：AI 消息带 thinking（推理过程），供前端历史"思考过程"面板
+        assertEquals("先考虑头数再算脚数差值", dto.getRecentMessages().get(1).getThinking());
     }
 
     @Test

@@ -16,9 +16,10 @@ import reactor.core.publisher.Flux;
 public interface TutoringLlmPort {
 
     /**
-     * 决策（非流式，快模型）：输出 action 元数据（type 闭集 + eval + mastery_signals + ...）。
+     * 决策（SSE 流式消费，快模型）：输出 action 元数据（type 闭集 + eval + mastery_signals + ...）。
      *
-     * <p>实现内部对错误重试 {@code AGENT_RETRY}（1）次。
+     * <p>实现内部消费 Python decide SSE 流、过滤 {@code meta} 事件取 ActionMeta；
+     * 仅连接失败（未收到事件）重试 {@code AGENT_RETRY}（1）次，空流/error（正常完成无 meta）不重试。
      */
     ActionMeta decide(DecideContext context);
 

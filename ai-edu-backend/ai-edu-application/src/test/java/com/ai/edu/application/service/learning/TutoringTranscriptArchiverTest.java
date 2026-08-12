@@ -63,6 +63,24 @@ class TutoringTranscriptArchiverTest {
     }
 
     @Test
+    @DisplayName("AI 消息的 thinking 推理过程一并整写进 transcript JSON")
+    void archive_writesAiThinking() {
+        when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString()))
+                .thenReturn("tutoring/transcripts/501/1001.json");
+
+        archiver.archive(STUDENT_ID, SESSION_ID, LocalDateTime.now(),
+                List.of(TutoringChatMessage.user("鸡兔同笼"),
+                        TutoringChatMessage.ai("先找已知条件", "先考虑头数再算脚数差值")),
+                TutoringState.ACTIVE, null);
+
+        ArgumentCaptor<byte[]> captor = ArgumentCaptor.forClass(byte[].class);
+        verify(fileStorageService).uploadToObjectKey(anyString(), captor.capture(), anyString());
+        String json = new String(captor.getValue());
+        assertTrue(json.contains("\"thinking\":\"先考虑头数再算脚数差值\""), json); // thinking 落 transcript
+        assertTrue(json.contains("\"role\":\"ai\""), json);
+    }
+
+    @Test
     @DisplayName("summary 可空——有则写入，无则省略")
     void archive_optionalSummary() {
         when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString()))

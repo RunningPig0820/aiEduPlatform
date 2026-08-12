@@ -28,6 +28,12 @@ public class ChatMessageDTO implements Serializable {
     /** 消息内容 */
     private String content;
 
+    /** 图片消息的 COS URL（图片题断点恢复展示用，文字消息为 null） */
+    private String imageUrl;
+
+    /** AI 推理过程文本（AI 消息含思考时返回，供"思考过程"折叠面板；无思考/学生消息为 null） */
+    private String thinking;
+
     /** 消息时间 */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;

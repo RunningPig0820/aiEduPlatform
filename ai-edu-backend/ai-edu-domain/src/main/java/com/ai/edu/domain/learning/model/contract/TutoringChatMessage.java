@@ -32,6 +32,10 @@ public class TutoringChatMessage implements Serializable {
     @JsonProperty("image_url")
     private String imageUrl;
 
+    /** AI 推理过程文本（generate thinking 分片拼接；学生消息/无思考轮为 null） */
+    @JsonProperty("thinking")
+    private String thinking;
+
     /** 消息时间（Python 可忽略） */
     @JsonProperty("created_at")
     private LocalDateTime createdAt;
@@ -50,5 +54,11 @@ public class TutoringChatMessage implements Serializable {
 
     public static TutoringChatMessage ai(String content) {
         return TutoringChatMessage.builder().role("ai").content(content).createdAt(LocalDateTime.now()).build();
+    }
+
+    /** AI 回复含推理过程：thinking 为 generate thinking 分片拼接（可 null = 无思考轮）。 */
+    public static TutoringChatMessage ai(String content, String thinking) {
+        return TutoringChatMessage.builder().role("ai").content(content)
+                .thinking(thinking).createdAt(LocalDateTime.now()).build();
     }
 }
