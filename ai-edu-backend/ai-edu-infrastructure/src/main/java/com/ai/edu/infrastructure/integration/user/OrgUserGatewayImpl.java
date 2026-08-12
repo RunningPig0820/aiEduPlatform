@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -120,14 +121,32 @@ public class OrgUserGatewayImpl implements OrgUserGateway {
             return;
         }
 
+        // 幂等绑定：跳过已存在的绑定关系。
+        // 学生删除关联后重新添加（复用同一 userId）会再次触发 bindStudentParents，若重复插入
+        // t_parent_profile 会撞 UNIQUE(student_user_id, parent_user_id) → DuplicateKeyException(500)。
+        List<ParentProfile> existing = parentProfileRepository.findByStudentUserId(studentUserId);
+        Set<Long> existingParentIds = existing.stream()
+                .map(ParentProfile::getParentUserId)
+                .collect(Collectors.toSet());
+
         List<ParentProfile> profiles = new ArrayList<>();
         for (ParentBinding binding : bindings) {
+            if (existingParentIds.contains(binding.getParentUserId())) {
+                log.info("[ACL-Org] 家长已绑定，跳过: studentUserId={}, parentUserId={}",
+                        studentUserId, binding.getParentUserId());
+                continue;
+            }
             ParentProfile profile = ParentProfile.create(
                     studentUserId,
                     binding.getParentUserId(),
                     binding.getRelationship()
             );
             profiles.add(profile);
+        }
+
+        if (profiles.isEmpty()) {
+            log.info("[ACL-Org] 所有家长均已绑定，无需处理: studentUserId={}", studentUserId);
+            return;
         }
 
         parentProfileRepository.saveAll(profiles);

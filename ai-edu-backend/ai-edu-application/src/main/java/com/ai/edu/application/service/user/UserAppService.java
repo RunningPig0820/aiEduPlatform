@@ -310,6 +310,11 @@ public class UserAppService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在"));
 
         // 修改密码（领域规则：校验旧密码、新旧不能相同）
+        // 注意：新旧相同的判断必须在编码前比较原文。若编码后再比，BCrypt 每次随机盐导致
+        // matches(新编码, 旧存储哈希) 永不相等，领域层的 SAME_AS_OLD 分支实际不可达。
+        if (request.getNewPassword().equals(request.getOldPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD, "新密码不能与原密码相同");
+        }
         String encodedPassword = PasswordUtil.encode(request.getNewPassword());
         PasswordChangeResult result = user.changePassword(request.getOldPassword(), encodedPassword, PasswordUtil::matches);
         if (result == PasswordChangeResult.OLD_PASSWORD_WRONG) {

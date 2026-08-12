@@ -52,7 +52,14 @@ public class AdminClassAppService {
     public AdminClassNodeDTO createNode(CreateAdminClassNodeCommand command) {
         log.info("创建行政班节点: {}", JSONUtil.toJsonStr(command));
 
-        DeptEduTypeEnum deptType = DeptEduTypeEnum.of(command.getDeptType());
+        // 非法 deptType 时 DeptEduTypeEnum.of 抛 IllegalArgumentException，会被 GlobalExceptionHandler
+        // 映射成 HTTP 500。这是参数校验错误，应按业务异常返回 400。
+        DeptEduTypeEnum deptType;
+        try {
+            deptType = DeptEduTypeEnum.of(command.getDeptType());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, e.getMessage());
+        }
 
         // 年级和班级节点需要 gradeCode + enrollmentYear
         if (deptType.requiresGradeInfo()) {

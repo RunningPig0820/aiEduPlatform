@@ -253,8 +253,10 @@ public class AdminClassStudentAppService {
         StudentClass studentClass = studentClassRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SCHOOL_NOT_FOUND, "学生关联不存在"));
 
-        studentClass.delete();
-        studentClassRepository.save(studentClass);
+        // 注意：不能用 studentClass.delete() + save()。MyBatis-Plus 全局配置了 logic-delete-field: deleted，
+        // updateById 会跳过逻辑删除字段的更新，is_deleted 不会落库，软删除实际不生效（删除后无法重新添加同一学生）。
+        // 必须走 deleteById：插件自动转 UPDATE SET is_deleted=1 WHERE id=? AND is_deleted=0。
+        studentClassRepository.deleteById(id);
 
         log.info("行政班学生关联删除成功: id={}, studentUserId={}", id, studentClass.getStudentIdValue());
     }
