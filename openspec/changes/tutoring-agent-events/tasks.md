@@ -28,10 +28,10 @@
 > 实施对接说明见 [decide-thinking-integration.md](decide-thinking-integration.md)（3 文件改动清单 + 契约要点）。
 > 注意：`TutoringLlmClient.java` / `TutoringLlmPort.java` 当前为 HEAD 旧 JSON 版 decide，需先按该文档恢复 SSE 解析再改流式。
 
-- [ ] 5.1 `TutoringLlmPort.decide(ctx)` → `decideStream(ctx): Flux<ServerSentEvent<String>>`（返回 Python decide 原始事件流）
-- [ ] 5.2 `TutoringLlmClient.decideStream` 去 `.block()` / 去 `.filter(meta)` / 去 retry（流式不可重试，与 generate 一致），原样透传全事件
-- [ ] 5.3 `TutoringAppService.orchestrate` 改响应式管线：`Sinks.One<ActionMeta>` + `Flux.concat(decideThinking, tail)`——thinking 实时中继、meta 到达后走 `postDecide`（抽取护栏/副作用/持久化/guardrail+generate）
-- [ ] 5.4 decide 失败处理：流中途失败 → 已有会话 `friendlyErrorStream`（50005），start 阶段重抛；`metaSink` 收 error/空流无 meta 均按失败
-- [ ] 5.5 并发锁适配：`withSessionLock` 改订阅时取锁、`postDecide` 副作用完成后释放（`unlock` 参数 + `doFinally` 兜底），generate 仍在锁外
-- [ ] 5.6 测试：`TutoringAppServiceTest` mock 改 `decideStream`；新增"thinking 先于 guardrail/meta 到达"时序用例；`TutoringLlmClientTest` decide 用例改流式断言
-- [ ] 5.7 api.md 已更新（decide thinking 中继 + 序列前置）；联调验证 decide thinking 实时透传、不入库（刷新后仅 generate thinking）
+- [x] 5.1 `TutoringLlmPort.decide(ctx)` → `decideStream(ctx): Flux<ServerSentEvent<String>>`（返回 Python decide 原始事件流）
+- [x] 5.2 `TutoringLlmClient.decideStream` 去 `.block()` / 去 `.filter(meta)` / 去 retry（流式不可重试，与 generate 一致），原样透传全事件
+- [x] 5.3 `TutoringAppService.orchestrate` 改响应式管线：`Sinks.One<ActionMeta>` + `Flux.concat(decideThinking, tail)`——thinking 实时中继、meta 到达后走 `postDecide`（抽取护栏/副作用/持久化/guardrail+generate）
+- [x] 5.4 decide 失败处理：流中途失败 → 已有会话 `friendlyErrorStream`（50005），start 阶段重抛；`metaSink` 收 error/空流无 meta 均按失败
+- [x] 5.5 并发锁适配：`withSessionLock` 改订阅时取锁、`postDecide` 副作用完成后释放（`unlock` 参数 + `doFinally` 兜底），generate 仍在锁外
+- [x] 5.6 测试：`TutoringAppServiceTest` mock 改 `decideStream`；新增"thinking 先于 guardrail/meta 到达"时序用例；`TutoringLlmClientTest` decide 用例改流式断言（application 40 用例 + infrastructure 3 用例全绿）
+- [x] 5.7 api.md 已更新（decide thinking 中继 + 序列前置）；**联调验证 decide thinking 实时透传、不入库（刷新后仅 generate thinking）待模型端实测**（代码侧已验证：compile + application/interface 全量回归）

@@ -1,14 +1,11 @@
 package com.ai.edu.infrastructure.ai.tutoring;
 
 import com.ai.edu.common.exception.TutoringAgentException;
-import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -25,17 +22,12 @@ import reactor.core.publisher.Mono;
 /**
  * 答疑 Python agent 客户端（WebClient，复用 llm-gateway internalToken 模式）。
  *
- * <p>类型先行流式：{@code decide}（SSE 流式消费，过滤 meta 事件取 ActionMeta）→ {@code generate}（流式正文）。
- * decide 仅连接失败（未收到事件）重试 {@code ai-edu.tutoring.agent-retry}（默认 1）次，
- * 空流/error（正常完成无 meta）不重试；<b>generate 不可重试</b>（流式），失败由编排层降级。
+ * <p>类型先行流式：{@code decide}（SSE 流，thinking/agent/meta/done 全透传，由编排层消费）→ {@code generate}（流式正文）。
+ * <b>decide/generate 均不可重试</b>（流式，重试会重发已透传事件），失败由编排层降级。
  */
 @Slf4j
 @Repository
 public class TutoringLlmClient implements TutoringLlmPort {
-
-    /** 宽容 ObjectMapper：容忍 Python decide meta 事件中的可选调试字段（reason 等），Java 不建模。 */
-    private static final ObjectMapper DECIDE_MAPPER = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Resource
     private WebClient tutoringWebClient;
@@ -44,44 +36,23 @@ public class TutoringLlmClient implements TutoringLlmPort {
     private TutoringConfig tutoringConfig;
 
     @Override
-    public ActionMeta decide(DecideContext context) {
-        log.info("[tutoring] decide 调用, history={}, round={}, answerReq={}, isNewQuestion={}",
+    public Flux<ServerSentEvent<String>> decideStream(DecideContext context) {
+        log.info("[tutoring] decideStream 调用, history={}, round={}, answerReq={}, isNewQuestion={}",
                 context.getHistory() == null ? 0 : context.getHistory().size(),
                 context.getRoundCount(), context.getAnswerRequestCount(), context.isNewQuestion());
-        try {
-            ActionMeta meta = Mono.defer(() -> tutoringWebClient.post()
-                    .uri(config().decidePath())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .bodyValue(context)
-                    .retrieve()
-                    .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
-                    .filter(e -> "meta".equals(e.event()))
-                    .map(e -> readActionMeta(e.data()))
-                    .next())
-                    .retry(config().agentRetry())
-                    .block(config().decideTimeout());
-            if (meta == null) {
-                // 空流 / event: error（流正常完成但无 meta）→ 按 agent 失败处理，不重试
-                log.warn("[tutoring] decide 流中无 meta 事件（空流/error），按 agent 失败处理");
-                throw new TutoringAgentException("答疑决策服务暂不可用");
-            }
-            return meta;
-        } catch (TutoringAgentException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[tutoring] decide 调用失败: {}", e.getMessage(), e);
-            throw new TutoringAgentException("答疑决策服务暂不可用", e);
-        }
-    }
-
-    /** 解析 meta 事件 data → ActionMeta（宽容 ObjectMapper，容忍 Python 调试字段 reason 等未知字段）。 */
-    private ActionMeta readActionMeta(String data) {
-        try {
-            return DECIDE_MAPPER.readValue(data, ActionMeta.class);
-        } catch (Exception e) {
-            throw new TutoringAgentException("答疑决策服务暂不可用", e);
-        }
+        // 流式不可重试：重试会重发已透传的 thinking，失败由编排层降级（与 generate 一致）
+        return tutoringWebClient.post()
+                .uri(config().decidePath())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(context)
+                .retrieve()
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                .doOnNext(event -> log.trace("[tutoring] decide SSE: {}", event.data()))
+                .onErrorResume(e -> {
+                    log.error("[tutoring] decide 调用失败: {}", e.getMessage(), e);
+                    return Flux.error(new TutoringAgentException("答疑决策服务暂不可用", e));
+                });
     }
 
     @Override

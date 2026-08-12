@@ -28,6 +28,7 @@ import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
 import com.ai.edu.domain.shared.service.FileStorageService;
 import com.ai.edu.domain.shared.service.RedisService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -115,7 +116,7 @@ class TutoringAppServiceTest {
     @Test
     @DisplayName("start: decide=hint → 护栏通过 → 建会话 → meta/token/done，round 落库")
     void start_normalHintFlow() {
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "鸡兔同笼，共35头94脚，各几只？");
@@ -135,7 +136,7 @@ class TutoringAppServiceTest {
     @Test
     @DisplayName("[BUG-A] start 图片: 首条图片消息须入 Redis 缓存（ensurePersisted 因 id 非空跳过，靠 start 显式补录）")
     void start_imageFirstMessagePersistedToCache() {
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先看图\"}")));
         when(fileStorageService.uploadToObjectKey(anyString(), any(byte[].class), anyString())).thenReturn(null);
         when(fileStorageService.getUrl(anyString()))
@@ -163,7 +164,7 @@ class TutoringAppServiceTest {
     void start_unrelatedTerminated() {
         ActionMeta end = meta("end");
         end.setSummary("我主要解答学科问题，请提出学习相关的内容");
-        when(llmPort.decide(any())).thenReturn(end);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(end));
 
         Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "今天天气怎么样");
 
@@ -190,11 +191,13 @@ class TutoringAppServiceTest {
     }
 
     @Test
-    @DisplayName("start: decide 失败重试后仍失败 → 不建会话，抛 TutoringAgentException")
+    @DisplayName("start: decide 流失败 → 不建会话，订阅期抛 TutoringAgentException")
     void start_decideFailure_noSession() {
-        when(llmPort.decide(any())).thenThrow(new TutoringAgentException("decide 失败"));
+        when(llmPort.decideStream(any())).thenReturn(Flux.error(new TutoringAgentException("decide 失败")));
 
-        assertThrows(TutoringAgentException.class, () -> service.start(STUDENT_ID, "鸡兔同笼"));
+        StepVerifier.create(service.start(STUDENT_ID, "鸡兔同笼"))
+                .expectError(TutoringAgentException.class)
+                .verify();
         verify(sessionRepository, never()).save(any());
     }
 
@@ -204,7 +207,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 正常一轮 hint → meta/token/done，round 递增")
     void sendMessage_normalRound() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意等式两边\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94");
@@ -224,7 +227,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 答案护栏拒绝 reveal（未授权）→ meta(approach, denied=reveal) + approach 生成流，count→1")
     void sendMessage_answerDeniedToApproach() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("reveal"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"思路：先设未知数\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "直接告诉我答案");
@@ -254,7 +257,7 @@ class TutoringAppServiceTest {
         TutoringSession session = activeSessionInCache();
         session.recordRound();
         session.recordRound(); // round=2
-        when(llmPort.decide(any())).thenReturn(meta("switch"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("switch")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"新题我们开始\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "换一题");
@@ -276,9 +279,9 @@ class TutoringAppServiceTest {
         when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString())).thenAnswer(inv -> inv.getArgument(0));
         when(fileStorageService.getUrl(anyString())).thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         AtomicReference<DecideContext> captured = new AtomicReference<>();
-        when(llmPort.decide(any())).thenAnswer(inv -> {
+        when(llmPort.decideStream(any())).thenAnswer(inv -> {
             captured.set(inv.getArgument(0));
-            return meta("hint");
+            return decideStreamOf(meta("hint"));
         });
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"新题开始\"}")));
 
@@ -301,9 +304,9 @@ class TutoringAppServiceTest {
     void sendMessage_text_isNewQuestionFalse() {
         activeSessionInCache();
         AtomicReference<DecideContext> captured = new AtomicReference<>();
-        when(llmPort.decide(any())).thenAnswer(inv -> {
+        when(llmPort.decideStream(any())).thenAnswer(inv -> {
             captured.set(inv.getArgument(0));
-            return meta("hint");
+            return decideStreamOf(meta("hint"));
         });
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"继续\"}")));
 
@@ -320,9 +323,9 @@ class TutoringAppServiceTest {
         when(fileStorageService.uploadToObjectKey(anyString(), any(), anyString())).thenAnswer(inv -> inv.getArgument(0));
         when(fileStorageService.getUrl(anyString())).thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         AtomicReference<DecideContext> captured = new AtomicReference<>();
-        when(llmPort.decide(any())).thenAnswer(inv -> {
+        when(llmPort.decideStream(any())).thenAnswer(inv -> {
             captured.set(inv.getArgument(0));
-            return meta("hint");
+            return decideStreamOf(meta("hint"));
         });
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
 
@@ -345,7 +348,7 @@ class TutoringAppServiceTest {
         action.setEval(EvalInfo.builder().correct(false).errorType("COMPUTATION")
                 .emotion("CONFUSED").exerciseComplete(false).build());
 
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"再想想\"}")));
         when(sessionCache.listMessages(SESSION_ID)).thenReturn(List.of(
                 TutoringChatMessage.user("设鸡x只"), TutoringChatMessage.ai("继续"), TutoringChatMessage.user("2x+4(35-x)=94")));
@@ -364,7 +367,7 @@ class TutoringAppServiceTest {
         TutoringSession session = activeSessionInCache();
         ActionMeta action = meta("switch");
         action.setEval(EvalInfo.builder().correct(false).build());
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"新题开始\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "换一题").subscribe();
@@ -378,7 +381,7 @@ class TutoringAppServiceTest {
         TutoringSession session = activeSessionInCache();
         ActionMeta action = meta("hint");
         action.setEval(EvalInfo.builder().correct(false).errorType(null).build());
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "一件商品打八折后240元，原价多少？").subscribe();
@@ -392,7 +395,7 @@ class TutoringAppServiceTest {
         TutoringSession session = activeSessionInCache();
         ActionMeta action = meta("reveal");
         action.setEval(EvalInfo.builder().correct(false).build());
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"思路\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "直接告诉我答案").subscribe();
@@ -407,7 +410,7 @@ class TutoringAppServiceTest {
         ActionMeta action = meta("end");
         action.setEndReason("COMPLETED");
         action.setEval(EvalInfo.builder().correct(false).build());
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"解出了\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").subscribe();
@@ -425,14 +428,14 @@ class TutoringAppServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.sendMessage(STUDENT_ID, SESSION_ID, "继续"));
         assertEquals("50003", ex.getCode());
-        verify(llmPort, never()).decide(any());
+        verify(llmPort, never()).decideStream(any());
     }
 
     @Test
     @DisplayName("sendMessage: mastery_signals 为空 → 跳过掌握度更新，不报错")
     void sendMessage_emptyMasterySignals() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("concept"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("concept")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"请把题目发完整\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "这题不会").subscribe();
@@ -445,7 +448,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: decide 输出非法 type → 默认 hint 放行，不阻断")
     void sendMessage_invalidType_defaultsHint() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("garbage"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("garbage")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"继续引导\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "这一步怎么算");
@@ -461,7 +464,7 @@ class TutoringAppServiceTest {
     @DisplayName("AI 回复落库：流结束后 AI 回复（拼接 token）追加到 Redis 消息列表")
     void sendMessage_appendsAiReply() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(
                 sse("token", "{\"content\":\"先找\"}"),
                 sse("token", "{\"content\":\"已知条件\"}")));
@@ -478,7 +481,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 只透传 Python 的 token 事件（meta/done 不泄漏为假 token）")
     void sendMessage_filtersNonTokenPythonEvents() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(
                 sse("meta", "{\"action_type\":\"hint\"}"),
                 sse("token", "{\"content\":\"先找已知条件\"}"),
@@ -504,7 +507,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 中继 Python generate 的 agent 事件（原样透传，不当作 token）")
     void sendMessage_relaysGenerateAgentEvents() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(
                 sse("agent", "{\"level\":\"sub\",\"stage\":\"generate\",\"label\":\"生成中\",\"status\":\"processing\"}"),
                 sse("token", "{\"content\":\"先找已知条件\"}")));
@@ -528,7 +531,7 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 中继 Python generate 的 thinking 事件（推理分片原样透传，不当作 token 累积）")
     void sendMessage_relaysGenerateThinkingEvents() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(
                 sse("agent", "{\"level\":\"sub\",\"stage\":\"generate\",\"label\":\"生成中\",\"status\":\"processing\"}"),
                 sse("thinking", "{\"content\":\"先考虑头数\"}"),
@@ -566,7 +569,7 @@ class TutoringAppServiceTest {
         ActionMeta action = meta("hint");
         action.setMasterySignals(List.of(
                 MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"很好\"}")));
 
         Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了");
@@ -591,7 +594,7 @@ class TutoringAppServiceTest {
         ActionMeta action = meta("hint");
         action.setMasterySignals(List.of(
                 MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
-        when(llmPort.decide(any())).thenReturn(action);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"很好\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").subscribe();
@@ -608,7 +611,7 @@ class TutoringAppServiceTest {
     @DisplayName("requestAnswer: 第 1 次 → approach（count=1）")
     void requestAnswer_firstTimeApproach() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("reveal"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"思路\"}")));
 
         service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
@@ -622,7 +625,7 @@ class TutoringAppServiceTest {
     void requestAnswer_secondTimeReveal() {
         TutoringSession session = activeSessionInCache();
         session.requestAnswer(); // count=1
-        when(llmPort.decide(any())).thenReturn(meta("reveal"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"答案：鸡15兔20\"}")));
 
         service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
@@ -636,7 +639,7 @@ class TutoringAppServiceTest {
     void requestAnswer_secondReveal_archivesSession() {
         TutoringSession session = activeSessionInCache();
         session.requestAnswer(); // count=1
-        when(llmPort.decide(any())).thenReturn(meta("reveal"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"答案：鸡15兔20\"}")));
 
         service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
@@ -759,13 +762,39 @@ class TutoringAppServiceTest {
     @DisplayName("sendMessage: 会话锁正常获取 → 释放锁")
     void sendMessage_releasesLock() {
         TutoringSession session = activeSessionInCache();
-        when(llmPort.decide(any())).thenReturn(meta("hint"));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"ok\"}")));
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "继续").subscribe();
 
         verify(redisService).tryLock(anyString(), anyString(), anyLong(), any());
         verify(redisService).unlock(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("decide thinking 实时中继: thinking 先于 guardrail/meta 到达（D7 响应式中继）")
+    void sendMessage_decideThinkingRelayedFirst() {
+        activeSessionInCache();
+        // decide 流: thinking × 2 → agent → meta → done（thinking 在 meta 前到达，须实时中继）
+        when(llmPort.decideStream(any())).thenReturn(Flux.just(
+                sse("thinking", "{\"content\":\"先识别题型\"}"),
+                sse("thinking", "{\"content\":\"再给提示\"}"),
+                sse("agent", "{\"stage\":\"decide\"}"),
+                sse("meta", serializeMeta(meta("hint"))),
+                sse("done", "{}")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"ok\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("thinking", ev.event()))   // ① decide thinking 实时中继
+                .assertNext(ev -> assertEquals("thinking", ev.event()))   // ②
+                .assertNext(ev -> assertEquals("agent", ev.event()))      // ③ guardrail 前置（meta 后）
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))      // memory 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
     }
 
     @Test
@@ -806,5 +835,21 @@ class TutoringAppServiceTest {
 
     private ServerSentEvent<String> sse(String event, String data) {
         return ServerSentEvent.<String>builder().event(event).data(data).build();
+    }
+
+    /** 构造 decide 流 mock：agent + meta + done（thinking 事件由用例按需自拼后前置）。 */
+    private Flux<ServerSentEvent<String>> decideStreamOf(ActionMeta meta) {
+        return Flux.just(
+                sse("agent", "{\"stage\":\"decide\"}"),
+                sse("meta", serializeMeta(meta)),
+                sse("done", "{}"));
+    }
+
+    private String serializeMeta(ActionMeta meta) {
+        try {
+            return new ObjectMapper().writeValueAsString(meta);
+        } catch (Exception e) {
+            throw new RuntimeException("serialize meta failed", e);
+        }
     }
 }

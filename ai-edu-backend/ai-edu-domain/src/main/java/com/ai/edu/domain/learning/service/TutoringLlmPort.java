@@ -1,6 +1,5 @@
 package com.ai.edu.domain.learning.service;
 
-import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
@@ -11,17 +10,17 @@ import reactor.core.publisher.Flux;
  * 答疑 LLM 端口（Java → Python 答疑 agent 的调用契约）。
  *
  * <p>基础设施层 {@code TutoringLlmClient} 以 WebClient 实现（复用 llm-gateway internalToken 模式）。
- * <b>类型先行流式</b>：decide（非流式快调用，出 action 元数据）→ Java 护栏校验 → generate（流式正文）。
+ * <b>类型先行流式</b>：decide（SSE 流，thinking 实时中继 + meta 提取）→ Java 护栏校验 → generate（流式正文）。
  */
 public interface TutoringLlmPort {
 
     /**
-     * 决策（SSE 流式消费，快模型）：输出 action 元数据（type 闭集 + eval + mastery_signals + ...）。
+     * 决策流（流式 SSE）：返回 Python decide 原始事件流（thinking / agent / meta / done 全保留），
+     * 由编排层决定消费哪些（实时中继 thinking + 提取 meta）。
      *
-     * <p>实现内部消费 Python decide SSE 流、过滤 {@code meta} 事件取 ActionMeta；
-     * 仅连接失败（未收到事件）重试 {@code AGENT_RETRY}（1）次，空流/error（正常完成无 meta）不重试。
+     * <p>实现内部<b>不重试</b>（流式不可重试，重试会重发已透传的 thinking，失败由编排层降级）。
      */
-    ActionMeta decide(DecideContext context);
+    Flux<ServerSentEvent<String>> decideStream(DecideContext context);
 
     /**
      * 生成正文（流式 SSE，强模型）：按已放行 action_type 输出 token 流。

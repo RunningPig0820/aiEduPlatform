@@ -41,6 +41,7 @@ import com.ai.edu.domain.learning.service.TutoringLlmPort;
 import com.ai.edu.domain.shared.service.FileStorageService;
 import com.ai.edu.domain.shared.service.RedisService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
@@ -50,6 +51,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -59,6 +62,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -92,6 +97,10 @@ public class TutoringAppService {
     private static final long SESSION_LOCK_SECONDS = 45;
 
     private static final ObjectMapper SSE_MAPPER = new ObjectMapper();
+
+    /** decide meta 事件解析用宽容 ObjectMapper（容忍 Python 调试字段 reason 等未知字段）。 */
+    private static final ObjectMapper ACTION_META_MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     /** 字段名不用 {@code sessionRepository}——与 Spring Session 的 RedisSessionRepository bean 名冲突（@Resource 按名注入）。 */
     @Resource
@@ -165,7 +174,7 @@ public class TutoringAppService {
                 sessionCache.appendMessage(session.getId(), msg);
             }
         }
-        return orchestrate(session, history, false);
+        return orchestrate(session, history, false, () -> {});
     }
 
     /** 发送学生回答（SSE）：追加消息 → decide → 护栏 → 落库副作用 → COS 整写 → generate 透传（文字）。 */
@@ -181,7 +190,7 @@ public class TutoringAppService {
      */
     public Flux<ServerSentEvent<String>> sendMessage(Long studentId, Long sessionId, String content,
                                                      byte[] imageData, String originalFilename) {
-        return withSessionLock(sessionId, () -> {
+        return withSessionLockReactive(sessionId, unlock -> {
             TutoringSession session = loadActiveSession(sessionId, studentId);
             boolean isNewQuestion = false;
             if (imageData != null && imageData.length > 0) {
@@ -194,17 +203,17 @@ public class TutoringAppService {
                 sessionCache.appendMessage(sessionId, TutoringChatMessage.user(content));
             }
             List<TutoringChatMessage> newHistory = sessionCache.listMessages(sessionId);
-            return orchestrate(session, newHistory, isNewQuestion);
+            return orchestrate(session, newHistory, isNewQuestion, unlock);
         });
     }
 
     /** 请求答案（SSE）：合成"请把答案给我"消息，交由 decide + 答案护栏处理（第 1 次思路 / 第 2 次答案）。 */
     public Flux<ServerSentEvent<String>> requestAnswer(Long studentId, Long sessionId) {
-        return withSessionLock(sessionId, () -> {
+        return withSessionLockReactive(sessionId, unlock -> {
             TutoringSession session = loadActiveSession(sessionId, studentId);
             sessionCache.appendMessage(sessionId, TutoringChatMessage.user("请把答案给我"));
             List<TutoringChatMessage> history = sessionCache.listMessages(sessionId);
-            return orchestrate(session, history, false);
+            return orchestrate(session, history, false, unlock);
         });
     }
 
@@ -325,72 +334,154 @@ public class TutoringAppService {
         }
     }
 
+    /**
+     * 同一会话串行化（D7 响应式版）：锁在订阅前获取，decide+副作用临界区结束后由 orchestrate 释放
+     * （unlock 参数 + doFinally 兜底，幂等），generate 在锁外执行。sendMessage/requestAnswer 使用。
+     * <p>锁被占（并发）→ 同步抛"会话繁忙"（不回流，保持原有 4xx 语义）；同步构建阶段异常 → 立即释放锁后重抛。
+     */
+    private Flux<ServerSentEvent<String>> withSessionLockReactive(Long sessionId,
+            Function<Runnable, Flux<ServerSentEvent<String>>> action) {
+        if (redisService == null) {
+            return action.apply(() -> {});
+        }
+        String lockKey = SESSION_LOCK_PREFIX + sessionId;
+        String lockValue = UUID.randomUUID().toString();
+        if (!Boolean.TRUE.equals(redisService.tryLock(lockKey, lockValue, SESSION_LOCK_SECONDS, TimeUnit.SECONDS))) {
+            log.warn("[tutoring] 会话并发，拒绝本次消息, sessionId={}", sessionId);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "会话繁忙，请稍后再试");
+        }
+        AtomicBoolean released = new AtomicBoolean(false);
+        Runnable unlock = () -> {
+            if (released.compareAndSet(false, true)) {
+                redisService.unlock(lockKey, lockValue);
+            }
+        };
+        try {
+            return action.apply(unlock);
+        } catch (Exception e) {
+            // 同步构建阶段异常（loadActiveSession/appendMessage/ctx 组装）→ 立即释放锁后重抛
+            unlock.run();
+            throw e;
+        }
+    }
+
     // ==================== 编排核心 ====================
 
     /**
-     * decide → 护栏 → 副作用 → generate 的统一编排（start/sendMessage/requestAnswer 共用）。
+     * decide（流式中继）→ meta 到达 → postDecide（护栏+副作用+generate）的统一编排（start/sendMessage/requestAnswer 共用）。
      *
-     * <p>流式路径：meta（护栏已放行 type）→ token（Python 正文流）→ done（终态）。终止/轮次上限无 token 流。
+     * <p><b>D7 响应式管线</b>：decide 不再同步 block——SSE 响应在 decide 一开始就建立，
+     * Python decide 的 thinking 事件实时中继前端（不入库），meta 到达后走 postDecide。
+     * 时序：thinking*(decide) → agent(guardrail) → meta → agent(generate) → thinking*(generate) → token* → agent(memory) → done。
      *
      * @param isNewQuestion 本轮学生是否上传了新的题目图片（换题信号，见 DecideContext.is_new_question）
+     * @param unlock        并发锁释放函数（decide+副作用临界区结束后调用；错误路径 doFinally 兜底，幂等）
      */
     private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<TutoringChatMessage> history,
-                                                      boolean isNewQuestion) {
-        try {
-            // 1. decide
-            List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
-            DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList, isNewQuestion);
-            ActionMeta action = llmPort.decide(ctx);
+                                                      boolean isNewQuestion, Runnable unlock) {
+        List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
+        DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList, isNewQuestion);
 
-            // 2. 安全终止（decide safety_flag）
-            if (Boolean.TRUE.equals(action.getSafetyFlag())) {
-                return terminate(session, action);
-            }
+        // decide 响应式中继：thinking 实时透传；meta 到达 → metaSink；error 事件 / 流结束无 meta → 按失败
+        Sinks.One<ActionMeta> metaSink = Sinks.one();
+        AtomicBoolean metaReceived = new AtomicBoolean(false);
+        Flux<ServerSentEvent<String>> decideThinking = llmPort.decideStream(ctx)
+                .doOnNext(e -> {
+                    if ("meta".equals(e.event())) {
+                        metaReceived.set(true);
+                        metaSink.tryEmitValue(readActionMeta(e.data()));
+                    } else if ("error".equals(e.event())) {
+                        metaSink.tryEmitError(new TutoringAgentException("答疑决策服务暂不可用"));
+                    }
+                })
+                .doOnComplete(() -> {
+                    // 流正常结束仍未收到 meta（空流 / 仅 agent+error 事件）→ 按 agent 失败处理，不重试
+                    if (!metaReceived.get()) {
+                        metaSink.tryEmitError(new TutoringAgentException("答疑决策服务暂不可用"));
+                    }
+                })
+                .filter(e -> "thinking".equals(e.event()));   // 只中继 thinking，agent/done 丢弃
 
-            // 3. 护栏校验
-            GuardResult guard = guardrail.validate(action, session);
+        // meta 到达 → postDecide（同步护栏+副作用+guardrail+generate）→ 释放锁（generate 在锁外）
+        Mono<Flux<ServerSentEvent<String>>> tail = metaSink.asMono()
+                .map(action -> {
+                    Flux<ServerSentEvent<String>> result = postDecide(session, action, history);
+                    unlock.run();   // decide+副作用临界区结束，generate 在锁外
+                    return result;
+                });
 
-            // 4. 终止类 end（无关/学习方法/非数学：type=end 且 end_reason 为空 → TERMINATED + 直接回复）
-            if (guard.isAllowed() && isTerminationEnd(action)) {
-                return terminate(session, action);
-            }
+        return Flux.concat(decideThinking, Mono.from(tail).flatMapMany(f -> f))
+                .doFinally(sig -> unlock.run())               // 错误/取消路径兜底释放锁（幂等）
+                .onErrorResume(e -> handleDecideFailure(session, e));
+    }
 
-            // 5. 轮次护栏拒绝（fallback=end）→ 强制收尾 ROUND_LIMIT，固定话术，无 generate
-            if (!guard.isAllowed() && guard.getFallbackType() == ActionType.END) {
-                return endByRoundLimit(session, action, history);
-            }
+    /** meta 到达后的护栏校验 + 落库副作用 + guardrail/generate 流（原 orchestrate 同步段，D7 抽取）。 */
+    private Flux<ServerSentEvent<String>> postDecide(TutoringSession session, ActionMeta action,
+                                                     List<TutoringChatMessage> history) {
+        // 1. 安全终止（decide safety_flag）
+        if (Boolean.TRUE.equals(action.getSafetyFlag())) {
+            return terminate(session, action);
+        }
 
-            // 6. 放行 type（护栏拒绝时用 fallbackType，如 reveal→approach）
-            ActionType allowedType = guard.isAllowed()
-                    ? ActionType.fromCodeOrDefault(action.getType())
-                    : guard.getFallbackType();
+        // 2. 护栏校验
+        GuardResult guard = guardrail.validate(action, session);
 
-            // 7. 新会话落库 + 消息入缓存；已有会话复用
-            ensurePersisted(session, history);
+        // 3. 终止类 end（无关/学习方法/非数学：type=end 且 end_reason 为空 → TERMINATED + 直接回复）
+        if (guard.isAllowed() && isTerminationEnd(action)) {
+            return terminate(session, action);
+        }
 
-            // 8. 落库副作用（掌握度/错误/情绪/round/换题/收尾）
-            String lastUserContent = lastUserContent(history);
-            applySideEffects(session, action, allowedType, lastUserContent);
-            tutoringSessionRepository.save(session);
-            sessionCache.saveSession(session);
+        // 4. 轮次护栏拒绝（fallback=end）→ 强制收尾 ROUND_LIMIT，固定话术，无 generate
+        if (!guard.isAllowed() && guard.getFallbackType() == ActionType.END) {
+            return endByRoundLimit(session, action, history);
+        }
 
-            // 9. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）
-            archiveTranscript(session, history, action.getSummary());
+        // 5. 放行 type（护栏拒绝时用 fallbackType，如 reveal→approach）
+        ActionType allowedType = guard.isAllowed()
+                ? ActionType.fromCodeOrDefault(action.getType())
+                : guard.getFallbackType();
 
-            // 10. 流式（agent 事件协议）：agent(guardrail) → meta → agent(generate) → token* → agent(memory) → done
-            //     guardrail 事件在护栏通过后、generate 前；会话结束（ARCHIVED/TERMINATED）后清 Redis
-            return Flux.concat(
-                    Flux.just(agentEvent(AGENT_STAGE_GUARDRAIL, AGENT_LABEL_GUARDRAIL, "done", guardDetail(guard, action))),
-                    buildStream(session, action, allowedType, guard, history))
-                    .doOnComplete(() -> clearCacheIfEnded(session));
-        } catch (TutoringAgentException e) {
-            // Python 调用失败重试后仍失败：start 阶段不建会话（接口层映射 40004）；
-            // sendMessage 阶段回"网络波动"，会话保持 ACTIVE 不断开
-            if (session.getId() == null) {
-                throw e;
-            }
+        // 6. 新会话落库 + 消息入缓存；已有会话复用
+        ensurePersisted(session, history);
+
+        // 7. 落库副作用（掌握度/错误/情绪/round/换题/收尾）
+        String lastUserContent = lastUserContent(history);
+        applySideEffects(session, action, allowedType, lastUserContent);
+        tutoringSessionRepository.save(session);
+        sessionCache.saveSession(session);
+
+        // 8. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）
+        archiveTranscript(session, history, action.getSummary());
+
+        // 9. 流式（agent 事件协议）：agent(guardrail) → meta → agent(generate) → token* → agent(memory) → done
+        //     guardrail 事件在护栏通过后、generate 前；会话结束（ARCHIVED/TERMINATED）后清 Redis
+        return Flux.concat(
+                Flux.just(agentEvent(AGENT_STAGE_GUARDRAIL, AGENT_LABEL_GUARDRAIL, "done", guardDetail(guard, action))),
+                buildStream(session, action, allowedType, guard, history))
+                .doOnComplete(() -> clearCacheIfEnded(session));
+    }
+
+    /**
+     * decide 失败处理（D7）：start 阶段（id==null）重抛由接口层映射；已有会话回"网络波动"，会话保持 ACTIVE。
+     * 仅 TutoringAgentException 走降级，其他异常原样上抛（非 agent 故障，不吞）。
+     */
+    private Flux<ServerSentEvent<String>> handleDecideFailure(TutoringSession session, Throwable e) {
+        if (session.getId() == null) {
+            return Flux.error(e);
+        }
+        if (e instanceof TutoringAgentException) {
             log.warn("[tutoring] Python agent 调用失败，回复网络波动, sessionId={}", session.getId());
             return friendlyErrorStream(session);
+        }
+        return Flux.error(e);
+    }
+
+    /** 解析 decide meta 事件 data → ActionMeta（宽容 ObjectMapper，容忍 Python 调试字段 reason 等未知字段）。 */
+    private ActionMeta readActionMeta(String data) {
+        try {
+            return ACTION_META_MAPPER.readValue(data, ActionMeta.class);
+        } catch (Exception e) {
+            throw new TutoringAgentException("答疑决策服务暂不可用", e);
         }
     }
 
