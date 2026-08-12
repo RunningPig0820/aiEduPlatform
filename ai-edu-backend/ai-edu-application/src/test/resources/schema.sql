@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS t_department (
     department_type VARCHAR(20) DEFAULT 'ORG',
     sort_order INT DEFAULT 0,
     description VARCHAR(500),
+    created_by BIGINT DEFAULT 0,
+    modified_by BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE
@@ -48,11 +50,11 @@ CREATE TABLE IF NOT EXISTS t_department_edu (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
--- 创建测试学校数据
-INSERT INTO t_school (id, name, status) VALUES (1, '测试学校', 'ACTIVE');
-INSERT INTO t_school (id, name, status) VALUES (2, '空学校', 'ACTIVE');
+-- 创建测试学校数据（幂等：MERGE 以主键为准，@Sql 每用例执行也不会重复插入）
+MERGE INTO t_school (id, name, status) VALUES (1, '测试学校', 'ACTIVE');
+MERGE INTO t_school (id, name, status) VALUES (2, '空学校', 'ACTIVE');
 
--- 索引
-CREATE INDEX idx_department_school ON t_department(school_id);
-CREATE INDEX idx_department_parent ON t_department(parent_id);
-CREATE INDEX idx_department_path ON t_department(department_path);
+-- 索引（幂等）
+CREATE INDEX IF NOT EXISTS idx_department_school ON t_department(school_id);
+CREATE INDEX IF NOT EXISTS idx_department_parent ON t_department(parent_id);
+CREATE INDEX IF NOT EXISTS idx_department_path ON t_department(department_path);

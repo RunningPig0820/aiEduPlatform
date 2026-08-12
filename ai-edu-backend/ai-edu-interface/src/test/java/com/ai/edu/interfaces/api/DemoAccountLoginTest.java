@@ -45,10 +45,11 @@ public class DemoAccountLoginTest {
     @Transactional
     @Commit  // 确保数据提交
     void initDemoAccounts() {
+        // 手机号不能用 1380013800x：schema.sql 已预置 teacher001/002/003（13800138001/2/3）同号
         createDemoUserIfNotExists("admin", "系统管理员", "ADMIN", "13800138000");
-        createDemoUserIfNotExists("student", "演示学生", "STUDENT", "13800138001");
-        createDemoUserIfNotExists("teacher", "演示老师", "TEACHER", "13800138002");
-        createDemoUserIfNotExists("parent", "演示家长", "PARENT", "13800138003");
+        createDemoUserIfNotExists("student", "演示学生", "STUDENT", "13112340001");
+        createDemoUserIfNotExists("teacher", "演示老师", "TEACHER", "13112340002");
+        createDemoUserIfNotExists("parent", "演示家长", "PARENT", "13112340003");
 
         System.out.println("[INIT] 演示账号初始化完成");
     }

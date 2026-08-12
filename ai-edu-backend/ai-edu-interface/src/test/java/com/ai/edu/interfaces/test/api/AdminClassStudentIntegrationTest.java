@@ -78,8 +78,9 @@ class AdminClassStudentIntegrationTest {
         assertThat(student.getStudentUserId()).isEqualTo(10L);
         assertThat(student.getName()).isEqualTo("测试学生A");
         assertThat(student.getPhone()).isEqualTo(EXISTING_STUDENT_PHONE);
-        assertThat(student.getMaskedIdCard()).isNotEmpty();
-        assertThat(student.getMaskedIdCard()).contains("*");
+        // 预置学生 student001（phone=13800000001）在 schema.sql 中未存 id_card，掩码为空串；
+        // 真实掩码路径由 testAddStudent_NewUser_WithNewParents（新用户带 id_card）验证。
+        assertThat(student.getMaskedIdCard()).isNotNull();
         assertThat(student.getStudentNo()).isEqualTo("2024001");
         assertThat(student.getDeptId()).isEqualTo(CLASS_DEPT_ID_1);
         assertThat(student.getStatus()).isEqualTo("ACTIVE");
@@ -135,11 +136,12 @@ class AdminClassStudentIntegrationTest {
                 .idCard("110101200001011234")
                 .build();
 
+        // 重复添加 → BusinessException(STUDENT_ALREADY_IN_ADMIN_CLASS) → HTTP 400
         mockMvc.perform(post("/api/auth/schools/{schoolId}/admin-classes/{deptId}/students",
                         SCHOOL_ID, CLASS_DEPT_ID_1)
                         .characterEncoding("UTF-8").contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("80011"));
 
         System.out.println("PASS: 重复添加被正确拒绝");
@@ -371,11 +373,13 @@ class AdminClassStudentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("00000"));
 
-        // 验证重新用同一手机号可添加（用户数据保留）
+        // 验证重新用同一手机号可添加（用户数据保留）。
+        // 必须用被删除学生（待删除学生 13777777777）的手机号重新添加：
+        // EXISTING_STUDENT_PHONE 是 Order(1) 已添加的一班学生，从未删除，重加会触发重复校验。
         CreateAdminClassStudentCommand command = CreateAdminClassStudentCommand.builder()
-                .name("测试学生A")
-                .phone(EXISTING_STUDENT_PHONE)
-                .idCard("110101200001011234")
+                .name("待删除学生")
+                .phone("13777777777")
+                .idCard("110101200001019999")
                 .build();
 
         MvcResult reAddResult = mockMvc.perform(post("/api/auth/schools/{schoolId}/admin-classes/{deptId}/students",
@@ -387,7 +391,7 @@ class AdminClassStudentIntegrationTest {
                 .andReturn();
 
         AdminClassStudentDTO reAdded = parseResponseData(reAddResult, AdminClassStudentDTO.class);
-        assertThat(reAdded.getStudentUserId()).isEqualTo(10L);
+        assertThat(reAdded.getStudentUserId()).isEqualTo(created.getStudentUserId());
 
         System.out.println("PASS: 删除关联成功，用户数据保留，重新添加复用同一 userId=" + reAdded.getStudentUserId());
     }

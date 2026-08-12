@@ -9,7 +9,6 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
@@ -21,6 +20,10 @@ import static org.mockito.Mockito.when;
 /**
  * 测试用 Spring Boot 配置
  * 加载 MyBatis-Plus + Dynamic DataSource + Neo4j
+ *
+ * <p>本配置仅供 7 个 Kg* 仓储集成测试使用（H2 内存库跑真实 SQL），
+ * 因此组件扫描收窄到 edukg 持久化包——仅实例化 Kg 仓储实现，
+ * 避免把 learning/organization/user/integration 等无关实现拉进上下文。
  */
 @SpringBootConfiguration
 @ImportAutoConfiguration({
@@ -31,20 +34,7 @@ import static org.mockito.Mockito.when;
     "com.ai.edu.infrastructure.persistence.edukg.mapper",
     "com.ai.edu.infrastructure.persistence.mapper"
 })
-@ComponentScan(
-    basePackages = "com.ai.edu.infrastructure",
-    excludeFilters = {
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.ai\\..*"),
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.cache\\..*"),
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.file\\..*"),
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.mq\\..*"),
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.security\\..*"),
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.ai\\.edu\\.infrastructure\\.redis\\..*"),
-        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
-            com.ai.edu.infrastructure.neo4j.Neo4jRelationQueryService.class
-        })
-    }
-)
+@ComponentScan(basePackages = "com.ai.edu.infrastructure.persistence.edukg")
 public class TestInfrastructureConfig {
 
     @Bean

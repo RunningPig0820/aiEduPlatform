@@ -6,7 +6,7 @@ import com.ai.edu.application.dto.org.command.CreateDepartmentCommand;
 import com.ai.edu.application.dto.org.command.DepartmentQueryCommand;
 import com.ai.edu.application.dto.org.command.UpdateDepartmentCommand;
 import com.ai.edu.common.exception.BusinessException;
-import com.ai.edu.application.TestApplication;
+import com.ai.edu.application.test.OrgDepartmentIntegrationTestConfig;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +21,15 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 部门应用服务集成测试
  * 使用 H2 内存数据库，不使用 Mock
+ *
+ * <p>用收窄配置 {@link OrgDepartmentIntegrationTestConfig} 代替全量 TestApplication：
+ * 只装配 DepartmentAppService 依赖链，不启动 Redis/Neo4j/LLM 等外部服务。
+ *
+ * <p>按 {@code @Order} 有序共享状态执行：各用例依赖前序用例落库的数据
+ * （如 M1 建根部门、M2 依赖其查重），故不加 {@code @Transactional} 回滚。
+ * schema.sql 幂等（DDL IF NOT EXISTS、INSERT 用 MERGE），@Sql 每用例重复执行不会报错。
  */
-@SpringBootTest(classes = TestApplication.class)
+@SpringBootTest(classes = OrgDepartmentIntegrationTestConfig.class)
 @ActiveProfiles("h2")
 @TestMethodOrder(OrderAnnotation.class)
 @Sql(scripts = "classpath:schema.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
@@ -38,7 +45,7 @@ class DepartmentAppServiceIntegrationTest {
 
     @Test
     @Order(1)
-    @DisplayName("创建根级部门 - department_path 应为空")
+    @DisplayName("创建根级部门 - department_path 应为自身ID")
     void createDepartment_rootDepartment_shouldHaveEmptyPath() {
         CreateDepartmentCommand command = CreateDepartmentCommand.builder()
                 .name("教务处")
@@ -53,7 +60,8 @@ class DepartmentAppServiceIntegrationTest {
         assertEquals("教务处", result.getName());
         assertNull(result.getParentId());
         assertTrue(result.getIsRoot());
-        assertNull(result.getDepartmentPath());  // 根部门路径为空
+        // 根部门路径 = 自身ID（Department.updateDepartmentPathAfterSave 保存后更新）
+        assertEquals(String.valueOf(result.getId()), result.getDepartmentPath());
         assertEquals(1, result.getSortOrder());
     }
 
@@ -77,7 +85,7 @@ class DepartmentAppServiceIntegrationTest {
 
     @Test
     @Order(3)
-    @DisplayName("创建子部门 - department_path 应为父部门ID")
+    @DisplayName("创建子部门 - department_path 应为 父ID_自身ID")
     void createDepartment_childDepartment_shouldHaveCorrectPath() {
         // 先获取已创建的根部门
         List<DepartmentDTO> tree = departmentAppService.getDepartmentTree(TEST_SCHOOL_ID);
@@ -100,8 +108,8 @@ class DepartmentAppServiceIntegrationTest {
         assertEquals("教务办公室", result.getName());
         assertEquals(parentId, result.getParentId());
         assertFalse(result.getIsRoot());
-        // department_path 应为父部门ID的字符串
-        assertEquals(String.valueOf(parentId), result.getDepartmentPath());
+        // department_path = 父路径 + "_" + 自身ID（Department.updateDepartmentPathAfterSave）
+        assertEquals(parentId + "_" + result.getId(), result.getDepartmentPath());
     }
 
     @Test
@@ -131,8 +139,8 @@ class DepartmentAppServiceIntegrationTest {
 
         assertNotNull(result);
         assertFalse(result.getIsRoot());
-        // department_path 应为 "教务处ID_教务办公室ID"
-        assertEquals(rootDept.getId() + "_" + childDept.getId(), result.getDepartmentPath());
+        // department_path = "教务处ID_教务办公室ID_自身ID"
+        assertEquals(rootDept.getId() + "_" + childDept.getId() + "_" + result.getId(), result.getDepartmentPath());
     }
 
     @Test

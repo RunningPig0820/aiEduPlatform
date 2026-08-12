@@ -2,6 +2,7 @@ package com.ai.edu.domain.learning.model.contract;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ActionMetaContractTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Test

@@ -50,8 +50,9 @@ public class AuthApiControllerTest {
     private UserRepository userRepository;
 
     // 测试数据常量
-    private static final String TEST_PHONE = "13800138001";
-    private static final String TEST_PHONE_2 = "13800138002";
+    // 手机号不能与 schema.sql 预置数据冲突（teacher001=13800138001 等），故用独立号段
+    private static final String TEST_PHONE = "13100000001";
+    private static final String TEST_PHONE_2 = "13100000002";
     private static final String TEST_USERNAME = "testuser001";
     private static final String TEST_USERNAME_2 = "testuser002";
     private static final String TEST_PASSWORD = "password123";
@@ -863,8 +864,10 @@ public class AuthApiControllerTest {
     @Transactional
     void getUser_Success() {
         User user = createTestUser(TEST_USERNAME, TEST_PHONE);
+        // getUser 先校验 session.userId == 请求的 id，否则返回"无权限"，故需传登录会话
+        HttpSession session = createLoginSession(user);
 
-        ApiResponse<UserResponse> response = authApiController.getUser(user.getId(), null);
+        ApiResponse<UserResponse> response = authApiController.getUser(user.getId(), session);
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
         assertEquals(TEST_USERNAME, response.getData().getUsername());
@@ -877,8 +880,13 @@ public class AuthApiControllerTest {
     @Order(1101)
     @Transactional
     void getUser_Fail_UserNotFound() {
+        // 权限校验要求 session.userId == 请求 id，故直接把 session 的 userId 置为不存在 id，
+        // 才能走到 getUserById 的"用户不存在"分支
+        HttpSession session = new MockHttpSession();
+        session.setAttribute("userId", 999999L);
+
         BusinessException exception = assertThrows(BusinessException.class, () -> {
-            authApiController.getUser(999999L, null);
+            authApiController.getUser(999999L, session);
         });
         assertEquals(ErrorCode.USER_NOT_FOUND, exception.getCode());
     }

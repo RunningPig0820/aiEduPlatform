@@ -52,7 +52,7 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(1)
-    @DisplayName("POST /api/admin-classes 创建学段节点")
+    @DisplayName("POST /api/auth/admin-classes 创建学段节点")
     void createStageNode() throws Exception {
         CreateAdminClassNodeCommand command = CreateAdminClassNodeCommand.builder()
                 .name("小学部")
@@ -63,7 +63,7 @@ class AdminClassControllerIntegrationTest {
                 .sortOrder(0)
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/admin-classes")
+        MvcResult result = mockMvc.perform(post("/api/auth/admin-classes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
                 .andExpect(status().isOk())
@@ -79,7 +79,7 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(2)
-    @DisplayName("POST /api/admin-classes 创建年级节点")
+    @DisplayName("POST /api/auth/admin-classes 创建年级节点")
     void createGradeNode() throws Exception {
         CreateAdminClassNodeCommand command = CreateAdminClassNodeCommand.builder()
                 .name("2024级")
@@ -92,7 +92,7 @@ class AdminClassControllerIntegrationTest {
                 .enrollmentYear("2024")
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/admin-classes")
+        MvcResult result = mockMvc.perform(post("/api/auth/admin-classes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
                 .andExpect(status().isOk())
@@ -106,7 +106,7 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(3)
-    @DisplayName("POST /api/admin-classes 创建班级节点")
+    @DisplayName("POST /api/auth/admin-classes 创建班级节点")
     void createClassNode() throws Exception {
         CreateAdminClassNodeCommand command = CreateAdminClassNodeCommand.builder()
                 .name("1班")
@@ -119,7 +119,7 @@ class AdminClassControllerIntegrationTest {
                 .enrollmentYear("2024")
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/admin-classes")
+        MvcResult result = mockMvc.perform(post("/api/auth/admin-classes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
                 .andExpect(status().isOk())
@@ -133,13 +133,13 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(4)
-    @DisplayName("POST /api/admin-classes 参数缺失应返回 10003")
+    @DisplayName("POST /api/auth/admin-classes 参数缺失应返回 10003")
     void createWithMissingParams() throws Exception {
         CreateAdminClassNodeCommand command = CreateAdminClassNodeCommand.builder()
                 .name("错误节点")
                 .build();
 
-        mockMvc.perform(post("/api/admin-classes")
+        mockMvc.perform(post("/api/auth/admin-classes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
                 .andExpect(status().isBadRequest());
@@ -147,7 +147,7 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(5)
-    @DisplayName("POST /api/admin-classes 无效 deptType 应抛异常")
+    @DisplayName("POST /api/auth/admin-classes 无效 deptType 应抛异常")
     void createWithInvalidDeptType() throws Exception {
         CreateAdminClassNodeCommand command = CreateAdminClassNodeCommand.builder()
                 .name("错误节点")
@@ -157,10 +157,11 @@ class AdminClassControllerIntegrationTest {
                 .stageYearCode("4")
                 .build();
 
-        mockMvc.perform(post("/api/admin-classes")
+        // 非法 deptType 现在由 AppService 转成 BusinessException(INVALID_PARAMS) → HTTP 400
+        mockMvc.perform(post("/api/auth/admin-classes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("10003"));
     }
 
@@ -168,9 +169,9 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(6)
-    @DisplayName("GET /api/admin-classes?schoolId= 查询行政班树")
+    @DisplayName("GET /api/auth/admin-classes?schoolId= 查询行政班树")
     void getNodeTree() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/admin-classes")
+        MvcResult result = mockMvc.perform(get("/api/auth/admin-classes")
                         .param("schoolId", String.valueOf(SCHOOL_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("00000"))
@@ -184,9 +185,9 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(7)
-    @DisplayName("GET /api/admin-classes/{id} 查询节点详情")
+    @DisplayName("GET /api/auth/admin-classes/{id} 查询节点详情")
     void getNodeDetail() throws Exception {
-        mockMvc.perform(get("/api/admin-classes/" + stageDeptId))
+        mockMvc.perform(get("/api/auth/admin-classes/" + stageDeptId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("00000"))
                 .andExpect(jsonPath("$.data.name").value("小学部"))
@@ -195,10 +196,11 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(8)
-    @DisplayName("GET /api/admin-classes/{id} 不存在节点应返回 10002")
+    @DisplayName("GET /api/auth/admin-classes/{id} 不存在节点应返回 10002")
     void getNodeDetail_notFound() throws Exception {
-        mockMvc.perform(get("/api/admin-classes/99999"))
-                .andExpect(status().isOk())
+        // 节点不存在 → BusinessException(SCHOOL_NOT_FOUND) → HTTP 400
+        mockMvc.perform(get("/api/auth/admin-classes/99999"))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("80001"));
     }
 
@@ -206,7 +208,7 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(9)
-    @DisplayName("PUT /api/admin-classes/{id} 更新节点")
+    @DisplayName("PUT /api/auth/admin-classes/{id} 更新节点")
     void updateNode() throws Exception {
         UpdateAdminClassNodeCommand command = UpdateAdminClassNodeCommand.builder()
                 .name("2025级")
@@ -214,7 +216,7 @@ class AdminClassControllerIntegrationTest {
                 .enrollmentYear("2025")
                 .build();
 
-        mockMvc.perform(put("/api/admin-classes/" + gradeDeptId)
+        mockMvc.perform(put("/api/auth/admin-classes/" + gradeDeptId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
                 .andExpect(status().isOk())
@@ -225,16 +227,17 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("PUT /api/admin-classes/{id} 不存在节点应返回 10002")
+    @DisplayName("PUT /api/auth/admin-classes/{id} 不存在节点应返回 10002")
     void updateNode_notFound() throws Exception {
         UpdateAdminClassNodeCommand command = UpdateAdminClassNodeCommand.builder()
                 .name("不存在节点")
                 .build();
 
-        mockMvc.perform(put("/api/admin-classes/99999")
+        // 节点不存在 → BusinessException(SCHOOL_NOT_FOUND) → HTTP 400
+        mockMvc.perform(put("/api/auth/admin-classes/99999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(command)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("80001"));
     }
 
@@ -242,24 +245,26 @@ class AdminClassControllerIntegrationTest {
 
     @Test
     @Order(11)
-    @DisplayName("DELETE /api/admin-classes/{id} 删除有子节点的节点应失败")
+    @DisplayName("DELETE /api/auth/admin-classes/{id} 删除有子节点的节点应失败")
     void deleteNode_withChildren() throws Exception {
-        mockMvc.perform(delete("/api/admin-classes/" + stageDeptId))
-                .andExpect(status().isOk())
+        // 存在子节点 → BusinessException(PARAM_ERROR) → HTTP 400
+        mockMvc.perform(delete("/api/auth/admin-classes/" + stageDeptId))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("10001"));
     }
 
     @Test
     @Order(12)
-    @DisplayName("DELETE /api/admin-classes/{id} 删除叶子节点应成功")
+    @DisplayName("DELETE /api/auth/admin-classes/{id} 删除叶子节点应成功")
     void deleteLeafNode() throws Exception {
-        mockMvc.perform(delete("/api/admin-classes/" + classDeptId))
+        mockMvc.perform(delete("/api/auth/admin-classes/" + classDeptId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("00000"));
 
         // 确认已删除
-        mockMvc.perform(get("/api/admin-classes/" + classDeptId))
-                .andExpect(status().isOk())
+        // 已删除节点重新查询 → BusinessException(SCHOOL_NOT_FOUND) → HTTP 400
+        mockMvc.perform(get("/api/auth/admin-classes/" + classDeptId))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("80001"));
     }
 

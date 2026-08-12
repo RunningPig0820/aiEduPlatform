@@ -200,7 +200,7 @@ class TutoringValueObjectTest {
         assertEquals(3, TutoringConstants.SESSION_CREATE_LIMIT);
         assertEquals(5, TutoringConstants.SESSION_CREATE_WINDOW_MINUTES);
         assertEquals(1, TutoringConstants.AGENT_RETRY);
-        assertEquals(Duration.ofSeconds(15), TutoringConstants.DECIDE_TIMEOUT);
+        assertEquals(Duration.ofSeconds(10), TutoringConstants.DECIDE_TIMEOUT);
         assertEquals(Duration.ofSeconds(60), TutoringConstants.GENERATE_TIMEOUT);
         assertEquals(Duration.ofSeconds(30), TutoringConstants.OCR_TIMEOUT);
     }

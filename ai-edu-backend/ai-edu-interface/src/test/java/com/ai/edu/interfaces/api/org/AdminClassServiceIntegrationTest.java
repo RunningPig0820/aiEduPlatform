@@ -141,8 +141,13 @@ class AdminClassServiceIntegrationTest {
         assertNotNull(tree);
         assertFalse(tree.isEmpty());
 
-        // 根节点应是学段
-        AdminClassNodeDTO stage = tree.get(0);
+        // 根节点应是本测试类创建的学段。
+        // 共享 H2（DB_CLOSE_DELAY=-1）下可能残留其他测试类（如 AdminClassControllerIntegrationTest，
+        // 它会把年级改名为 2025级）建的同名树，tree.get(0) 不稳定，必须按本类自建的 stageDeptId 过滤。
+        AdminClassNodeDTO stage = tree.stream()
+                .filter(s -> stageDeptId.equals(s.getDeptId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未找到本测试类创建的学段节点 deptId=" + stageDeptId));
         assertEquals("小学部", stage.getName());
         assertEquals(3, stage.getDeptType());
         assertNotNull(stage.getChildren());

@@ -67,17 +67,19 @@ class KgDatasourceRoutingTest {
         assertEquals(8, EDUKG_MAPPER_CLASSES.size(), "edukg Mapper 数量应为 8 个");
     }
 
-    // ==================== 6.14.2 业务 Mapper 不应有 @DS("kg") ====================
+    // ==================== 6.14.2 业务 Mapper 不应路由到 kg 数据源 ====================
 
     @Test
     @Order(3)
-    @DisplayName("业务 Mapper 不应携带 @DS 注解（走默认 user 库）")
-    void businessMappers_shouldNotHaveDSAnnotation() throws ClassNotFoundException {
+    @DisplayName("业务 Mapper 不应携带 @DS(\"kg\")（数据源隔离，走 user/org 库）")
+    void businessMappers_shouldNotHaveDSKgAnnotation() throws ClassNotFoundException {
         for (String className : BUSINESS_MAPPER_CLASSES) {
             Class<?> clazz = Class.forName(className);
             DS dsAnnotation = clazz.getAnnotation(DS.class);
-            assertNull(dsAnnotation,
-                    className + " 不应携带 @DS 注解（应走默认数据源）");
+            // 业务 Mapper 显式路由各自数据源（UserMapper→user、组织 Mapper→org），
+            // 未标注者走默认 user 库；唯一不允许的是路由到 edukg 的 kg 库
+            assertTrue(dsAnnotation == null || !"kg".equals(dsAnnotation.value()),
+                    className + " 不应路由到 kg 数据源（应走 user/org 库）");
         }
     }
 
@@ -102,11 +104,26 @@ class KgDatasourceRoutingTest {
         assertEquals(Set.of("kg"), edukgDsValues,
                 "所有 edukg Mapper 的 @DS 值应仅为 \"kg\"");
 
-        // 抽样验证业务 Mapper 无 @DS
+        // 业务 Mapper 的 @DS 值集合不应包含 "kg"（隔离校验）
+        Set<String> businessDsValues = BUSINESS_MAPPER_CLASSES.stream()
+                .map(name -> {
+                    try {
+                        Class<?> clazz = Class.forName(name);
+                        DS ds = clazz.getAnnotation(DS.class);
+                        return ds != null ? ds.value() : null;
+                    } catch (ClassNotFoundException e) {
+                        return null;
+                    }
+                })
+                .collect(Collectors.toSet());
+        assertFalse(businessDsValues.contains("kg"),
+                "业务 Mapper 不应有任何路由到 kg 数据源");
+
+        // 抽样验证：UserMapper 显式 user 库、QuestionMapper 走默认 user 库，均非 kg
         Class<?> userMapper = Class.forName("com.ai.edu.infrastructure.persistence.user.mapper.UserMapper");
         Class<?> questionMapper = Class.forName("com.ai.edu.infrastructure.persistence.mapper.QuestionMapper");
-        assertNull(userMapper.getAnnotation(DS.class), "UserMapper 不应有 @DS 注解");
-        assertNull(questionMapper.getAnnotation(DS.class), "QuestionMapper 不应有 @DS 注解");
+        assertNotEquals("kg", userMapper.getAnnotation(DS.class).value(), "UserMapper 不应路由到 kg");
+        assertTrue(questionMapper.getAnnotation(DS.class) == null, "QuestionMapper 不应携带 @DS（默认 user 库）");
     }
 
     // ==================== 6.14.3 syncFull() 无整体事务（拆分为独立子任务） ====================

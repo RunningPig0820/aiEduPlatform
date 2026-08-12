@@ -34,8 +34,9 @@ class DepartmentIntegrationTest {
     @Order(1)
     @DisplayName("创建根级部门")
     void createRootDepartment() {
+        // 名称不能用"教务处"：schema.sql 已预置 id=1 的教务处部门
         CreateDepartmentCommand command = CreateDepartmentCommand.builder()
-                .name("教务处")
+                .name("信息中心")
                 .sortOrder(1)
                 .description("教务管理部门")
                 .build();
@@ -44,9 +45,10 @@ class DepartmentIntegrationTest {
 
         assertNotNull(result);
         assertNotNull(result.getId());
-        assertEquals("教务处", result.getName());
+        assertEquals("信息中心", result.getName());
         assertTrue(result.getIsRoot());
-        assertNull(result.getDepartmentPath());
+        // 根部门路径 = 自身ID（Department.updateDepartmentPathAfterSave 保存后更新）
+        assertEquals(String.valueOf(result.getId()), result.getDepartmentPath());
     }
 
     @Test
@@ -70,7 +72,8 @@ class DepartmentIntegrationTest {
 
         assertNotNull(child);
         assertEquals(root.getId(), child.getParentId());
-        assertEquals(String.valueOf(root.getId()), child.getDepartmentPath());
+        // 子部门路径 = 父路径 + "_" + 自身ID
+        assertEquals(root.getId() + "_" + child.getId(), child.getDepartmentPath());
     }
 
     @Test

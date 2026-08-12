@@ -172,12 +172,12 @@ CREATE TABLE IF NOT EXISTS t_department_edu (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
--- 初始化测试学校数据
-INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (1, '测试学校', 'PRIMARY', FALSE);
-INSERT INTO t_school (id, name, school_type, is_deleted) VALUES (2, '空学校', 'PRIMARY', FALSE);
+-- 初始化测试学校数据（幂等：多测试类共享同一 H2 内存库，schema 会在每个上下文加载时重跑）
+MERGE INTO t_school (id, name, school_type, is_deleted) KEY(id) VALUES (1, '测试学校', 'PRIMARY', FALSE);
+MERGE INTO t_school (id, name, school_type, is_deleted) KEY(id) VALUES (2, '空学校', 'PRIMARY', FALSE);
 
--- 初始化测试用户数据
-INSERT INTO t_user (id, username, password, real_name, phone, role, enabled) VALUES
+-- 初始化测试用户数据（幂等 MERGE，防止多上下文重跑 schema 时主键冲突）
+MERGE INTO t_user (id, username, password, real_name, phone, role, enabled) KEY(id) VALUES
 (1, 'teacher001', 'password123', '张三', '13800138001', 'TEACHER', TRUE),
 (2, 'teacher002', 'password123', '李四', '13800138002', 'TEACHER', TRUE),
 (3, 'teacher003', 'password123', '王五', '13800138003', 'TEACHER', TRUE),
@@ -188,21 +188,21 @@ INSERT INTO t_user (id, username, password, real_name, phone, role, enabled) VAL
 (20, 'parent001', 'password123', '测试家长X', '13900000001', 'PARENT', TRUE),
 (21, 'parent002', 'password123', '测试家长Y', '13900000002', 'PARENT', TRUE);
 
--- 初始化测试部门数据
-INSERT INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, created_by, modified_by, is_deleted) VALUES
+-- 初始化测试部门数据（幂等 MERGE）
+MERGE INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, created_by, modified_by, is_deleted) KEY(id) VALUES
 (1, 1, '教务处', NULL, '1', 'ORG', 1, 0, 0, FALSE),
 (2, 1, '语文教研组', 1, '1_2', 'ORG', 1, 0, 0, FALSE),
 (3, 1, '数学教研组', 1, '1_3', 'ORG', 2, 0, 0, FALSE);
 
--- 行政班测试数据：小学部 → 一年级 → 一班/二班
-INSERT INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, is_deleted) VALUES
+-- 行政班测试数据：小学部 → 一年级 → 一班/二班（幂等 MERGE）
+MERGE INTO t_department (id, school_id, name, parent_id, department_path, department_type, sort_order, is_deleted) KEY(id) VALUES
 (10, 1, '小学部', NULL, '10', 'ADMIN_CLASS', 1, FALSE),
 (11, 1, '一年级', 10, '10_11', 'ADMIN_CLASS', 1, FALSE),
 (12, 1, '一班', 11, '10_11_12', 'ADMIN_CLASS', 1, FALSE),
 (13, 1, '二班', 11, '10_11_13', 'ADMIN_CLASS', 2, FALSE);
 
--- 行政班扩展属性
-INSERT INTO t_department_edu (id, dept_id, school_id, dept_type, stage_code, stage_year_code, grade_code, enrollment_year, is_deleted) VALUES
+-- 行政班扩展属性（幂等 MERGE）
+MERGE INTO t_department_edu (id, dept_id, school_id, dept_type, stage_code, stage_year_code, grade_code, enrollment_year, is_deleted) KEY(id) VALUES
 (10, 10, 1, 3, 'PRIMARY', '4', '', '', FALSE),
 (11, 11, 1, 4, 'PRIMARY', '4', '1', '2024', FALSE),
 (12, 12, 1, 5, 'PRIMARY', '4', '1', '2024', FALSE),
@@ -235,12 +235,15 @@ CREATE TABLE IF NOT EXISTS t_parent_profile (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- 索引
-CREATE INDEX idx_department_school ON t_department(school_id);
-CREATE INDEX idx_department_parent ON t_department(parent_id);
-CREATE INDEX idx_department_path ON t_department(department_path);
-CREATE UNIQUE INDEX idx_org_teacher_school_user ON t_org_teacher(school_id, user_id);
-CREATE INDEX idx_org_teacher_department ON t_org_teacher(department_id);
-CREATE INDEX idx_parent_profile_student ON t_parent_profile(student_user_id);
-CREATE INDEX idx_parent_profile_parent ON t_parent_profile(parent_user_id);
-CREATE UNIQUE INDEX idx_parent_profile_unique ON t_parent_profile(student_user_id, parent_user_id);
+-- 索引（幂等：多上下文重跑 schema 时避免 "index already exists"）
+CREATE INDEX IF NOT EXISTS idx_department_school ON t_department(school_id);
+CREATE INDEX IF NOT EXISTS idx_department_parent ON t_department(parent_id);
+CREATE INDEX IF NOT EXISTS idx_department_path ON t_department(department_path);
+-- 教职工 (school_id, user_id) 不能用 UNIQUE：逻辑删除(is_deleted=1)后重新添加同一教职工时，
+-- 软删除行仍占用唯一键 → INSERT 撞唯一约束 → DuplicateKeyException(500)。
+-- 唯一性改由应用层校验（OrgTeacherRepository.findBySchoolIdAndUserId 已过滤 is_deleted=false）。
+CREATE INDEX IF NOT EXISTS idx_org_teacher_school_user ON t_org_teacher(school_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_org_teacher_department ON t_org_teacher(department_id);
+CREATE INDEX IF NOT EXISTS idx_parent_profile_student ON t_parent_profile(student_user_id);
+CREATE INDEX IF NOT EXISTS idx_parent_profile_parent ON t_parent_profile(parent_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_profile_unique ON t_parent_profile(student_user_id, parent_user_id);

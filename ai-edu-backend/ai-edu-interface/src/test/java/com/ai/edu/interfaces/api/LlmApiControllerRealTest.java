@@ -52,12 +52,17 @@ class LlmApiControllerRealTest {
     // LLM 服务可用性标记
     private static boolean llmServiceAvailable = false;
 
+    // 场景端点可用性标记：Python 服务（ai-edu-ai-service）主链路已实现但 /api/llm/scenes 尚未实现时，
+    // getScenes_Real_Success 应跳过而非失败，单独探测该端点。
+    private static boolean scenesServiceAvailable = false;
+
     @BeforeAll
     static void setUp(@Value("${ai-edu.llm.gateway.base-url:}") String baseUrl, @Value("${ai-edu.llm.gateway.internal-token:}") String token) {
         // 检测 LLM 服务是否可用
         if (baseUrl != null && !baseUrl.isEmpty()) {
             llmServiceAvailable = LlmServiceChecker.isAvailable(baseUrl, token, 3000);
-            System.out.println("[LLM Service] baseUrl=" + baseUrl + ", available=" + llmServiceAvailable);
+            scenesServiceAvailable = LlmServiceChecker.isScenesAvailable(baseUrl, token, 3000);
+            System.out.println("[LLM Service] baseUrl=" + baseUrl + ", available=" + llmServiceAvailable + ", scenesAvailable=" + scenesServiceAvailable);
         } else {
             System.out.println("[LLM Service] baseUrl not configured, tests will be skipped");
         }
@@ -262,7 +267,8 @@ class LlmApiControllerRealTest {
     @Test
     @Order(400)
     void getScenes_Real_Success() {
-        Assumptions.assumeTrue(llmServiceAvailable, "LLM 服务不可用，跳过测试");
+        // 场景端点由 Python 服务 /api/llm/scenes 提供；未实现时跳过（见 scenesServiceAvailable 说明）
+        Assumptions.assumeTrue(scenesServiceAvailable, "LLM 服务未实现 /api/llm/scenes 端点，跳过测试");
 
         // When: 调用真实接口（无需登录）
         Mono<ApiResponse<ScenesResponse>> result = llmApiController.getScenes();
