@@ -90,7 +90,7 @@ private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<
 **时序**：`thinking*(decide) → agent(guardrail) → meta → agent(generate) → thinking*(generate) → token* → agent(memory) → done`。`Flux.concat` 保证 thinking 段先流完（decide 结束）才进 tail。
 
 - **postDecide**：抽取现 `orchestrate` 第 345~385 行（安全终止 / 护栏校验 / 轮次护栏 / 放行 type / ensurePersisted / applySideEffects / archiveTranscript）→ 返回 `Flux.concat(agent(guardrail), buildStream(...))`，仍是同步代码。
-- decide 的 agent 事件（perceive/analyze/plan/decide）仍不透传，`filter` 只放行 thinking。
+- decide 的 agent 事件（perceive/analyze/plan/decide）仍不透传，`filter` 只放行 thinking。（⚠️ 2026-08-12 **已演进**：filter 放行 `thinking + agent`，见 `tutoring-agent-workflow-backend`）
 - **错误**：decide 流中途失败 → `onErrorResume` → 已有会话 `friendlyErrorStream`（50005）；start 阶段（session.id==null）重抛由接口层映射。
 - **并发锁**：`withSessionLock` 现为同步持锁（decide+副作用后释放、generate 在锁外）。流式化后 decide 在 Flux 内执行 → 锁改为**订阅时获取、postDecide 副作用完成后释放**（`unlock` 参数传入 orchestrate，错误路径 `doFinally` 兜底）。
 
@@ -102,7 +102,7 @@ private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<
 |----|-----|
 | 新事件序列 | `thinking*(decide) → agent(guardrail) → meta → agent(generate) → thinking*(generate) → token* → agent(memory) → done` |
 | decide thinking | 实时中继，**不入库**（历史 thinking 只存 generate 段） |
-| decide agent 事件 | 仍不透传（perceive/analyze/plan/decide 丢弃） |
+| decide agent 事件 | 仍不透传（perceive/analyze/plan/decide 丢弃）。（⚠️ 2026-08-12 **已演进**：透传，见 `tutoring-agent-workflow-backend`） |
 | 后端未演进时 | 前端 decideThinking 恒空、思考条不渲染，行为与改造前一致（向前兼容） |
 
 ---

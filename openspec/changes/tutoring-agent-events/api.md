@@ -2,7 +2,7 @@
 
 > 基础路径: `/api/tutoring`
 >
-> 更新日期: 2026-08-07
+> 更新日期: 2026-08-12（decide agent 透传 + meta 新字段）
 > 本变更只改 **SSE 事件流**（新增 `event: agent`），接口路径/请求/错误码均不变。
 > 配合模型端 `tutoring-agent-protocol`（decide 改 SSE 流式）。
 
@@ -45,16 +45,20 @@ data: {"level":"sub","stage":"guardrail","label":"安全把关","status":"done",
 ### 响应（SSE 流，事件序列变更）
 
 ```
-event: thinking {"content":"学生在回顾已知条件..."}   ← Python decide 推理分片（模型决策思考，可多条，实时透传，不入库）
+event: agent    {"level":"sub","stage":"perceive","label":"读题感知","status":"done","detail":"识别题目为二元一次方程组应用题"}   ← Python decide 读题感知（done）
+event: agent    {"level":"sub","stage":"analyze","label":"解析意图","status":"processing"}                                        ← Python decide 解析学生意图中（processing）
+event: agent    {"level":"sub","stage":"plan","label":"规划决策","status":"processing"}                                           ← Python decide 规划决策中（processing）
+event: thinking {"content":"学生在回顾已知条件..."}                                                                                ← Python decide 推理分片（模型决策思考，可多条，实时透传，不入库）
 event: thinking {"content":"..."}
-event: agent    {"level":"sub","stage":"guardrail","label":"安全把关","status":"done","detail":"放行: hint"}   ← Java 护栏通过后
-event: meta     {"sessionId":1001,"status":"ACTIVE","type":"hint","roundCount":1,"eval":{...}}                    ← Java 自建（含护栏已放行 type）
-event: agent    {"level":"sub","stage":"generate","label":"生成中","status":"processing"}                          ← Python generate
-event: thinking {"content":"我在打磨符合要求的引导性反问..."}   ← Python 推理分片（模型思考，可多条，已落库）
+event: agent    {"level":"sub","stage":"decide","label":"意图判定","status":"done","detail":"hint: 学生正常作答,推一步"}            ← Python 决策完成（meta 前）
+event: agent    {"level":"sub","stage":"guardrail","label":"安全把关","status":"done","detail":"放行: hint"}                       ← Java 护栏通过后
+event: meta     {"sessionId":1001,"status":"ACTIVE","type":"hint","roundCount":1,"decideReason":"学生正常作答,给一步引导","questionKps":["二元一次方程组"],"masterySignals":[{"kpLabel":"二元一次方程组","signal":"practicing"}],"eval":{...}}   ← Java 自建（含护栏已放行 type）
+event: agent    {"level":"sub","stage":"generate","label":"生成中","status":"processing"}                                            ← Python generate
+event: thinking {"content":"我在打磨符合要求的引导性反问..."}                                                                       ← Python 推理分片（模型思考，可多条，已落库）
 event: thinking {"content":"..."}
 event: token    {"content":"先找题目里的已知条件..."}
 event: token    {"content":"..."}
-event: agent    {"level":"sub","stage":"memory","label":"记忆更新","status":"done","detail":"二元一次方程组 → 练习中"}  ← Java 落库后
+event: agent    {"level":"sub","stage":"memory","label":"记忆更新","status":"done","detail":"二元一次方程组 → 练习中"}               ← Java 落库后
 event: done     {"sessionId":1001,"status":"ACTIVE","roundCount":1,...}
 ```
 
@@ -62,22 +66,39 @@ event: done     {"sessionId":1001,"status":"ACTIVE","roundCount":1,...}
 
 | 位置 | 事件 | 发射方 |
 |------|------|--------|
-| 1 | `thinking*`(decide) | Python（**decide 决策推理分片**，`{"content":"..."}`，可多条，Java 实时中继、**不入库**） |
-| 2 | `agent(guardrail)` | Java（护栏通过后、generate 前） |
-| 3 | `meta` | Java 自建（type=已放行类型，含 eval/roundCount） |
-| 4 | `agent(generate)` | Python |
-| 5 | `thinking*`(generate) | Python（模型推理分片，`{"content":"..."}`，可多条，按 chunk 拼接展示） |
-| 6 | `token*` | Python（正文流） |
-| 7 | `agent(memory)` | Java（掌握度落库后收尾） |
-| 8 | `done` | Java 自建 |
+| 1 | `agent(perceive)` | Python（decide 读题感知，done） |
+| 2 | `agent(analyze)` | Python（decide 解析学生意图中，processing） |
+| 3 | `agent(plan)` | Python（decide 规划决策中，processing） |
+| 4 | `thinking*`(decide) | Python（**decide 决策推理分片**，`{"content":"..."}`，可多条，Java 实时中继、**不入库**） |
+| 5 | `agent(decide)` | Python（决策完成，done，meta 前） |
+| 6 | `agent(guardrail)` | Java（护栏通过后、generate 前） |
+| 7 | `meta` | Java 自建（type=已放行类型，含 eval/roundCount；新增 `decideReason`/`questionKps`/`masterySignals`，见下节） |
+| 8 | `agent(generate)` | Python |
+| 9 | `thinking*`(generate) | Python（模型推理分片，`{"content":"..."}`，可多条，按 chunk 拼接展示） |
+| 10 | `token*` | Python（正文流） |
+| 11 | `agent(memory)` | Java（掌握度落库后收尾） |
+| 12 | `done` | Java 自建 |
 
 > **注意**：
 > - **generate 的 thinking 事件**（2026-08-12 新增）：Python generate 在 token 前流式吐推理分片，Java **原样中继** + **累积落库**（`thinking` 字段：Redis 热存消息 + COS transcript，供历史消息"思考过程"展示）。前端可渲染可折叠"思考过程"面板（DeepSeek 风格，见下节）；不渲染也完全不影响现有逻辑（thinking 会被忽略）。
 > - **decide 的 thinking 事件**（2026-08-13 新增，演进自原"不透传"）：Python decide 流式吐**决策推理分片**，Java **实时中继**前端（消除 decide 长等待黑盒，实测 17~48s）。**不入库**（仅实时透传，历史消息只保留 generate thinking）——若要 decide thinking 也落历史，另立 change。实现依赖 decide 消费从"同步 blockLast 取 meta"演进为"响应式中继 thinking + 提取 meta"（见 design.md D7）。
-> - decide 阶段的 agent 事件（perceive/analyze/plan/decide）**仍不中继前端**（Java 只中继 thinking + 提取 meta），前端在 guardrail 前显示通用"AI 思考中" + 实时推理分片即可。
-> - 护栏拒绝时（如 reveal 未授权）：`agent(guardrail)` detail 为"拒绝: reveal → 降级 approach"，随后 `meta.type=approach`，无 token 的降级话术由 generate 出。
+> - **decide 阶段的 agent 事件**（2026-08-12 新增，演进自原"不透传"）：Python decide 的 `perceive`/`analyze`/`plan`/`decide` agent 事件由 Java **原样透传**前端（decide filter 从 `only thinking` 放行为 `thinking + agent`），前端可用其驱动"本轮意图·解析意图…"live 状态（见 `tutoring-agent-workflow-backend` change）。`meta` 到达后定型为决策结果。
+> - 护栏拒绝时（如 reveal 未授权）：`agent(guardrail)` detail 为"拒绝: reveal → 降级 approach"，随后 `meta.type=approach`（`denied=reveal`、`reason=answerCountInsufficient`、`decideReason=Python理由`），无 token 的降级话术由 generate 出。
 > - 终止/轮次上限场景：无 guardrail 事件（无 generate 路径），走既有 meta(TERMINATED/ROUND_LIMIT) 流程。
-> - 换题短路（is_new_question）/ 降级兜底（degraded）分支不吐 thinking（未调 LLM），行为不变。
+> - 换题短路（is_new_question）/ 降级兜底（degraded）分支不吐 thinking（未调 LLM）；`perceive`/`analyze`/`plan` agent 事件仍恒发，`agent(decide)` **不发出**（只在 thinking 事件时发出，短路/降级仅 yield meta），仅 meta 仍到，行为不变。
+
+### meta 事件新增字段（2026-08-12）
+
+`meta`（Java 自建）在既有字段（sessionId/status/type/roundCount/answerRequestCount/eval/newQuestion/denied/degraded/reply）基础上新增：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `decideReason` | String? | Python 决策自由文本（如"学生正常作答,给一步引导"），每轮无条件带出（可空）。前端作"为什么"行的 hover 补充。 |
+| `questionKps` | List<String>? | 题目涉及知识点（Python decide 读题顺手列，可空；空时前端显示占位"—"）。 |
+| `masterySignals` | List\<Object\>? | 掌握度信号 `[{kpLabel, signal}]`（**camelCase**，signal: mastered/practicing/struggling）。前端从 `meta.masterySignals` 读取（`meta.eval.masterySignals` 恒 undefined）。 |
+
+> **字段命名**：`reason`（护栏拒绝原因 `answerCountInsufficient`/`roundLimitExceeded`/`safetyFlagHit`，仅拒绝时 set）语义**不变**；`decideReason` 是新增的 Python 决策文本，两者语义不同、互不覆盖。前端只消费 `decideReason`。
+> **camelCase 坑**：`masterySignals` 经后端新增 `SseMasterySignalDTO {kpLabel, signal}` 序列化，不能用领域 `MasterySignalItem`（其 `kpLabel` 标 `@JsonProperty("kp_label")`，会序列化成 `kp_label`）。
 
 ### 常见错误
 
@@ -101,6 +122,7 @@ event: done     {"sessionId":1001,"status":"ACTIVE","roundCount":1,...}
 
 - 前端订阅 `agent` 事件，按 `stage`/`label`/`status` 渲染阶段标签或进度条（如"安全把关 ✓""生成中…""记忆更新 ✓"）
 - `status=processing` → 显示进行中；`status=done` → 显示完成
+- decide 阶段 agent（`perceive`/`analyze`/`plan`/`decide`）到达即意图解析 live（processing 显示"解析意图…"）；`agent(decide)` done + meta 到达后定型为决策结果
 - 未识别的 stage 忽略即可（协议 additive，向后兼容）
 
 ### 2. 事件顺序依赖
@@ -110,7 +132,7 @@ event: done     {"sessionId":1001,"status":"ACTIVE","roundCount":1,...}
 
 ### 3. SSE 消费顺序（完整）
 
-`agent(guardrail) → meta → agent(generate) → thinking* → token* → agent(memory) → done`
+`agent(perceive) → agent(analyze) → agent(plan) → thinking*(decide) → agent(decide) → agent(guardrail) → meta → agent(generate) → thinking* → token* → agent(memory) → done`
 
 - 仍以 `meta` 的 type 为准（类型先行）
 - `done` 带最终状态与 eval；`agent(memory)` 表示本轮学习成果已落库

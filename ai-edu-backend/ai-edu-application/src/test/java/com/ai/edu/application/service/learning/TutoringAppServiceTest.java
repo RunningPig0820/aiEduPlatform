@@ -789,10 +789,72 @@ class TutoringAppServiceTest {
         StepVerifier.create(stream)
                 .assertNext(ev -> assertEquals("thinking", ev.event()))   // ① decide thinking 实时中继
                 .assertNext(ev -> assertEquals("thinking", ev.event()))   // ②
-                .assertNext(ev -> assertEquals("agent", ev.event()))      // ③ guardrail 前置（meta 后）
+                .assertNext(ev -> {                                       // ③ decide 阶段 agent 事件中继（D7 后 filter 放行 agent）
+                    assertEquals("agent", ev.event());
+                    assertTrue(ev.data().contains("\"stage\":\"decide\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("agent", ev.event()))      // ④ guardrail 前置（meta 后）
                 .assertNext(ev -> assertEquals("meta", ev.event()))
                 .assertNext(ev -> assertEquals("token", ev.event()))
                 .assertNext(ev -> assertEquals("agent", ev.event()))      // memory 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("sendMessage: 中继 Python decide 阶段全部 agent 事件（perceive/analyze/plan/decide），先于 guardrail/meta")
+    void sendMessage_relaysDecideAgentEvents() {
+        activeSessionInCache();
+        when(llmPort.decideStream(any())).thenReturn(Flux.just(
+                sse("agent", "{\"stage\":\"perceive\",\"label\":\"读取题目\",\"status\":\"processing\"}"),
+                sse("agent", "{\"stage\":\"analyze\",\"label\":\"解析意图\",\"status\":\"processing\"}"),
+                sse("agent", "{\"stage\":\"plan\",\"label\":\"规划引导\",\"status\":\"processing\"}"),
+                sse("agent", "{\"stage\":\"decide\",\"label\":\"决策完成\",\"status\":\"done\"}"),
+                sse("meta", serializeMeta(meta("hint"))),
+                sse("done", "{}")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"ok\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertTrue(ev.data().contains("\"stage\":\"perceive\""), ev.data()))
+                .assertNext(ev -> assertTrue(ev.data().contains("\"stage\":\"analyze\""), ev.data()))
+                .assertNext(ev -> assertTrue(ev.data().contains("\"stage\":\"plan\""), ev.data()))
+                .assertNext(ev -> assertTrue(ev.data().contains("\"stage\":\"decide\""), ev.data()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // guardrail 前置
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // memory 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("sendMessage: meta 携带 decideReason/questionKps/masterySignals（Agent 工作流契约）")
+    void sendMessage_metaCarriesWorkflowFields() {
+        TutoringSession session = activeSessionInCache();
+        ActionMeta action = meta("hint");
+        action.setReason("学生第 1 次要求答案,但未达放行条件,降级为思路引导");
+        action.setQuestionKps(List.of("二元一次方程组", "鸡兔同笼"));
+        action.setMasterySignals(List.of(
+                MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"ok\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "鸡兔同笼");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // guardrail 前置
+                .assertNext(ev -> {
+                    assertEquals("meta", ev.event());
+                    assertTrue(ev.data().contains("\"decideReason\":\"学生第 1 次要求答案"), ev.data());
+                    assertTrue(ev.data().contains("\"questionKps\":[\"二元一次方程组\",\"鸡兔同笼\"]"), ev.data());
+                    assertTrue(ev.data().contains("\"masterySignals\""), ev.data());
+                    assertTrue(ev.data().contains("\"kpLabel\":\"二元一次方程组\""), ev.data());
+                    assertTrue(ev.data().contains("\"signal\":\"practicing\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // memory
                 .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
     }
@@ -837,10 +899,9 @@ class TutoringAppServiceTest {
         return ServerSentEvent.<String>builder().event(event).data(data).build();
     }
 
-    /** 构造 decide 流 mock：agent + meta + done（thinking 事件由用例按需自拼后前置）。 */
+    /** 构造 decide 流 mock：meta + done（decide 阶段 agent / thinking 事件由用例按需自拼后前置）。 */
     private Flux<ServerSentEvent<String>> decideStreamOf(ActionMeta meta) {
         return Flux.just(
-                sse("agent", "{\"stage\":\"decide\"}"),
                 sse("meta", serializeMeta(meta)),
                 sse("done", "{}"));
     }

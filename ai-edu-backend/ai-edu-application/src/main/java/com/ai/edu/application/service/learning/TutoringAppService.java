@@ -10,6 +10,7 @@ import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.application.dto.learning.sse.SseDoneDTO;
 import com.ai.edu.application.dto.learning.sse.SseEvalDTO;
+import com.ai.edu.application.dto.learning.sse.SseMasterySignalDTO;
 import com.ai.edu.application.dto.learning.sse.SseMetaDTO;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -371,8 +372,10 @@ public class TutoringAppService {
      * decide（流式中继）→ meta 到达 → postDecide（护栏+副作用+generate）的统一编排（start/sendMessage/requestAnswer 共用）。
      *
      * <p><b>D7 响应式管线</b>：decide 不再同步 block——SSE 响应在 decide 一开始就建立，
-     * Python decide 的 thinking 事件实时中继前端（不入库），meta 到达后走 postDecide。
-     * 时序：thinking*(decide) → agent(guardrail) → meta → agent(generate) → thinking*(generate) → token* → agent(memory) → done。
+     * Python decide 的 thinking + agent 事件实时中继前端（不入库），meta 到达后走 postDecide。
+     * 时序：agent*(decide: perceive/analyze/plan/decide) → thinking*(decide) → agent(guardrail) → meta
+     * → agent(generate) → thinking*(generate) → token* → agent(memory) → done。
+     * decide agent 事件供前端"Agent 工作流"面板的本轮意图解析 live 展示。
      *
      * @param isNewQuestion 本轮学生是否上传了新的题目图片（换题信号，见 DecideContext.is_new_question）
      * @param unlock        并发锁释放函数（decide+副作用临界区结束后调用；错误路径 doFinally 兜底，幂等）
@@ -382,7 +385,8 @@ public class TutoringAppService {
         List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
         DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList, isNewQuestion);
 
-        // decide 响应式中继：thinking 实时透传；meta 到达 → metaSink；error 事件 / 流结束无 meta → 按失败
+        // decide 响应式中继：thinking + decide 阶段 agent 事件（perceive/analyze/plan/decide）实时透传；
+        // meta 到达 → metaSink；error 事件 / 流结束无 meta → 按失败
         Sinks.One<ActionMeta> metaSink = Sinks.one();
         AtomicBoolean metaReceived = new AtomicBoolean(false);
         Flux<ServerSentEvent<String>> decideThinking = llmPort.decideStream(ctx)
@@ -400,7 +404,7 @@ public class TutoringAppService {
                         metaSink.tryEmitError(new TutoringAgentException("答疑决策服务暂不可用"));
                     }
                 })
-                .filter(e -> "thinking".equals(e.event()));   // 只中继 thinking，agent/done 丢弃
+                .filter(e -> "thinking".equals(e.event()) || "agent".equals(e.event()));   // 中继 thinking + decide agent(perceive/analyze/plan/decide)，done 丢弃
 
         // meta 到达 → postDecide（同步护栏+副作用+guardrail+generate）→ 释放锁（generate 在锁外）
         Mono<Flux<ServerSentEvent<String>>> tail = metaSink.asMono()
@@ -643,6 +647,19 @@ public class TutoringAppService {
                 .build();
         if (action.getEval() != null) {
             meta.setEval(toSseEval(action.getEval()));
+        }
+        // 决策自由文本（Python reason，前端"为什么"hover 补充，可空）
+        meta.setDecideReason(action.getReason());
+        // 题目涉及知识点（decide 读题分析，可空）
+        meta.setQuestionKps(action.getQuestionKps());
+        // 掌握度信号（修复 meta.eval.masterySignals 恒空缺口：前端改读 meta.masterySignals）
+        if (action.getMasterySignals() != null && !action.getMasterySignals().isEmpty()) {
+            meta.setMasterySignals(action.getMasterySignals().stream()
+                    .map(s -> SseMasterySignalDTO.builder()
+                            .kpLabel(s.getKpLabel())
+                            .signal(s.getSignal())
+                            .build())
+                    .toList());
         }
         if (!guard.isAllowed()) {
             meta.setDenied(ActionType.fromCodeOrDefault(action.getType()).name().toLowerCase());

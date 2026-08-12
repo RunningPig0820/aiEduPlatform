@@ -15,7 +15,8 @@ import java.util.List;
  *
  * <p>字段用 String 承载 Python 原始值（type="hint"、signal="practicing" 为小写），
  * 由护栏/应用层经容错 fromCode 转为领域枚举（非法 → 默认，不阻断）。
- * {@code reason} 是 Python 可选调试字段，Java 不建模（Jackson 默认容忍未知字段）。
+ * {@code reason}（决策自由文本）与 {@code question_kps}（题目涉及知识点）已建模，
+ * 供 SSE meta 透传（前端"Agent 工作流"面板展示）。
  */
 @Data
 @Builder
@@ -53,4 +54,11 @@ public class ActionMeta implements Serializable {
 
     /** 结构化输出兜底标记：type=hint + degraded=true（监控用，Java 按普通 hint 放行） */
     private Boolean degraded = false;
+
+    /** 决策自由文本（Python 解释为何选该 action，前端"为什么"hover 补充，可空） */
+    private String reason;
+
+    /** 题目涉及知识点（decide 读题时列出，可空；完整"读题知识点分析"功能后续替换数据源） */
+    @JsonProperty("question_kps")
+    private List<String> questionKps;
 }

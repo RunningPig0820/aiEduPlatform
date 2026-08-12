@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * SSE {@code meta} 事件（前端 camelCase）——护栏已放行的 type 先行到达。
@@ -49,6 +50,15 @@ public class SseMetaDTO implements Serializable {
 
     /** 护栏拒绝原因（answerCountInsufficient / roundLimitExceeded / safetyFlagHit） */
     private String reason;
+
+    /** Python 决策自由文本（解释为何选该 action，前端"为什么"hover 补充，可空） */
+    private String decideReason;
+
+    /** 题目涉及知识点（首轮 decide 读题分析，可空；完整读题分析功能后续替换数据源） */
+    private List<String> questionKps;
+
+    /** 掌握度信号（每轮 decide 输出，前端"知识点确认"阶段数据源；{kpLabel, signal} 数组） */
+    private List<SseMasterySignalDTO> masterySignals;
 
     /** Python 结构化输出兜底标记（type=hint + degraded=true，监控用） */
     private Boolean degraded;

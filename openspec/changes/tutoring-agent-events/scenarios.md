@@ -59,7 +59,7 @@
 | S2.5 | generate agent 中继 | Python generate 流含 `agent(generate)` | Java 原样透传 `event: agent`（data 不变）；Python 的 meta/done **被丢弃**（不泄漏为假 token） |
 | S2.6 | memory 事件流尾 | 正常轮含 mastery_signals | `agent(memory)` 在最后 token 后、`done` 前；detail 汇总信号（如 `"二元一次方程组 → 练习中"`）；无信号时 detail=null |
 | S2.7 | 终止/轮次上限无 guardrail | 无关内容 / round≥20 | **无** `agent(guardrail)` 事件（无 generate 路径），走既有 meta(TERMINATED/ROUND_LIMIT) |
-| S2.8 | decide 阶段事件不透传 | 观察 Python decide 的 perceive/analyze/plan/decide 事件 | Java **不透传**（block 取 meta 即结束），前端 guardrail 前显示通用"AI 思考中"即可（additive，前端容忍未知 stage） |
+| S2.8 | decide 阶段事件不透传 | 观察 Python decide 的 perceive/analyze/plan/decide 事件 | Java **不透传**（block 取 meta 即结束），前端 guardrail 前显示通用"AI 思考中"即可（additive，前端容忍未知 stage）。（⚠️ 2026-08-12 **已演进为透传**，见 `tutoring-agent-workflow-backend`） |
 | S2.9 | SSE 未登录/越权 | 无 session 访问 SSE 端点 / TEACHER 访问 | 不开流，返回 `event: error`（401/20004） |
 
 ## S3 护栏规则（Java 确定性）
@@ -149,7 +149,7 @@
 - S2.5 generate 中继：`agent(generate)` 原样透传（Python 格式 detail=null）；Python 的 meta/done **零泄漏**为假 token ✅
 - S2.6 memory 流尾：`agent(memory)` 在最后 token 后、done 前；detail 含掌握度信号（有信号时）✅
 - S2.7 终止无 guardrail：安全内容 → `meta(TERMINATED)`，**无 guardrail/generate/token** ✅（注：无关/非数学带 end_reason 的 end 走收尾路径 ARCHIVED，见 B4，非终止路径）
-- S2.8 decide 阶段不透传：前端仅收到 guardrail/generate/memory 三种 agent 事件，`perceive/analyze/plan/decide` **零泄漏** ✅
+- S2.8 decide 阶段不透传：前端仅收到 guardrail/generate/memory 三种 agent 事件，`perceive/analyze/plan/decide` **零泄漏** ✅（⚠️ 2026-08-12 **已演进**：decide agent 事件现透传，前端收到全部五类 agent 事件，见 `tutoring-agent-workflow-backend`）
 - S2.9 未登录/越权：未登录 → 统一 401 JSON（`code:10004`）；TEACHER 访问学生 SSE → `event: error {"code":"20004"}` 不开流 ✅
 
 **S3 场景组（2026-08-07 真实 E2E 自测）**：

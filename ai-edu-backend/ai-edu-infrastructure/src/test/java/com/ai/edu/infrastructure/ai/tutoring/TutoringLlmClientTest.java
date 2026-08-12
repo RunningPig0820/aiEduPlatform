@@ -58,8 +58,8 @@ class TutoringLlmClientTest {
         TutoringLlmClient client = buildClient(Flux.just(
                 sse("thinking", "{\"content\":\"先识别题型\"}"),
                 sse("agent", "{\"level\":\"sub\",\"stage\":\"perceive\",\"label\":\"读取题目\"}"),
-                // meta 事件含 Python 调试字段 reason（Java 不建模）→ 原样透传，容忍未知字段
-                sse("meta", "{\"type\":\"hint\",\"reason\":\"debug field\",\"eval\":{\"correct\":false,\"emotion\":\"NEUTRAL\"}}"),
+                // meta 事件含 Python reason/question_kps（Java 已建模）→ 客户端仅原样透传原始 JSON，语义由编排层解析
+                sse("meta", "{\"type\":\"hint\",\"reason\":\"debug field\",\"question_kps\":[\"二元一次方程组\"],\"eval\":{\"correct\":false,\"emotion\":\"NEUTRAL\"}}"),
                 sse("done", "{\"model_used\":\"doubao/doubao-seed-2-0-lite\"}")));
 
         Flux<ServerSentEvent<String>> flux =

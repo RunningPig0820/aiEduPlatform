@@ -19,7 +19,7 @@ Java 侧三个对接点：① decide SSE 消费（BREAKING）② generate 中继
 - 保持护栏/落库/SSE 业务逻辑不变（只加展示事件，不改决策）
 
 **Non-Goals:**
-- **不中继 decide 的 agent 阶段事件**（perceive/analyze/plan/decide）——只中继 decide 的 thinking 推理分片（D7），agent 阶段事件仍不透传，前端 guardrail 前显示"AI 思考中" + 实时推理分片即可
+- **不中继 decide 的 agent 阶段事件**（perceive/analyze/plan/decide）——只中继 decide 的 thinking 推理分片（D7），agent 阶段事件仍不透传，前端 guardrail 前显示"AI 思考中" + 实时推理分片即可。（⚠️ 2026-08-12 **已演进**：decide agent 事件现透传前端，见 `tutoring-agent-workflow-backend` change design D1）
 - **decide thinking 不入库**——仅实时透传，历史消息只保留 generate thinking（Redis/COS）；若要 decide thinking 落历史，另立 change
 - 不改 ActionMeta 契约内容、不改生成约束（引导式学习不变）
 - 不做真实工具调用（知识图谱 agent 为将来）
@@ -89,7 +89,7 @@ Java 侧用 `Map` + 现有 `SSE_MAPPER` 序列化（与 `contentToken` 同模式
    时序: `thinking*(decide) → agent(guardrail) → meta → agent(generate) → thinking*(generate) → token* → agent(memory) → done`。
 3. **错误语义**: decide 流中途失败 → `onErrorResume` → 已有会话 `friendlyErrorStream`（50005，会话保持 ACTIVE）；start 阶段（session.id==null）重抛由接口层映射。
 4. **并发锁适配**: 现 `withSessionLock` 同步持锁（decide+副作用后释放、generate 在锁外）。流式化后 decide 在 Flux 内执行 → 锁改为**订阅时获取、meta 副作用完成后释放**（`unlock` 参数传入 orchestrate，`postDecide` 副作用完成后调用；错误路径 `doFinally` 兜底）。
-5. **decide agent 事件仍不透传**: `filter` 只放行 thinking，perceive/analyze/plan/decide 丢弃（与 D1 Non-Goals 一致）。
+5. **decide agent 事件仍不透传**: `filter` 只放行 thinking，perceive/analyze/plan/decide 丢弃（与 D1 Non-Goals 一致）。（⚠️ 2026-08-12 **已演进**：filter 放行 `thinking + agent`，见 `tutoring-agent-workflow-backend` change design D1）
 
 **原因**: thinking 与 token 是并行内容流，decide 决策思考正是主等待段（17~48s）；实时中继把黑盒变可见，与 generate thinking 的 DeepSeek 风格一脉相承。代价是 orchestrate 从"同步 decide→同步编排"改"响应式管线"，terminate/round-limit/副作用分支挪进 `postDecide`（复用原逻辑，仅执行时机从返回流前变为 meta 到达后）。
 
@@ -119,7 +119,7 @@ Java 侧用 `Map` + 现有 `SSE_MAPPER` 序列化（与 `contentToken` 同模式
 
 ## Open Questions
 
-- **decide 的 agent 阶段事件（perceive/analyze/plan/decide）要不要实时中继前端？** 目前只中继 thinking（D7），阶段标签不展示；若产品要"决策四阶段"过程感，在 D7 的响应式管线里多 filter 一层 agent 事件即可，单独排期。
+- **decide 的 agent 阶段事件（perceive/analyze/plan/decide）要不要实时中继前端？** 目前只中继 thinking（D7），阶段标签不展示；若产品要"决策四阶段"过程感，在 D7 的响应式管线里多 filter 一层 agent 事件即可，单独排期。（✅ 已答复 2026-08-12：**要**，`tutoring-agent-workflow-backend` 已实现 filter 放行 agent + 前端"本轮意图"面板消费）
 - **decide thinking 要不要落库？** 当前不入库（仅实时），刷新后消失；产品若要求历史回看决策思考，需扩展 Redis/COS 消息模型，另立 change。
 - **guardrail 事件的 terminate/round-limit 分支**是否也要发？本轮不发（D2），如产品要求"拒绝也要展示把关"再补。
 - 前端对 `event: agent` 的渲染粒度（进度条 vs 标签流）由前端侧定。
