@@ -28,8 +28,8 @@ public final class TutoringConstants {
     /** Python decide/recognize 失败重试次数（generate 流式不可重试） */
     public static final int AGENT_RETRY = 1;
 
-    /** decide 调用超时（非流式，快模型） */
-    public static final Duration DECIDE_TIMEOUT = Duration.ofSeconds(15);
+    /** decide 调用超时（流式；2026-08 关思考 + 换 mini 后实测 ~1.5s，10s 防挂起/边缘误超时） */
+    public static final Duration DECIDE_TIMEOUT = Duration.ofSeconds(10);
 
     /** generate 调用超时（流式正文） */
     public static final Duration GENERATE_TIMEOUT = Duration.ofSeconds(60);

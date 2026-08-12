@@ -40,7 +40,8 @@ public class TutoringLlmClient implements TutoringLlmPort {
         log.info("[tutoring] decideStream 调用, history={}, round={}, answerReq={}, isNewQuestion={}",
                 context.getHistory() == null ? 0 : context.getHistory().size(),
                 context.getRoundCount(), context.getAnswerRequestCount(), context.isNewQuestion());
-        // 流式不可重试：重试会重发已透传的 thinking，失败由编排层降级（与 generate 一致）
+        // 流式不可重试：重试会重发已透传事件，失败由编排层降级（与 generate 一致）；
+        // 超时按配置（2026-08 关思考后 decide ~1.5s，配置 10s 防挂起；TimeoutException 由 onErrorResume 包装）
         return tutoringWebClient.post()
                 .uri(config().decidePath())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -49,6 +50,7 @@ public class TutoringLlmClient implements TutoringLlmPort {
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                 .doOnNext(event -> log.trace("[tutoring] decide SSE: {}", event.data()))
+                .timeout(config().decideTimeout())
                 .onErrorResume(e -> {
                     log.error("[tutoring] decide 调用失败: {}", e.getMessage(), e);
                     return Flux.error(new TutoringAgentException("答疑决策服务暂不可用", e));
