@@ -43,6 +43,17 @@ public class TutoringSessionRepositoryImpl implements TutoringSessionRepository 
     }
 
     @Override
+    public List<TutoringSession> findListByStudentId(Long studentId) {
+        return TutoringSessionPo.toEntityList(tutoringSessionMapper.selectListByStudentId(studentId));
+    }
+
+    @Override
+    public void softDelete(Long sessionId) {
+        // 全局逻辑删除（logic-delete-field: deleted）→ deleteById 执行 is_deleted=1 更新而非物理删
+        tutoringSessionMapper.deleteById(sessionId);
+    }
+
+    @Override
     public void updateTranscriptUrl(Long sessionId, String transcriptUrl) {
         tutoringSessionMapper.updateTranscriptUrl(sessionId, transcriptUrl, 0L);
     }

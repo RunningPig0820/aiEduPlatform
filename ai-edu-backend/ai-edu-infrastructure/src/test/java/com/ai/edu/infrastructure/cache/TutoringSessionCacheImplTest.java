@@ -1,5 +1,6 @@
 package com.ai.edu.infrastructure.cache;
 
+import com.ai.edu.domain.learning.model.contract.EvalInfo;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.EndReason;
@@ -145,6 +146,40 @@ class TutoringSessionCacheImplTest {
 
         verify(redissonClient, atLeastOnce()).getBucket("learning:tutoring:messages:" + SESSION_ID);
         verify(mockBucket).set(contains("\"先找已知条件\""), eq(TTL_SECONDS), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    @DisplayName("消息 meta 往返：JSON 键为 snake_case（Python 契约），listMessages 恢复全部 meta 字段")
+    void appendMessage_metaRoundTrip() {
+        TutoringChatMessage ai = TutoringChatMessage.builder()
+                .role("ai").content("先找已知条件")
+                .type("approach").denied("reveal")
+                .decideReason("答案需分步引导").round(2)
+                .questionKps(List.of("一次方程", "图像性质"))
+                .eval(EvalInfo.builder().correct(true).errorType("calc").emotion("neutral").build())
+                .status("ACTIVE")
+                .build();
+        String json = jsonOf(List.of(ai));
+
+        // 序列化键为 snake_case（Java↔Python 契约 / COS transcript 一致，前端 toMessage 兼容双命名）
+        assertTrue(json.contains("\"decide_reason\":\"答案需分步引导\""), json);
+        assertTrue(json.contains("\"question_kps\":[\"一次方程\",\"图像性质\"]"), json);
+        assertTrue(json.contains("\"error_type\":\"calc\""), json); // EvalInfo 内字段同样 snake_case
+
+        when(mockBucket.get()).thenReturn(json);
+        List<TutoringChatMessage> found = cache.listMessages(SESSION_ID);
+
+        assertEquals(1, found.size());
+        TutoringChatMessage m = found.get(0);
+        assertEquals("approach", m.getType());
+        assertEquals("reveal", m.getDenied());
+        assertEquals("答案需分步引导", m.getDecideReason());
+        assertEquals(2, m.getRound());
+        assertEquals(List.of("一次方程", "图像性质"), m.getQuestionKps());
+        assertEquals("ACTIVE", m.getStatus());
+        assertNotNull(m.getEval());
+        assertEquals(Boolean.TRUE, m.getEval().getCorrect());
+        assertEquals("calc", m.getEval().getErrorType());
     }
 
     @Test

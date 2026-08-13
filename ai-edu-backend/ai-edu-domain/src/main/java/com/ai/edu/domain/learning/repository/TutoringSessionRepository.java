@@ -26,6 +26,16 @@ public interface TutoringSessionRepository {
     List<TutoringSession> findActiveByStudentId(Long studentId);
 
     /**
+     * 按学生查全部会话（历史列表）：全状态（含已归档/终止），按 updated_at 倒序，不含软删。
+     */
+    List<TutoringSession> findListByStudentId(Long studentId);
+
+    /**
+     * 软删会话（is_deleted=1，全局逻辑删除；COS transcript/题目图片保留，可恢复）。
+     */
+    void softDelete(Long sessionId);
+
+    /**
      * 回填 COS 对话归档 objectKey（首次实时写即调用）。
      */
     void updateTranscriptUrl(Long sessionId, String transcriptUrl);

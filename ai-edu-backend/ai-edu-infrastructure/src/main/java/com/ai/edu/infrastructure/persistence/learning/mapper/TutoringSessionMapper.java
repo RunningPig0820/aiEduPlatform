@@ -21,6 +21,13 @@ public interface TutoringSessionMapper extends BaseMapper<TutoringSessionPo> {
     @Select("SELECT * FROM t_tutoring_session WHERE student_id = #{studentId} AND status = 'ACTIVE' AND is_deleted = false ORDER BY id")
     List<TutoringSessionPo> selectActiveByStudentId(@Param("studentId") Long studentId);
 
+    /**
+     * 查该学生全部会话（历史列表）：全状态（含已归档/终止），显式排除软删，按更新时间倒序。
+     * <p>注：MyBatis-Plus 逻辑删除只对 BaseMapper 方法自动过滤，原生 @Select 需手动拼 {@code is_deleted = false}。
+     */
+    @Select("SELECT * FROM t_tutoring_session WHERE student_id = #{studentId} AND is_deleted = false ORDER BY updated_at DESC")
+    List<TutoringSessionPo> selectListByStudentId(@Param("studentId") Long studentId);
+
     /** 回填 COS 对话归档 objectKey（首次实时写即调用）。 */
     @Update("UPDATE t_tutoring_session SET transcript_url = #{transcriptUrl}, modified_by = #{modifiedBy} " +
             "WHERE id = #{id} AND is_deleted = false")

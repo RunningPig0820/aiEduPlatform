@@ -3,6 +3,7 @@ package com.ai.edu.interfaces.api.learning;
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.application.dto.learning.command.SendMessageCommand;
 import com.ai.edu.application.dto.learning.command.StartTutoringCommand;
 import com.ai.edu.application.service.learning.TutoringAppService;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * AI 答疑 REST API（SSE 类型先行流式 + 同步端点）。
@@ -130,6 +133,23 @@ public class TutoringController {
     public ApiResponse<TutoringConfigDTO> getConfig(HttpSession session) {
         TutoringAuth.requireStudent(session);
         return ApiResponse.success(tutoringAppService.getTutoringConfig());
+    }
+
+    /** 会话历史列表（全状态，updated_at 倒序，不含软删）。 */
+    @Operation(summary = "会话历史列表", description = "当前学生全部会话（含已归档/终止），updated_at 倒序；内容经 transcriptUrl 拉 COS")
+    @GetMapping("/sessions")
+    public ApiResponse<List<TutoringSessionListItemDTO>> listSessions(HttpSession session) {
+        Long studentId = TutoringAuth.requireStudent(session);
+        return ApiResponse.success(tutoringAppService.listSessions(studentId));
+    }
+
+    /** 删除会话（软删 + 清 Redis 缓存；COS 保留可恢复）。 */
+    @Operation(summary = "删除会话", description = "软删会话并清 Redis 缓存；归属校验失败返回 50002（不泄露存在性）")
+    @DeleteMapping("/sessions/{sessionId}")
+    public ApiResponse<Void> deleteSession(@PathVariable Long sessionId, HttpSession session) {
+        Long studentId = TutoringAuth.requireStudent(session);
+        tutoringAppService.deleteSession(studentId, sessionId);
+        return ApiResponse.success(null);
     }
 
     /** 查询会话状态（断点恢复）。 */

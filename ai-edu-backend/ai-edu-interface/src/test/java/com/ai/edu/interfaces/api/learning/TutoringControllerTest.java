@@ -3,6 +3,7 @@ package com.ai.edu.interfaces.api.learning;
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.application.dto.learning.command.SendMessageCommand;
 import com.ai.edu.application.dto.learning.command.StartTutoringCommand;
 import com.ai.edu.application.service.learning.TutoringAppService;
@@ -17,6 +18,8 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -186,6 +189,62 @@ class TutoringControllerTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> controller.getSession(SESSION_ID, new MockHttpSession()));
         assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
+    }
+
+    // ==================== listSessions / deleteSession（同步） ====================
+
+    @Test
+    @DisplayName("listSessions：登录 STUDENT → 委托服务并包装列表")
+    void listSessions_delegates() {
+        when(appService.listSessions(eq(STUDENT_ID))).thenReturn(List.of(
+                TutoringSessionListItemDTO.builder().sessionId(SESSION_ID).title("鸡兔同笼怎么做").status("ACTIVE").build()));
+
+        ApiResponse<List<TutoringSessionListItemDTO>> response = controller.listSessions(loginSession());
+
+        assertEquals(ErrorCode.SUCCESS, response.getCode());
+        assertEquals(1, response.getData().size());
+        assertEquals(SESSION_ID, response.getData().get(0).getSessionId());
+        verify(appService).listSessions(STUDENT_ID);
+    }
+
+    @Test
+    @DisplayName("listSessions：未登录 → 抛 10004")
+    void listSessions_notLoggedIn() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.listSessions(new MockHttpSession()));
+        assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
+        verify(appService, never()).listSessions(any());
+    }
+
+    @Test
+    @DisplayName("listSessions：非 STUDENT → 抛 20004")
+    void listSessions_notStudentRole() {
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("userId", 999L);
+        session.setAttribute("role", "TEACHER");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.listSessions(session));
+        assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
+    }
+
+    @Test
+    @DisplayName("deleteSession：登录 → 委托服务，返回空 data")
+    void deleteSession_delegates() {
+        ApiResponse<Void> response = controller.deleteSession(SESSION_ID, loginSession());
+
+        assertEquals(ErrorCode.SUCCESS, response.getCode());
+        assertNull(response.getData());
+        verify(appService).deleteSession(STUDENT_ID, SESSION_ID);
+    }
+
+    @Test
+    @DisplayName("deleteSession：未登录 → 抛 10004")
+    void deleteSession_notLoggedIn() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.deleteSession(SESSION_ID, new MockHttpSession()));
+        assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
+        verify(appService, never()).deleteSession(anyLong(), anyLong());
     }
 
     // ==================== archive（同步） ====================

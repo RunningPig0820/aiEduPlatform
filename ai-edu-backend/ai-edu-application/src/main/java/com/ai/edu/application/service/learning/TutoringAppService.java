@@ -8,6 +8,7 @@ import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.SummaryDTO;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.application.dto.learning.sse.SseDoneDTO;
 import com.ai.edu.application.dto.learning.sse.SseEvalDTO;
 import com.ai.edu.application.dto.learning.sse.SseMasterySignalDTO;
@@ -92,6 +93,12 @@ public class TutoringAppService {
     private static final String AGENT_LABEL_MEMORY = "记忆更新";
     /** 断点恢复返回的最近消息条数上限 */
     private static final int RECENT_MESSAGES_LIMIT = 50;
+    /** 会话标题取首条用户消息的前 N 个字符（历史列表展示；见设计 D3） */
+    private static final int SESSION_TITLE_MAX_LENGTH = 30;
+    /** 图片发起（首条消息无文字）时标题兜底 */
+    private static final String SESSION_TITLE_IMAGE_FALLBACK = "图片题目";
+    /** 无文字无图片的极端兜底 */
+    private static final String SESSION_TITLE_EMPTY_FALLBACK = "答疑会话";
 
     /** 11.2 会话并发锁：Redis key 前缀 + 锁 TTL（覆盖 decide 重试窗口，超时自动释放） */
     private static final String SESSION_LOCK_PREFIX = "learning:tutoring:lock:";
@@ -159,6 +166,9 @@ public class TutoringAppService {
         // 7.9 会话创建频率限制
         ensureCreateAllowed(studentId);
         TutoringSession session = TutoringSession.start(studentId, "math");
+        // 会话标题：首条用户消息内容前 ~30 字（历史列表展示，见设计 D3）；须在首次落库前设置，
+        // 图片路径（save 拿 sessionId）与文字路径（ensurePersisted）都随会话一起持久化。
+        session.setTitle(buildSessionTitle(message, imageData));
         if (imageData != null && imageData.length > 0) {
             // 图片发起：先落库拿 sessionId，题目图按会话路径组织（tutoring/questions/{studentId}/{sessionId}/）。
             // decide 终止/失败由编排处理（TERMINATED 或保持 ACTIVE 可续），不留 pending 临时目录。
@@ -230,6 +240,23 @@ public class TutoringAppService {
         TutoringSessionDTO dto = assembler.toSessionDTO(session, recent, null);
         resolveTranscriptUrl(dto);
         return dto;
+    }
+
+    /** 会话历史列表：该学生全部会话（含已归档/终止，updated_at 倒序，不含软删）。 */
+    public List<TutoringSessionListItemDTO> listSessions(Long studentId) {
+        return tutoringSessionRepository.findListByStudentId(studentId).stream()
+                .map(assembler::toListItemDTO)
+                .toList();
+    }
+
+    /**
+     * 删除会话：归属校验（loadSession，非本人/不存在/已软删 → 50002）→ 软删（is_deleted=1）→
+     * 清 Redis 缓存（session+messages+active 三 key）。COS transcript/题目图片保留（可恢复）。
+     */
+    public void deleteSession(Long studentId, Long sessionId) {
+        loadSession(sessionId, studentId);   // 归属/存在校验（越权 404 不泄露存在性）
+        tutoringSessionRepository.softDelete(sessionId);
+        sessionCache.clear(sessionId);
     }
 
     /** 主动收尾：end_reason=ABANDONED，掌握度不提升 + COS 终态写 + 清 Redis。 */
@@ -613,8 +640,23 @@ public class TutoringAppService {
                 .doOnComplete(() -> {
                     if (aiReply.length() > 0) {
                         String thinking = thinkingBuf.length() > 0 ? thinkingBuf.toString() : null;
+                        // AI 消息补工作流 meta（与 buildMeta 同源镜像，值域见设计 D2）：
+                        // 历史列表复原时前端 deriveTurnFlow 依赖这些字段，与 live SSE 渲染逐字段一致。
                         sessionCache.appendMessage(session.getId(),
-                                TutoringChatMessage.ai(aiReply.toString(), thinking));
+                                TutoringChatMessage.builder()
+                                        .role("ai")
+                                        .content(aiReply.toString())
+                                        .thinking(thinking)
+                                        .createdAt(LocalDateTime.now())
+                                        .type(allowedType.name().toLowerCase())
+                                        .denied(guard.isAllowed() ? null
+                                                : ActionType.fromCodeOrDefault(action.getType()).name().toLowerCase())
+                                        .decideReason(action.getReason())
+                                        .round(session.getRoundCount())
+                                        .questionKps(action.getQuestionKps())
+                                        .eval(action.getEval())
+                                        .status(session.getStatus() == null ? null : session.getStatus().name())
+                                        .build());
                         archiveTranscript(session, sessionCache.listMessages(session.getId()), action.getSummary());
                     }
                 });
@@ -860,6 +902,14 @@ public class TutoringAppService {
         }
         String url = uploadQuestionImage(studentId, sessionId, imageData, originalFilename);
         return TutoringChatMessage.userWithImage(content, url);
+    }
+
+    /** 会话标题：首条用户消息内容前 {@value #SESSION_TITLE_MAX_LENGTH} 字；图片题无文字兜底「图片题目」。 */
+    private String buildSessionTitle(String message, byte[] imageData) {
+        String text = (message == null || message.isBlank())
+                ? (imageData == null || imageData.length == 0 ? SESSION_TITLE_EMPTY_FALLBACK : SESSION_TITLE_IMAGE_FALLBACK)
+                : message.trim();
+        return text.length() <= SESSION_TITLE_MAX_LENGTH ? text : text.substring(0, SESSION_TITLE_MAX_LENGTH);
     }
 
     /**

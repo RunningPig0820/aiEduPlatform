@@ -3,6 +3,7 @@ package com.ai.edu.application.assembler.learning;
 import com.ai.edu.application.dto.learning.ChatMessageDTO;
 import com.ai.edu.application.dto.learning.SummaryDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
@@ -39,6 +40,22 @@ public class TutoringAssembler {
                 .recentMessages(recentMessages)
                 .summary(summary)
                 .transcriptUrl(session.getTranscriptUrl())
+                .build();
+    }
+
+    /**
+     * 领域会话 → 历史列表项 DTO（全状态；不含内容，内容经 COS transcript 拉取）。
+     */
+    public TutoringSessionListItemDTO toListItemDTO(TutoringSession session) {
+        return TutoringSessionListItemDTO.builder()
+                .sessionId(session.getId())
+                .title(session.getTitle())
+                .status(session.getStatus() == null ? null : session.getStatus().name())
+                .subject(session.getSubject())
+                .questionType(session.getQuestionType() == null ? null : session.getQuestionType().name())
+                .roundCount(session.getRoundCount())
+                .updatedAt(session.getUpdatedAt())
+                .archivedAt(session.getArchivedAt())
                 .build();
     }
 

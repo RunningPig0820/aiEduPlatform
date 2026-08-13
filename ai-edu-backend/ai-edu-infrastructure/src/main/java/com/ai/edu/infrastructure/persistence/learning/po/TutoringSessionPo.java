@@ -38,6 +38,9 @@ public class TutoringSessionPo {
     @TableField("subject")
     private String subject;
 
+    @TableField("title")
+    private String title;
+
     @TableField("question_type")
     private String questionType;
 
@@ -91,6 +94,7 @@ public class TutoringSessionPo {
         po.id = entity.getId();
         po.studentId = entity.getStudentId();
         po.subject = entity.getSubject();
+        po.title = entity.getTitle();
         po.questionType = entity.getQuestionType() == null ? null : entity.getQuestionType().name();
         po.questionKind = entity.getQuestionKind() == null ? null : entity.getQuestionKind().name();
         po.intentCategory = entity.getIntentCategory();
@@ -111,6 +115,7 @@ public class TutoringSessionPo {
                 this.id,
                 this.studentId,
                 this.subject,
+                this.title,
                 TutoringQuestionType.fromCode(this.questionType),
                 TutoringQuestionKind.fromCode(this.questionKind),
                 this.intentCategory,

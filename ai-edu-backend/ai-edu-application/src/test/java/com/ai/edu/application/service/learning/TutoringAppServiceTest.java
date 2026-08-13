@@ -5,6 +5,7 @@ import com.ai.edu.application.dto.learning.GuardResult;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
+import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
@@ -249,6 +251,62 @@ class TutoringAppServiceTest {
                 .assertNext(ev -> assertEquals("done", ev.event()))
                 .verifyComplete();
         assertEquals(1, session.getAnswerRequestCount());
+    }
+
+    @Test
+    @DisplayName("sendMessage: AI 消息 append 携带工作流 meta（type/round/decide_reason/question_kps/eval/status，镜像 buildMeta）")
+    void sendMessage_aiMessageCarriesMeta() {
+        TutoringSession session = activeSessionInCache();
+        ActionMeta hint = meta("hint");
+        hint.setReason("学生已列方程，先给思路");
+        hint.setQuestionKps(List.of("一次方程", "鸡兔同笼模型"));
+        hint.setEval(EvalInfo.builder().correct(true).errorType("calc").emotion("neutral").build());
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(hint));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意等式两边同时减去4x\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+        // AI 消息 meta = buildMeta 同源镜像（护栏通过 → denied 为空）
+        verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
+                "ai".equals(m.getRole())
+                        && "hint".equals(m.getType())
+                        && m.getDenied() == null
+                        && "学生已列方程，先给思路".equals(m.getDecideReason())
+                        && Integer.valueOf(1).equals(m.getRound())            // applySideEffects 已递增 round 0→1
+                        && List.of("一次方程", "鸡兔同笼模型").equals(m.getQuestionKps())
+                        && m.getEval() != null && Boolean.TRUE.equals(m.getEval().getCorrect())
+                        && "calc".equals(m.getEval().getErrorType())
+                        && "ACTIVE".equals(m.getStatus())
+                        && "注意等式两边同时减去4x".equals(m.getContent())));
+    }
+
+    @Test
+    @DisplayName("sendMessage: 护栏拒绝 reveal → AI 消息 meta.type=approach + denied=reveal（历史复原与 live 一致）")
+    void sendMessage_deniedAiMessageCarriesMeta() {
+        TutoringSession session = activeSessionInCache();
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"思路：先设未知数\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "直接告诉我答案");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+        verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
+                "ai".equals(m.getRole())
+                        && "approach".equals(m.getType())
+                        && "reveal".equals(m.getDenied())));
     }
 
     @Test
@@ -878,6 +936,108 @@ class TutoringAppServiceTest {
         TutoringConfigDTO dto = service.getTutoringConfig();
 
         assertEquals(true, dto.getOcrEnabled());
+    }
+
+    // ==================== 列表 / 删除 / 标题 ====================
+
+    @Test
+    @DisplayName("listSessions：全状态映射列表项（sessionId/title/status/subject/questionType/roundCount/updatedAt/archivedAt）")
+    void listSessions_mapsAllStatus() {
+        TutoringSession active = TutoringSession.start(STUDENT_ID, "math");
+        active.setId(1001L);
+        active.setTitle("鸡兔同笼怎么做");
+        TutoringSession archived = TutoringSession.start(STUDENT_ID, "math");
+        archived.setId(1002L);
+        archived.setTitle("二次函数图像");
+        archived.complete(EndReason.COMPLETED);
+        when(sessionRepository.findListByStudentId(STUDENT_ID)).thenReturn(List.of(active, archived));
+
+        List<TutoringSessionListItemDTO> list = service.listSessions(STUDENT_ID);
+
+        assertEquals(2, list.size());
+        TutoringSessionListItemDTO first = list.get(0);
+        assertEquals(1001L, first.getSessionId());
+        assertEquals("鸡兔同笼怎么做", first.getTitle());
+        assertEquals("ACTIVE", first.getStatus());
+        assertEquals("math", first.getSubject());
+        assertEquals(0, first.getRoundCount());
+        assertNotNull(first.getUpdatedAt());
+        assertNull(first.getArchivedAt());
+        assertEquals("ARCHIVED", list.get(1).getStatus());
+        assertNotNull(list.get(1).getArchivedAt());
+        verify(sessionRepository).findListByStudentId(STUDENT_ID);
+    }
+
+    @Test
+    @DisplayName("deleteSession：归属校验通过 → 软删 + 清 Redis 缓存")
+    void deleteSession_happyPath() {
+        TutoringSession session = TutoringSession.start(STUDENT_ID, "math");
+        session.setId(SESSION_ID);
+        when(sessionCache.findSession(SESSION_ID)).thenReturn(Optional.of(session));
+
+        service.deleteSession(STUDENT_ID, SESSION_ID);
+
+        verify(sessionRepository).softDelete(SESSION_ID);
+        verify(sessionCache).clear(SESSION_ID);
+    }
+
+    @Test
+    @DisplayName("deleteSession：越权（他人会话）→ 50002，不软删不改缓存")
+    void deleteSession_ownershipRejected() {
+        TutoringSession session = TutoringSession.start(STUDENT_ID, "math");
+        session.setId(SESSION_ID);
+        when(sessionCache.findSession(SESSION_ID)).thenReturn(Optional.of(session));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.deleteSession(STUDENT_ID + 1, SESSION_ID));
+        assertEquals("50002", ex.getCode());
+        verify(sessionRepository, never()).softDelete(any());
+        verify(sessionCache, never()).clear(any());
+    }
+
+    @Test
+    @DisplayName("deleteSession：会话不存在 → 50002")
+    void deleteSession_notFound() {
+        when(sessionCache.findSession(SESSION_ID)).thenReturn(Optional.empty());
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.deleteSession(STUDENT_ID, SESSION_ID));
+        assertEquals("50002", ex.getCode());
+        verify(sessionRepository, never()).softDelete(any());
+    }
+
+    @Test
+    @DisplayName("start 文字：首条消息生成 title 截断至 ~30 字，随会话落库")
+    void start_generatesTitleFromFirstMessage() {
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
+        String longMsg = "鸡兔同笼有35个头94只脚问鸡和兔子各有多少只这是一个经典的二元一次方程组问题";
+
+        service.start(STUDENT_ID, longMsg).blockLast();
+
+        ArgumentCaptor<TutoringSession> captor = ArgumentCaptor.forClass(TutoringSession.class);
+        verify(sessionRepository, atLeastOnce()).save(captor.capture());
+        TutoringSession saved = captor.getAllValues().get(0);
+        assertNotNull(saved.getTitle());
+        assertEquals(30, saved.getTitle().length());      // 截断到 SESSION_TITLE_MAX_LENGTH=30
+        assertTrue(saved.getTitle().startsWith("鸡兔同笼"));
+    }
+
+    @Test
+    @DisplayName("start 图片：无正文 → title 兜底「图片题目」，不阻断")
+    void start_imageTitleFallback() {
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先看图\"}")));
+        when(fileStorageService.uploadToObjectKey(anyString(), any(byte[].class), anyString())).thenReturn(null);
+        when(fileStorageService.getUrl(anyString()))
+                .thenReturn("https://cos/tutoring/questions/501/1001/20260807-000000-000.png");
+
+        service.start(STUDENT_ID, null, new byte[]{1, 2, 3}, "q.png").blockLast();
+
+        ArgumentCaptor<TutoringSession> captor = ArgumentCaptor.forClass(TutoringSession.class);
+        verify(sessionRepository, atLeastOnce()).save(captor.capture());
+        assertEquals("图片题目", captor.getAllValues().get(0).getTitle());
     }
 
     // ==================== helpers ====================

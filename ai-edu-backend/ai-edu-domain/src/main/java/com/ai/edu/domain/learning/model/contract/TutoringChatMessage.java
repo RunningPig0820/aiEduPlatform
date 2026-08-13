@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 答疑对话消息（Redis 热存 + decide/generate 上下文 history 项，Java↔Python 契约 snake_case）。
@@ -39,6 +40,29 @@ public class TutoringChatMessage implements Serializable {
     /** 消息时间（Python 可忽略） */
     @JsonProperty("created_at")
     private LocalDateTime createdAt;
+
+    /** 工作流 meta：本消息动作类型（AI 消息生效类型，护栏降级后；用户消息为空） */
+    private String type;
+
+    /** 护栏拒绝时的原始请求类型（如 reveal；无拒绝为空） */
+    private String denied;
+
+    /** Python 决策自由文本（前端"为什么"hover 补充，可空） */
+    @JsonProperty("decide_reason")
+    private String decideReason;
+
+    /** 当前轮次（本消息所属轮） */
+    private Integer round;
+
+    /** 题目涉及知识点（decide 读题分析，可空） */
+    @JsonProperty("question_kps")
+    private List<String> questionKps;
+
+    /** 学生回答评估（EvalInfo，snake_case 内字段；可空） */
+    private EvalInfo eval;
+
+    /** 该轮会话状态（ACTIVE/ARCHIVED/TERMINATED，前端 ⑥ 归档点亮判定） */
+    private String status;
 
     public static TutoringChatMessage user(String content) {
         return TutoringChatMessage.builder().role("user").content(content).createdAt(LocalDateTime.now()).build();

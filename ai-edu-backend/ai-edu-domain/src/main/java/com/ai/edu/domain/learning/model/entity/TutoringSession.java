@@ -26,6 +26,7 @@ public class TutoringSession {
     private Long id;
     private Long studentId;
     private String subject;
+    private String title;
     private TutoringQuestionType questionType;
     private TutoringQuestionKind questionKind;
     private String intentCategory;
@@ -48,7 +49,7 @@ public class TutoringSession {
      * <p>仓储实现经 PO.toEntity 调用——领域实体除 setId 外不暴露状态写入，
      * 重新水合由领域工厂完成，保证状态一致性由聚合根自身掌控。
      */
-    public static TutoringSession restore(Long id, Long studentId, String subject,
+    public static TutoringSession restore(Long id, Long studentId, String subject, String title,
                                           TutoringQuestionType questionType, TutoringQuestionKind questionKind,
                                           String intentCategory, TutoringEmotion lastEmotion, TutoringState status,
                                           int roundCount, int answerRequestCount, EndReason endReason,
@@ -58,6 +59,7 @@ public class TutoringSession {
         session.id = id;
         session.studentId = studentId;
         session.subject = subject;
+        session.title = title;
         session.questionType = questionType;
         session.questionKind = questionKind;
         session.intentCategory = intentCategory;
@@ -94,6 +96,11 @@ public class TutoringSession {
     /** 恢复持久化生成的主键（仓储实现经 PO.toEntity 调用，沿用全项目 setId 约定）。 */
     public void setId(Long id) {
         this.id = id;
+    }
+
+    /** 会话标题（首条用户消息生成，历史列表展示；应用层生成后设置，随会话落库）。 */
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     /** 记录一轮引导（hint/approach 消耗轮次）；已达上限抛异常。 */

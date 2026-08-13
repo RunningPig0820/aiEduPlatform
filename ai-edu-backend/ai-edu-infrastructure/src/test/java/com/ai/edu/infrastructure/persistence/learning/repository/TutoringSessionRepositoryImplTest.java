@@ -92,6 +92,28 @@ class TutoringSessionRepositoryImplTest {
     }
 
     @Test
+    @DisplayName("findListByStudentId：委托 Mapper 返回该学生全部会话（历史列表）")
+    void findListByStudentId() {
+        TutoringSession session = TutoringSession.start(STUDENT_ID, "math");
+        session.setId(SESSION_ID);
+        when(mapper.selectListByStudentId(STUDENT_ID)).thenReturn(List.of(TutoringSessionPo.from(session)));
+
+        List<TutoringSession> list = repo.findListByStudentId(STUDENT_ID);
+
+        assertEquals(1, list.size());
+        assertEquals(SESSION_ID, list.get(0).getId());
+        verify(mapper).selectListByStudentId(STUDENT_ID);
+    }
+
+    @Test
+    @DisplayName("softDelete：委托 deleteById（全局逻辑删 is_deleted=1，非物理删）")
+    void softDelete() {
+        repo.softDelete(SESSION_ID);
+
+        verify(mapper).deleteById(SESSION_ID);
+    }
+
+    @Test
     @DisplayName("updateTranscriptUrl：委托 Mapper 回填 objectKey")
     void updateTranscriptUrl() {
         repo.updateTranscriptUrl(SESSION_ID, "tutoring/transcripts/1001.json");
