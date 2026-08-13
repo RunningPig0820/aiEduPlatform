@@ -40,9 +40,6 @@ public interface TutoringConfig {
     /** OCR 调用超时。 */
     Duration ocrTimeout();
 
-    /** transcript 签名 URL 有效期（分钟，读时现生成避免死链接）。 */
-    int transcriptUrlExpireMinutes();
-
     /** 拍题 OCR 开关（关闭时前端隐藏拍照入口，仅手打/粘贴）。 */
     boolean ocrEnabled();
 
@@ -96,11 +93,6 @@ public interface TutoringConfig {
             @Override
             public Duration ocrTimeout() {
                 return TutoringConstants.OCR_TIMEOUT;
-            }
-
-            @Override
-            public int transcriptUrlExpireMinutes() {
-                return TutoringConstants.TRANSCRIPT_URL_EXPIRE_MINUTES;
             }
 
             @Override

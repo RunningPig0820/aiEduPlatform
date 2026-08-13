@@ -7,7 +7,10 @@ import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
 import com.qcloud.cos.auth.COSCredentials;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.http.HttpProtocol;
+import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.COSObjectInputStream;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
 import com.qcloud.cos.region.Region;
@@ -99,6 +102,33 @@ public class CosFileStorageServiceImpl implements FileStorageService {
         } catch (Exception e) {
             log.error("文件整写失败: objectKey={}", objectKey, e);
             throw new BusinessException("FILE_UPLOAD_FAILED", "文件上传失败: " + e.getMessage());
+        } finally {
+            cosClient.shutdown();
+        }
+    }
+
+    @Override
+    public byte[] download(String objectKey) {
+        COSClient cosClient = createCOSClient();
+        try {
+            COSObject cosObject = cosClient.getObject(cosProperties.getBucketName(), objectKey);
+            byte[] content;
+            try (COSObjectInputStream in = cosObject.getObjectContent()) {
+                content = in.readAllBytes();
+            }
+            log.info("文件读取成功: objectKey={}, size={}bytes", objectKey, content.length);
+            return content;
+        } catch (CosServiceException e) {
+            // 对象不存在（NoSuchKey，HTTP 404）→ 返回 null，调用方优雅降级（如空 transcript）
+            if (e.getStatusCode() == 404) {
+                log.info("文件不存在（返回 null）: objectKey={}", objectKey);
+                return null;
+            }
+            log.error("文件读取失败: objectKey={}", objectKey, e);
+            throw new BusinessException("FILE_READ_FAILED", "文件读取失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("文件读取失败: objectKey={}", objectKey, e);
+            throw new BusinessException("FILE_READ_FAILED", "文件读取失败: " + e.getMessage());
         } finally {
             cosClient.shutdown();
         }

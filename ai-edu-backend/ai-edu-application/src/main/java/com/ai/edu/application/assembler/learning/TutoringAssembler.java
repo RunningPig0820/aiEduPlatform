@@ -39,7 +39,6 @@ public class TutoringAssembler {
                 .answerRequestCount(session.getAnswerRequestCount())
                 .recentMessages(recentMessages)
                 .summary(summary)
-                .transcriptUrl(session.getTranscriptUrl())
                 .build();
     }
 

@@ -3,7 +3,9 @@
 > 基础路径: `/api/tutoring`
 >
 > 更新日期: 2026-08-13
-> 本变更新增会话**列表**与**删除**接口，并让 COS transcript 消息携带工作流 meta。既有 `GET /sessions/{id}`（详情，返回签名 transcriptUrl + recentMessages）与 SSE 流式接口**均不变**。
+> 本变更新增会话**列表**、**删除**、**transcript 后端代理**接口，并让 COS transcript 消息携带工作流 meta。
+> **既有 `GET /sessions/{id}`（详情）不再返回签名 `transcriptUrl`**（消除签名 URL 下发浏览器的权限风险 + 存储桶 CORS 依赖），
+> 历史详情内容统一经新增的 `GET /sessions/{id}/transcript`（后端服务端读 COS）获取。
 
 ---
 
@@ -12,7 +14,8 @@
 - [通用响应结构](#通用响应结构)
 - [GET /api/tutoring/sessions（会话列表）](#1-get-apitutoringsessions会话列表)
 - [DELETE /api/tutoring/sessions/{id}（删除会话）](#2-delete-apitutoringsessionsid删除会话)
-- [COS transcript 消息结构（含 meta）](#3-cos-transcript-消息结构含-meta)
+- [GET /api/tutoring/sessions/{id}/transcript（获取会话 transcript）](#3-get-apitutoringsessionsidtranscript获取会话-transcript)
+- [COS transcript 消息结构（含 meta）](#4-cos-transcript-消息结构含-meta)
 - [错误码说明](#错误码说明)
 - [前端调用注意事项](#前端调用注意事项)
 
@@ -172,45 +175,96 @@ const result = await response.json();
 
 ---
 
-## 3. COS transcript 消息结构（含 meta）
+## 3. GET /api/tutoring/sessions/{id}/transcript（获取会话 transcript）
 
-详情内容加载：前端调 `GET /sessions/{id}`（既有接口，不变）拿到**签名 `transcriptUrl`** 与 `status`，随后 `fetch` 该 URL 拉取 transcript JSON。消息项在既有 `role/content/image_url/thinking/created_at` 基础上**新增 meta 字段**（snake_case，可空）：
+> **新增**（后端代理，前端零 COS 直连）。签名 URL / COS 对象路径**不再出现在任何响应里**。
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/tutoring/sessions/{sessionId}/transcript` |
+| Content-Type | `application/json` |
+| 需要登录 | 是（STUDENT 角色） |
+
+### 请求参数
+
+**Path**
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+|------|------|------|----------|------|
+| sessionId | Long | 是 | > 0 | 会话 ID |
+
+**无请求体。** 学生 id 从鉴权上下文取；服务端校验会话归属后才读 COS。
+
+### 响应参数
+
+成功时 `data` 返回 transcript 消息数组（结构与 COS transcript JSON 的 `messages` 一致，含 meta）：
 
 ```json
 {
-  "session_id": 1001,
-  "student_id": 501,
-  "status": "ARCHIVED",
-  "subject": "math",
-  "created_at": "2026-08-13T11:00:00",
-  "updated_at": "2026-08-13T12:00:00",
-  "messages": [
-    {
-      "role": "user",
-      "content": "鸡兔同笼怎么做",
-      "image_url": null,
-      "thinking": null,
-      "created_at": "2026-08-13T11:00:01"
-    },
-    {
-      "role": "ai",
-      "content": "先假设全是鸡……",
-      "image_url": null,
-      "thinking": "设 x 只兔……",
-      "created_at": "2026-08-13T11:00:10",
-      "type": "approach",
-      "denied": null,
-      "decide_reason": "学生第一次要思路，给分步引导",
-      "round": 1,
-      "question_kps": ["鸡兔同笼", "二元一次方程组"],
-      "eval": { "correct": false, "error_type": "equation_setup", "emotion": "CONFUSED", "exercise_complete": false },
-      "status": "ACTIVE"
-    }
-  ]
+  "code": "00000",
+  "message": "success",
+  "data": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "鸡兔同笼怎么做",
+        "image_url": null,
+        "thinking": null,
+        "created_at": "2026-08-13T11:00:01"
+      },
+      {
+        "role": "ai",
+        "content": "先假设全是鸡……",
+        "image_url": null,
+        "thinking": "设 x 只兔……",
+        "created_at": "2026-08-13T11:00:10",
+        "type": "approach",
+        "denied": null,
+        "decide_reason": "学生第一次要思路，给分步引导",
+        "round": 1,
+        "question_kps": ["鸡兔同笼", "二元一次方程组"],
+        "eval": { "correct": false, "error_type": "equation_setup", "emotion": "CONFUSED", "exercise_complete": false },
+        "status": "ACTIVE"
+      }
+    ]
+  }
 }
 ```
 
-### 消息项字段说明
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| messages | Array | 完整对话消息数组；**COS 对象缺失（未归档/B2 异步归档未完成/已删）→ 空数组 `[]`**（code 仍 00000，前端兜底 recentMessages） |
+
+### 请求示例
+
+**JavaScript (fetch):**
+```javascript
+const response = await fetch(`/api/tutoring/sessions/${sessionId}/transcript`, {
+  credentials: 'include'
+});
+const result = await response.json();
+// result.data.messages => [{ role, content, thinking, type, decide_reason, ... }]
+```
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 10004 | 未登录 | 未登录或 Session 过期 |
+| 20004 | 仅学生可访问 | 非 STUDENT 角色 |
+| 50002 | 会话不存在 | 会话不存在 / 非本人会话 / 已软删除 |
+
+> **COS 对象缺失 ≠ 50002**：会话存在且归属正确但对象未归档 → 返回空 `messages`；只有会话不存在/越权/已软删才 50002。
+
+---
+
+## 4. COS transcript 消息结构（含 meta）
+
+详情内容加载：前端调 `GET /sessions/{id}`（详情，返回 `status` + `recentMessages`，**不再含签名 `transcriptUrl`**），
+需要完整历史时调 `GET /sessions/{id}/transcript`（后端服务端读 COS 透传）。消息项结构（snake_case，可空）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -229,9 +283,10 @@ const result = await response.json();
 
 > **前端消费提示**：`toMessage` 已兼容 `decide_reason||decideReason`、`question_kps||questionKps`；`eval.exerciseComplete` 需兼容 snake_case `exercise_complete`（见设计 R2）。
 
-### transcriptUrl 为空时的兜底
+### transcript 为空时的兜底
 
-新会话仅首条用户消息（尚无 AI 回合）→ `transcriptUrl` 为空 → 前端回退 `GET /sessions/{id}` 的 `recentMessages`（Redis 热存）。
+新会话仅首条用户消息（尚无 AI 回合）→ COS 对象缺失 → `transcript` 接口返回空 `messages` → 前端回退
+`GET /sessions/{id}` 的 `recentMessages`（Redis 热存）；再失败回退 localStorage 离线兜底。
 
 ---
 
@@ -261,15 +316,19 @@ const result = await response.json();
 
 ### 1. Session 管理
 
-所有接口需登录，请求必须携带 `credentials: 'include'`（Session Cookie）。列表/删除的学生 id 均从服务端 Session 取，前端**无需也不应传 user_id**。
+所有接口需登录，请求必须携带 `credentials: 'include'`（Session Cookie）。列表/删除/transcript 的学生 id 均从服务端 Session 取，前端**无需也不应传 user_id**。
 
 ### 2. 列表刷新
 
 删除当前打开的会话后回到新建态并刷新列表；列表随 `updated_at` 变化倒序排列，会话有新轮次后需重新拉取。
 
-### 3. 详情内容 = COS transcript
+### 3. 详情内容 = transcript 后端代理
 
-历史详情以 `GET /sessions/{id}` 的 `transcriptUrl`（短时签名）为主数据源，即时 fetch；签名过期则重调 `GET /sessions/{id}` 刷新。`transcriptUrl` 为空或拉取失败时回退 `recentMessages`，再失败回退 localStorage 离线兜底。
+历史详情以 `GET /sessions/{id}/transcript` 为主数据源（后端服务端读 COS，无签名 URL、无跨域）。`messages` 为空或失败时回退 `GET /sessions/{id}` 的 `recentMessages`，再失败回退 localStorage 离线兜底。
+
+### 4. 前端零 COS 直连
+
+**不再 `fetch(transcriptUrl)`**——detail 已移除 `transcriptUrl` 字段。存储桶 CORS（B4）废弃，无需配置。
 
 ---
 

@@ -3,6 +3,8 @@ package com.ai.edu.application.service.learning;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.shared.service.FileStorageService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +58,32 @@ public class TutoringTranscriptArchiver {
         log.info("[tutoring] 对话整写 COS: objectKey={}, msgs={}, status={}",
                 objectKey, messages == null ? 0 : messages.size(), status);
         return objectKey;
+    }
+
+    /**
+     * 读取 COS transcript 消息列表（后端代理透传，见 `GET /sessions/{id}/transcript`）。
+     *
+     * @param studentId 学生 ID（归档路径按学生分目录，与 {@link #archive} 一致）
+     * @param sessionId 会话 ID
+     * @return 完整消息列表（含 meta，结构与 {@link #archive} 序列化一致）；对象缺失/未归档/反序列化失败 → 空列表
+     */
+    public List<TutoringChatMessage> readMessages(Long studentId, Long sessionId) {
+        String objectKey = TRANSCRIPT_DIR + "/" + studentId + "/" + sessionId + ".json";
+        byte[] content = fileStorageService.download(objectKey);
+        if (content == null) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(content);
+            JsonNode messages = root.get("messages");
+            if (messages == null || !messages.isArray()) {
+                return List.of();
+            }
+            return objectMapper.convertValue(messages, new TypeReference<List<TutoringChatMessage>>() {});
+        } catch (Exception e) {
+            log.warn("[tutoring] transcript 反序列化失败，返回空: objectKey={}", objectKey, e);
+            return List.of();
+        }
     }
 
     private byte[] buildTranscriptJson(Long studentId, Long sessionId, LocalDateTime createdAt,

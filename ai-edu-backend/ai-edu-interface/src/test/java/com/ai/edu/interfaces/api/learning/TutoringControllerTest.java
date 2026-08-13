@@ -4,12 +4,14 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
+import com.ai.edu.application.dto.learning.TutoringTranscriptDTO;
 import com.ai.edu.application.dto.learning.command.SendMessageCommand;
 import com.ai.edu.application.dto.learning.command.StartTutoringCommand;
 import com.ai.edu.application.service.learning.TutoringAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
+import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -189,6 +191,44 @@ class TutoringControllerTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> controller.getSession(SESSION_ID, new MockHttpSession()));
         assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
+    }
+
+    // ==================== getTranscript（COS 后端代理，同步） ====================
+
+    @Test
+    @DisplayName("getTranscript：登录 → 委托服务并包装 messages")
+    void getTranscript_delegates() {
+        TutoringChatMessage msg = TutoringChatMessage.ai("先找已知条件", "先考虑头数");
+        msg.setType("hint");
+        when(appService.getTranscript(eq(STUDENT_ID), eq(SESSION_ID))).thenReturn(List.of(msg));
+
+        ApiResponse<TutoringTranscriptDTO> response = controller.getTranscript(SESSION_ID, loginSession());
+
+        assertEquals(ErrorCode.SUCCESS, response.getCode());
+        assertEquals(1, response.getData().getMessages().size());
+        assertEquals("hint", response.getData().getMessages().get(0).getType());
+        verify(appService).getTranscript(STUDENT_ID, SESSION_ID);
+    }
+
+    @Test
+    @DisplayName("getTranscript：未登录 → 抛 10004")
+    void getTranscript_notLoggedIn() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.getTranscript(SESSION_ID, new MockHttpSession()));
+        assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
+        verify(appService, never()).getTranscript(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("getTranscript：非 STUDENT → 抛 20004")
+    void getTranscript_notStudentRole() {
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("userId", 999L);
+        session.setAttribute("role", "TEACHER");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.getTranscript(SESSION_ID, session));
+        assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
     }
 
     // ==================== listSessions / deleteSession（同步） ====================

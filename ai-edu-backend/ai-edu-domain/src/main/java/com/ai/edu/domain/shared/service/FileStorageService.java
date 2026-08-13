@@ -28,6 +28,14 @@ public interface FileStorageService {
     String uploadToObjectKey(String objectKey, byte[] content, String contentType);
 
     /**
+     * 读取对象内容（服务端读 COS，答疑 transcript 后端代理用）。
+     *
+     * @param objectKey 对象键，如 "tutoring/transcripts/1001.json"
+     * @return 对象内容字节；对象不存在（404/NoSuchKey）返回 {@code null}（调用方优雅降级，如空 transcript），其余异常抛错
+     */
+    byte[] download(String objectKey);
+
+    /**
      * 删除文件
      *
      * @param fileUrl 文件URL

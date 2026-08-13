@@ -30,9 +30,6 @@ public class TutoringProperties implements TutoringConfig {
     /** Python decide/recognize 失败重试次数（generate 流式不可重试） */
     private int agentRetry = 1;
 
-    /** transcript 签名 URL 有效期（分钟） */
-    private int transcriptUrlExpireMinutes = 30;
-
     /** 拍题 OCR 开关 */
     private Ocr ocr = new Ocr();
 
@@ -77,11 +74,6 @@ public class TutoringProperties implements TutoringConfig {
     @Override
     public Duration ocrTimeout() {
         return timeout.getOcr();
-    }
-
-    @Override
-    public int transcriptUrlExpireMinutes() {
-        return transcriptUrlExpireMinutes;
     }
 
     @Override

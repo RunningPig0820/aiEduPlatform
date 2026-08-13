@@ -46,7 +46,4 @@ public class TutoringSessionDTO implements Serializable {
 
     /** 收尾总结（结构化：知识点/薄弱点，可空） */
     private SummaryDTO summary;
-
-    /** COS 对话归档 objectKey（可空） */
-    private String transcriptUrl;
 }

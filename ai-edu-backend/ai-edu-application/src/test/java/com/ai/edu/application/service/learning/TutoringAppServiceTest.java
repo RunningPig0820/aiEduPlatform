@@ -30,11 +30,14 @@ import com.ai.edu.domain.learning.service.TutoringLlmPort;
 import com.ai.edu.domain.shared.service.FileStorageService;
 import com.ai.edu.domain.shared.service.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import org.mockito.ArgumentCaptor;
 
@@ -92,6 +95,8 @@ class TutoringAppServiceTest {
         service.setFileStorageService(fileStorageService);
         service.setTutoringConfig(TutoringConfig.defaults());
         service.setRedisService(redisService);
+        // B2 归档异步化：测试注入 immediate()，归档同步执行 → 现有 verify(transcriptArchiver.archive(...)) 不竞态
+        service.setArchiveScheduler(Schedulers.immediate());
 
         // 会话并发锁默认放行
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any())).thenReturn(true);
@@ -133,6 +138,30 @@ class TutoringAppServiceTest {
         verify(sessionRepository, atLeastOnce()).save(any()); // 建会话 + 更新计数
         verify(transcriptArchiver, atLeastOnce()).archive(any(), eq(SESSION_ID), any(), anyList(), any(), any());
         verify(sessionCache, never()).clear(eq(SESSION_ID)); // ACTIVE 不清理
+    }
+
+    @Test
+    @DisplayName("[B2] 归档异步提交：schedule 被调用、archive 未内联执行（SSE 不等待 COS 上传）")
+    void start_archivesAsync_nonBlocking() {
+        // mock 调度器只记录不执行 → transcriptArchiver.archive 绝不被同步调用
+        Scheduler archiveScheduler = mock(Scheduler.class);
+        service.setArchiveScheduler(archiveScheduler);
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "鸡兔同笼，共35头94脚，各几只？");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail) 前置
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory) 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+
+        // 归档提交到调度器（postDecide + doOnComplete 各一次），证明非阻塞，SSE 不等待 COS
+        verify(archiveScheduler, atLeast(2)).schedule(any(Runnable.class));
+        verify(transcriptArchiver, never()).archive(any(), any(), any(), anyList(), any(), any());
     }
 
     @Test
@@ -711,8 +740,8 @@ class TutoringAppServiceTest {
     // ==================== getSession / archive / mastery ====================
 
     @Test
-    @DisplayName("getSession: 断点恢复返回最近消息 + transcriptUrl 签名 URL")
-    void getSession_returnsRecentMessages() {
+    @DisplayName("getSession: 断点恢复返回最近消息（不再下发 transcriptUrl 签名 URL）")
+    void getSession_returnsRecentMessages() throws Exception {
         TutoringSession session = activeSessionInCache();
         session.updateTranscriptUrl("tutoring/transcripts/1001.json");
         when(sessionCache.listMessages(SESSION_ID)).thenReturn(List.of(
@@ -723,9 +752,65 @@ class TutoringAppServiceTest {
 
         assertEquals(SESSION_ID, dto.getSessionId());
         assertEquals(2, dto.getRecentMessages().size());
-        assertEquals("https://cos/tutoring/transcripts/1001.json", dto.getTranscriptUrl());
         // 断点恢复：AI 消息带 thinking（推理过程），供前端历史"思考过程"面板
         assertEquals("先考虑头数再算脚数差值", dto.getRecentMessages().get(1).getThinking());
+        // [T4] detail 响应不再含 transcriptUrl（签名 URL 不下发浏览器）
+        String json = new ObjectMapper().registerModule(new JavaTimeModule()).writeValueAsString(dto);
+        assertFalse(json.contains("transcriptUrl"), json);
+    }
+
+    // ==================== getTranscript（COS 后端代理） ====================
+
+    @Test
+    @DisplayName("getTranscript: 归属校验通过 → 读 COS 返回完整消息（含 meta）")
+    void getTranscript_returnsMessages() {
+        activeSessionInCache();
+        List<TutoringChatMessage> expected = List.of(TutoringChatMessage.user("鸡兔同笼"),
+                TutoringChatMessage.ai("先找已知条件", "先考虑头数再算脚数差值"));
+        when(transcriptArchiver.readMessages(eq(STUDENT_ID), eq(SESSION_ID))).thenReturn(expected);
+
+        List<TutoringChatMessage> messages = service.getTranscript(STUDENT_ID, SESSION_ID);
+
+        assertEquals(2, messages.size());
+        assertEquals(expected, messages);
+        verify(transcriptArchiver).readMessages(STUDENT_ID, SESSION_ID);
+    }
+
+    @Test
+    @DisplayName("getTranscript: COS 对象缺失（未归档/异步未完成）→ 空列表，非 50002")
+    void getTranscript_objectMissing_returnsEmpty() {
+        activeSessionInCache();
+        when(transcriptArchiver.readMessages(eq(STUDENT_ID), eq(SESSION_ID))).thenReturn(List.of());
+
+        List<TutoringChatMessage> messages = service.getTranscript(STUDENT_ID, SESSION_ID);
+
+        assertNotNull(messages);
+        assertTrue(messages.isEmpty());
+    }
+
+    @Test
+    @DisplayName("getTranscript: 越权（他人会话）→ 50002，不读 COS")
+    void getTranscript_ownershipRejected() {
+        TutoringSession session = TutoringSession.start(STUDENT_ID, "math");
+        session.setId(SESSION_ID);
+        when(sessionCache.findSession(SESSION_ID)).thenReturn(Optional.of(session));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.getTranscript(STUDENT_ID + 1, SESSION_ID));
+        assertEquals("50002", ex.getCode());
+        verify(transcriptArchiver, never()).readMessages(any(), any());
+    }
+
+    @Test
+    @DisplayName("getTranscript: 会话不存在 → 50002")
+    void getTranscript_sessionNotFound() {
+        when(sessionCache.findSession(SESSION_ID)).thenReturn(Optional.empty());
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.getTranscript(STUDENT_ID, SESSION_ID));
+        assertEquals("50002", ex.getCode());
+        verify(transcriptArchiver, never()).readMessages(any(), any());
     }
 
     @Test

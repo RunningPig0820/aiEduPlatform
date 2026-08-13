@@ -36,7 +36,4 @@ public final class TutoringConstants {
 
     /** OCR 调用超时 */
     public static final Duration OCR_TIMEOUT = Duration.ofSeconds(30);
-
-    /** transcript 签名 URL 有效期（分钟，对外读时经 generatePresignedUrl 现生成，避免死链接） */
-    public static final int TRANSCRIPT_URL_EXPIRE_MINUTES = 30;
 }

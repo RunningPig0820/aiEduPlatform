@@ -79,8 +79,17 @@
 | 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
 |---------|---------|---------|------|---------|
 | REG-001 | SSE 流不受影响 | 正常一轮 | start/sendMessage | meta/token/done 序列不变，护栏/轮次逻辑不变 |
-| REG-002 | getSession 不变 | 会话存在 | GET /sessions/{id} | 返回 recentMessages + 签名 transcriptUrl |
+| REG-002 | getSession 不再下发签名 URL | 会话存在 | GET /sessions/{id} | 返回 recentMessages；**不含 transcriptUrl**（签名 URL 不下发浏览器） |
 | REG-003 | Python 契约容忍 | AI 消息带 meta | 构造 DecideContext.history | Python 侧 Pydantic 忽略额外字段，decide 不中断（R1，跨仓验证） |
+
+### 3.6 transcript 后端代理（TRAN）
+
+| 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
+|---------|---------|---------|------|---------|
+| TRAN-001 | 正常-归属通过 | 会话存在（A 的，COS 有归档） | GET /sessions/1001/transcript（A 登录） | data.messages 完整（含 meta），结构与 COS 序列化一致 |
+| TRAN-002 | 正常-COS 对象缺失 | 会话存在但未归档 | GET /sessions/1001/transcript | data.messages=[]（code 00000，**非 50002**） |
+| TRAN-003 | 异常-越权 | B 登录访问 A 的会话 | GET /sessions/1001/transcript | code=50002，不读 COS |
+| TRAN-004 | 异常-会话不存在/已软删 | 无 9999 | GET /sessions/9999/transcript | code=50002 |
 
 ---
 
@@ -104,7 +113,8 @@
 | 消息 meta | 6 |
 | 会话标题 | 3 |
 | 回归 | 3 |
-| **总计** | **24** |
+| transcript 后端代理 | 4 |
+| **总计** | **28** |
 
 ---
 
@@ -116,6 +126,7 @@
 300-306  : META 消息 meta
 400-403  : TITLE 会话标题
 500-503  : REG  回归（含 Python 契约验证）
+600-603  : TRAN transcript 后端代理
 ```
 
 ---

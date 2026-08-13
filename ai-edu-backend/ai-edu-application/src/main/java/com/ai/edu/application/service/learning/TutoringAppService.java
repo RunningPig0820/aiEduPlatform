@@ -55,6 +55,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -151,6 +153,13 @@ public class TutoringAppService {
     @Setter(AccessLevel.PACKAGE)
     private RedisService redisService;
 
+    /** COS transcript 归档调度器：单线程 FIFO（先"部分写"、后"完整写"顺序执行，防止完整写被部分写覆盖）。
+     *  默认 daemon 单线程，SSE 响应不等待 COS 上传；测试注入 {@link Schedulers#immediate()} 保持
+     *  现有 {@code verify(transcriptArchiver.archive(...))} 同步断言不竞态。 */
+    private static final Scheduler DEFAULT_ARCHIVE_SCHEDULER = Schedulers.newSingle("tutoring-archive", true);
+    @Setter(AccessLevel.PACKAGE)
+    private Scheduler archiveScheduler = DEFAULT_ARCHIVE_SCHEDULER;
+
     // ==================== 对外入口 ====================
 
     /** 发起答疑（SSE，类型先行流式）：首条学生消息进历史 → decide → 护栏 → 建会话 → generate（文字题）。 */
@@ -238,8 +247,16 @@ public class TutoringAppService {
                         .imageUrl(m.getImageUrl()).thinking(m.getThinking()).createdAt(m.getCreatedAt()).build())
                 .toList();
         TutoringSessionDTO dto = assembler.toSessionDTO(session, recent, null);
-        resolveTranscriptUrl(dto);
         return dto;
+    }
+
+    /**
+     * 获取会话完整 transcript（后端代理读 COS，前端零 COS 直连）：归属校验 → 读 COS 反序列化消息。
+     * 对象缺失（未归档 / B2 异步归档未完成）→ 空列表（code 00000，非 50002），前端兜底 recentMessages。
+     */
+    public List<TutoringChatMessage> getTranscript(Long studentId, Long sessionId) {
+        TutoringSession session = loadSession(sessionId, studentId);  // 不存在/越权/已软删 → 50002
+        return transcriptArchiver.readMessages(session.getStudentId(), session.getId());
     }
 
     /** 会话历史列表：该学生全部会话（含已归档/终止，updated_at 倒序，不含软删）。 */
@@ -270,9 +287,7 @@ public class TutoringAppService {
             session.updateTranscriptUrl(objectKey);
             persistSession(session);
             sessionCache.clear(sessionId);
-            TutoringSessionDTO dto = assembler.toSessionDTO(session, null, null);
-            resolveTranscriptUrl(dto);
-            return dto;
+            return assembler.toSessionDTO(session, null, null);
         });
     }
 
@@ -481,8 +496,8 @@ public class TutoringAppService {
         tutoringSessionRepository.save(session);
         sessionCache.saveSession(session);
 
-        // 8. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）
-        archiveTranscript(session, history, action.getSummary());
+        // 8. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）——异步提交，首条 SSE 不等待 COS
+        archiveAsync(session, history, action.getSummary());
 
         // 9. 流式（agent 事件协议）：agent(guardrail) → meta → agent(generate) → token* → agent(memory) → done
         //     guardrail 事件在护栏通过后、generate 前；会话结束（ARCHIVED/TERMINATED）后清 Redis
@@ -657,7 +672,10 @@ public class TutoringAppService {
                                         .eval(action.getEval())
                                         .status(session.getStatus() == null ? null : session.getStatus().name())
                                         .build());
-                        archiveTranscript(session, sessionCache.listMessages(session.getId()), action.getSummary());
+                        // 异步归档：消息列表同步捕获（含刚 append 的 AI 消息），
+                        // 规避 clearCacheIfEnded 清缓存后异步重读为空
+                        List<TutoringChatMessage> completeMessages = sessionCache.listMessages(session.getId());
+                        archiveAsync(session, completeMessages, action.getSummary());
                     }
                 });
     }
@@ -756,7 +774,7 @@ public class TutoringAppService {
                                                           List<TutoringChatMessage> history) {
         guardrail.onEnd(session, EndReason.ROUND_LIMIT);
         persistSession(session);
-        archiveTranscript(session, history, action.getSummary());
+        archiveAsync(session, history, action.getSummary());
         SseMetaDTO meta = SseMetaDTO.builder()
                 .sessionId(session.getId()).status(session.getStatus().name())
                 .type("end").roundCount(session.getRoundCount())
@@ -814,6 +832,11 @@ public class TutoringAppService {
         }
     }
 
+    /** 归档异步化（B2 会话拆分修复）：提交到单线程调度器，SSE 响应不等待 COS 上传。 */
+    private void archiveAsync(TutoringSession session, List<TutoringChatMessage> messages, String summaryText) {
+        archiveScheduler.schedule(() -> archiveTranscript(session, messages, summaryText));
+    }
+
     private void clearCacheIfEnded(TutoringSession session) {
         if (session.getStatus() != null && session.getStatus() != TutoringState.ACTIVE) {
             sessionCache.clear(session.getId());
@@ -826,14 +849,6 @@ public class TutoringAppService {
                 config().createWindowMinutes(), config().createLimit());
         if (!allowed) {
             throw new BusinessException(ErrorCode.TUTORING_CREATE_FREQUENT, "创建会话过于频繁，请稍后再试");
-        }
-    }
-
-    /** transcriptUrl 为 COS objectKey，对外经 FileStorageService 生成短时签名 URL（读时现生成，避免死链接）。 */
-    private void resolveTranscriptUrl(TutoringSessionDTO dto) {
-        if (dto.getTranscriptUrl() != null && fileStorageService != null) {
-            dto.setTranscriptUrl(fileStorageService.generatePresignedUrl(
-                    dto.getTranscriptUrl(), config().transcriptUrlExpireMinutes()));
         }
     }
 

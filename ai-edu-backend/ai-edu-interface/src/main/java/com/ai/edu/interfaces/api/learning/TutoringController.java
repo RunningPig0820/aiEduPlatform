@@ -4,6 +4,7 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
+import com.ai.edu.application.dto.learning.TutoringTranscriptDTO;
 import com.ai.edu.application.dto.learning.command.SendMessageCommand;
 import com.ai.edu.application.dto.learning.command.StartTutoringCommand;
 import com.ai.edu.application.service.learning.TutoringAppService;
@@ -136,7 +137,7 @@ public class TutoringController {
     }
 
     /** 会话历史列表（全状态，updated_at 倒序，不含软删）。 */
-    @Operation(summary = "会话历史列表", description = "当前学生全部会话（含已归档/终止），updated_at 倒序；内容经 transcriptUrl 拉 COS")
+    @Operation(summary = "会话历史列表", description = "当前学生全部会话（含已归档/终止），updated_at 倒序；内容经 GET /sessions/{id}/transcript 后端代理拉取")
     @GetMapping("/sessions")
     public ApiResponse<List<TutoringSessionListItemDTO>> listSessions(HttpSession session) {
         Long studentId = TutoringAuth.requireStudent(session);
@@ -160,8 +161,18 @@ public class TutoringController {
         return ApiResponse.success(tutoringAppService.getSession(studentId, sessionId));
     }
 
+    /** 获取会话完整 transcript（后端代理读 COS，前端零 COS 直连）。 */
+    @Operation(summary = "获取会话 transcript", description = "后端服务端读 COS 透传消息数组（含 meta）；归属校验失败 50002，COS 对象缺失返回空 messages（前端兜底 recentMessages）")
+    @GetMapping("/sessions/{sessionId}/transcript")
+    public ApiResponse<TutoringTranscriptDTO> getTranscript(@PathVariable Long sessionId, HttpSession session) {
+        Long studentId = TutoringAuth.requireStudent(session);
+        return ApiResponse.success(TutoringTranscriptDTO.builder()
+                .messages(tutoringAppService.getTranscript(studentId, sessionId))
+                .build());
+    }
+
     /** 主动结束并归档会话（end_reason=ABANDONED，掌握度不提升 + COS 终态写）。 */
-    @Operation(summary = "结束并归档会话", description = "学生主动收尾，置 ARCHIVED 并回传 transcript 签名 URL")
+    @Operation(summary = "结束并归档会话", description = "学生主动收尾，置 ARCHIVED 并写 COS transcript 终态")
     @PostMapping("/sessions/{sessionId}/archive")
     public ApiResponse<TutoringSessionDTO> archive(@PathVariable Long sessionId, HttpSession session) {
         Long studentId = TutoringAuth.requireStudent(session);

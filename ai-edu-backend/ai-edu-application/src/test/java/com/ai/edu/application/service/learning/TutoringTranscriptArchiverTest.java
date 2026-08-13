@@ -96,4 +96,47 @@ class TutoringTranscriptArchiverTest {
         assertTrue(json.contains("二元一次方程组"), json);
         assertTrue(json.contains("\"status\":\"ARCHIVED\""), json);
     }
+
+    // ==================== readMessages（COS 后端代理透传） ====================
+
+    @Test
+    @DisplayName("readMessages: 读 COS 反序列化完整消息（含 meta），key 与归档路径一致")
+    void readMessages_parsesMessagesWithMeta() {
+        when(fileStorageService.download("tutoring/transcripts/501/1001.json"))
+                .thenReturn(("{\"session_id\":1001,\"student_id\":501,\"messages\":["
+                        + "{\"role\":\"user\",\"content\":\"鸡兔同笼\",\"thinking\":null,\"created_at\":\"2026-08-05T10:00:00\"},"
+                        + "{\"role\":\"ai\",\"content\":\"先找已知条件\",\"thinking\":\"先考虑头数再算脚数差值\","
+                        + "\"created_at\":\"2026-08-05T10:00:10\",\"type\":\"hint\",\"decide_reason\":\"给分步引导\","
+                        + "\"round\":1,\"question_kps\":[\"鸡兔同笼\"],\"status\":\"ACTIVE\"}]}").getBytes());
+
+        List<TutoringChatMessage> messages = archiver.readMessages(STUDENT_ID, SESSION_ID);
+
+        assertEquals(2, messages.size());
+        assertEquals("user", messages.get(0).getRole());
+        assertEquals("ai", messages.get(1).getRole());
+        // meta 往返不丢（transcript 后端透传的核心）：type/decide_reason/round/question_kps/status/thinking
+        assertEquals("hint", messages.get(1).getType());
+        assertEquals("给分步引导", messages.get(1).getDecideReason());
+        assertEquals(1, messages.get(1).getRound());
+        assertEquals(List.of("鸡兔同笼"), messages.get(1).getQuestionKps());
+        assertEquals("ACTIVE", messages.get(1).getStatus());
+        assertEquals("先考虑头数再算脚数差值", messages.get(1).getThinking());
+    }
+
+    @Test
+    @DisplayName("readMessages: COS 对象缺失（download=null）→ 空列表，不抛错")
+    void readMessages_objectMissing_returnsEmpty() {
+        when(fileStorageService.download("tutoring/transcripts/501/1001.json")).thenReturn(null);
+
+        assertTrue(archiver.readMessages(STUDENT_ID, SESSION_ID).isEmpty());
+    }
+
+    @Test
+    @DisplayName("readMessages: 反序列化失败（损坏 JSON）→ 空列表，不抛错")
+    void readMessages_corruptJson_returnsEmpty() {
+        when(fileStorageService.download("tutoring/transcripts/501/1001.json"))
+                .thenReturn("{\"session_id\":".getBytes());
+
+        assertTrue(archiver.readMessages(STUDENT_ID, SESSION_ID).isEmpty());
+    }
 }
