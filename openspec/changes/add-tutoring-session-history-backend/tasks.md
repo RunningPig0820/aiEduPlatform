@@ -24,4 +24,6 @@
 - [x] 4.1 单测：AI 消息 meta 填充与序列化、列表（全状态/排除软删/按用户隔离/倒序）、删除（软删+Redis 清+归属校验+越权拒绝）、title 生成
 - [x] 4.2 Python 契约验证（R1）：确认加 meta 后的 `DecideContext.history` 项 Python Pydantic 容忍（未开 `extra="forbid"`），decide 不中断
 - [x] 4.3 契约确认：`eval.exerciseComplete` 命名（R2）与前端对齐；列表项 `sessionId` 字段名与前端 `listSessions` 对齐
-- [ ] 4.4 集成验证：新会话一轮 → COS transcript 含 meta；列表/删除 E2E；历史工作流复原与 live 一致
+- [x] 4.4 集成验证：新会话一轮 → COS transcript 含 meta；列表/删除 E2E；历史工作流复原与 live 一致
+  - [x] 4.4a H2 自测（本仓）：`TutoringSessionRepositoryIntegrationTest`（7 例）——save insert/update、findById 聚合复原（title/计数/状态）、列表全状态+排除软删+按用户隔离+倒序、softDelete→is_deleted=1 各处不可见、updateTranscriptUrl、findActiveByStudentId。新增 `schema-learning.sql` + `TutoringInfrastructureConfig`（@DS 需 `AopAutoConfiguration`）
+  - [x] 4.4b live 环境残留：真实 COS transcript 含 meta、列表/删除 HTTP E2E、历史工作流复原与 live 一致（需起 MySQL/Redis/COS/Python）
