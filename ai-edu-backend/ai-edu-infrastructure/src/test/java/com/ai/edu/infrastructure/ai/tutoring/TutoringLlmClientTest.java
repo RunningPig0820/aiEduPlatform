@@ -2,6 +2,8 @@ package com.ai.edu.infrastructure.ai.tutoring;
 
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
+import com.ai.edu.domain.learning.model.contract.GenerateContext;
+import com.ai.edu.domain.learning.service.TutoringConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -13,6 +15,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,5 +93,29 @@ class TutoringLlmClientTest {
 
         StepVerifier.create(client.decideStream(DecideContext.builder().history(List.of()).build()))
                 .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("generate: 上游挂起无响应 → 超时包装为 TutoringAgentException（GENERATE_TIMEOUT 兜底，SSE 不无限停滞）")
+    void generate_hungStream_timesOut() {
+        // 注入短超时 config，模拟 Python generate 挂起（Flux.never 永不吐事件）。
+        // 回归：曾漏配 .timeout()，generate 挂起则 SSE 在 meta 后无限停滞 → 无 done、
+        // 前端刷新丢 sessionId（会话被拆成多个单轮孤儿的根因之一）。
+        TutoringConfig config = mock(TutoringConfig.class);
+        when(config.generateTimeout()).thenReturn(Duration.ofMillis(200));
+        when(config.generatePath()).thenReturn("/generate");
+
+        TutoringLlmClient client = buildClient(Flux.never());
+        ReflectionTestUtils.setField(client, "tutoringConfig", config);
+
+        StepVerifier.withVirtualTime(() ->
+                        client.generate(GenerateContext.builder().actionType("hint").history(List.of()).build()))
+                .expectSubscription()
+                .thenAwait(Duration.ofMillis(250))
+                .expectErrorSatisfies(e -> {
+                    assertEquals(TutoringAgentException.class, e.getClass());
+                    assertEquals("答疑生成服务暂不可用", e.getMessage());
+                })
+                .verify();
     }
 }

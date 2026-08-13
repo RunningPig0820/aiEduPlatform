@@ -69,6 +69,10 @@ public class TutoringLlmClient implements TutoringLlmPort {
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                 .doOnNext(event -> log.trace("[tutoring] generate SSE: {}", event.data()))
+                // 生成阶段必须有超时（GENERATE_TIMEOUT=60s）：缺省时 Python generate 挂起不报错，
+                // 下游 onErrorResume 不触发，SSE 在 meta 后无限停滞 → 无 done、AI 回复不入库，
+                // 前端等不到 done 刷新即丢 sessionId（会话拆分根因之一）。decide 有、此处漏配。
+                .timeout(config().generateTimeout())
                 .onErrorResume(e -> {
                     log.error("[tutoring] generate 调用失败: {}", e.getMessage(), e);
                     return Flux.error(new TutoringAgentException("答疑生成服务暂不可用", e));
