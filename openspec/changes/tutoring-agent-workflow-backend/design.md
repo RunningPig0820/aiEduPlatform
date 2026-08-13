@@ -107,3 +107,29 @@
 ## Open Questions
 
 无（与前端 change D2/D3/D4/D5 对齐；字段命名已定 `decideReason`）。
+
+---
+
+# 阶段二（2026-08-13）：契约冻结确认
+
+## Context
+
+前端阶段二（展示位重构：六阶段进气泡、每回合重置、SENDING live 走查）为纯前端重构，交接结论：**契约冻结，后端/模型端零改动**。阶段一（D1-D5）实现即阶段二所需的全部后端契约。
+
+## 冻结确认（对 D1-D5 的验证，已对照代码）
+
+| 决策 | 现状 |
+|---|---|
+| D1 decide filter `thinking + agent` | ✅ `TutoringAppService.orchestrate` 407 行，decide agent 事件按 Python 顺序原样透传 |
+| D2 `decideReason`（Python 理由） | ✅ buildMeta 无条件 set；`reason`（护栏 code）语义不变，仅拒绝时 set |
+| D3 `SseMasterySignalDTO` camelCase | ✅ `meta.masterySignals` 序列化为 `{kpLabel, signal}`（前端只读此字段，不再读 `meta.eval.masterySignals`） |
+| D4 `questionKps` | ✅ ActionMeta question_kps → SseMetaDTO，可空，前端占位"—" |
+
+## 新增硬性契约（前端阶段二依赖）
+
+**decide 事件时序稳定**：前端 SENDING 期连续消费 decide 阶段 agent 事件做 live 走查，序列 `perceive→analyze→plan→decide→meta` 不得重排、不得丢序。当前 filter 透传满足；后续改 decide 消费链路必须回归此序列。
+
+## Non-Goals（阶段二）
+
+- 不做任何后端 / Python 改动，不新增字段、不新增事件。
+- 不做展示位实现（属前端 `AgentTurnFlow` / live 管线）。

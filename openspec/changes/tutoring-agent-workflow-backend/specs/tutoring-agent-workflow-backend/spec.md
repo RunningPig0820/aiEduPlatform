@@ -52,3 +52,11 @@
 #### Scenario: 全字段带出
 - **WHEN** `buildMeta` 执行（放行或拒绝路径）
 - **THEN** meta 含 decideReason（Python 理由）、questionKps、masterySignals 对应值；拒绝路径额外含 denied/denied 轮 reason（护栏 code）
+
+### Requirement: decide 事件时序稳定（阶段二冻结契约）
+
+前端阶段二 SENDING 期连续消费 decide 阶段 agent 事件做 live 走查，系统 SHALL 保持 decide 阶段事件时序稳定：`agent(perceive) → agent(analyze) → agent(plan) → agent(decide) → meta`，不得重排或丢失。此为本变更 filter 透传的既有保证，阶段二前端依赖此顺序（见"阶段二契约冻结"结论，后端无新增改动）。
+
+#### Scenario: SENDING 期 live 走查按序消费
+- **WHEN** 前端处于 SENDING 期，连续消费 decide 阶段 agent 事件
+- **THEN** 事件按 perceive→analyze→plan→decide 顺序到达，meta 最后定型，无乱序/丢序导致"解析中"状态异常

@@ -88,3 +88,19 @@ agent(perceive) → agent(analyze) → agent(plan) → [thinking*] → agent(dec
 ## 常见错误
 
 不变（见 `tutoring-agent-events/api.md`）：00000/50002/50003/50004/50005/50006/401。
+
+---
+
+## 4. 阶段二契约冻结确认（2026-08-13）
+
+前端阶段二（展示位重构：六阶段进气泡 + SENDING live 走查）为纯前端重构，**本契约冻结，无新增字段/事件**。前端消费的契约项全部已生效：
+
+| 契约项 | 前端用途 | 状态 |
+|---|---|---|
+| decide agent 事件透传（1 节） | SENDING 期"解析意图…"live | ✅ |
+| `meta.decideReason`（2.1） | ①决策行 hover | ✅ |
+| `meta.questionKps`（2.2） | ②知识点分析 | ✅ |
+| `meta.masterySignals`（2.2） | KpChips | ✅ |
+| `meta.type/denied/eval/status` | 各阶段点亮判定 | ✅ |
+
+> **唯一依赖**：decide 事件时序稳定 `perceive→analyze→plan→decide→meta`（见 1 节序列）。前端 SENDING 期按此顺序连续消费，勿重排/丢序。

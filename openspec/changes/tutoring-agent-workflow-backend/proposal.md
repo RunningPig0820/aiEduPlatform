@@ -34,3 +34,32 @@
 - **测试**：`TutoringAppServiceTest.sendMessage_decideThinkingRelayedFirst` 需更新（decide agent 事件透传断言）+ meta 新字段断言。
 - **契约文档**：`openspec/changes/tutoring-agent-events/api.md`。
 - **Python（配套，独立部署）**：decide meta 增加 `question_kps`（见前端 change tasks 2.1，不在本变更范围；Python 未下发时 Java 透传 null，前端显示占位"—"）。
+
+---
+
+# 阶段二（2026-08-13）：展示位重构 · 契约冻结确认
+
+## Why
+
+前端 `show-tutoring-agent-workflow` 阶段二把 agent 工作流六阶段从顶部独立面板移入**每个 AI 回答气泡内**（每回合重置走一遍），并新增 SENDING 期 live 走查（替换打字指示）。前端交接结论：**契约冻结，后端与模型端无需任何改动** —— 本变更已实现的契约完全覆盖阶段二全部需求，阶段二是纯前端重构。
+
+## What（对后端：无改动）
+
+前端交接表逐项确认（已对照当前代码核对）：
+
+| 契约项 | 前端用途 | 现状 |
+|---|---|---|
+| decide 阶段 agent 事件 perceive/analyze/plan/decide 透传 | SENDING 期实时展示"解析意图…"（①意图分类处理中） | ✅ `orchestrate` filter 已放行 thinking + agent |
+| `meta.decideReason`（Python 决策自由文本） | ①决策行的 hover 补充说明 | ✅ buildMeta 无条件带出 |
+| `meta.questionKps`（List,可空） | ②知识点分析，每回合展示 | ✅ ActionMeta question_kps → SseMetaDTO |
+| `meta.masterySignals` | 知识点 chips（KpChips） | ✅ SseMasterySignalDTO camelCase {kpLabel, signal} |
+| `meta.type/denied/eval/status` | ①③④⑤⑥ 各阶段点亮判定 | ✅ 既有字段 |
+
+## 唯一新增依赖：decide 事件时序稳定
+
+前端 SENDING 期会连续消费 decide 阶段 agent 事件做 live 走查，**事件时序（perceive→analyze→plan→decide→meta）稳定**成为硬性契约。当前 filter 原样透传保持 Python 顺序，已满足；后续任何改动不得重排/丢序。
+
+## Impact（阶段二）
+
+- **无代码改动**（Java / Python 均不动）；仅本 change 文档固化契约冻结结论。
+- 无迁移/回滚动作。
