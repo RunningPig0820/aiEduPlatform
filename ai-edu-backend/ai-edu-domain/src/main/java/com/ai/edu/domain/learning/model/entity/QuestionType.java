@@ -61,4 +61,20 @@ public class QuestionType {
     public void setId(Long id) {
         this.id = id;
     }
+
+    /** 更新聚合统计（hit_students/hit_count），供聚合任务回写。 */
+    public void updateStats(Integer hitStudents, Integer hitCount) {
+        this.hitStudents = hitStudents == null ? 0 : hitStudents;
+        this.hitCount = hitCount == null ? 0 : hitCount;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 审核通过升 STABLE（可补 definition）。 */
+    public void promoteToStable(String definition) {
+        this.status = QuestionTypeStatus.STABLE;
+        if (definition != null && !definition.isBlank()) {
+            this.definition = definition;
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
 }

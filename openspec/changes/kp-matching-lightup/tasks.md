@@ -16,13 +16,14 @@
 - [x] 2.5 学生澄清交互：低置信/歧义生成学科概念选项（不暴露 kp_uri），学生选择落 `source=student_vote` 观测，跳过弃权
 - [x] 2.6 冷启动弱化：题型库无先验时首条 LLM 消歧标 `WEAK`，不点亮；第二独立信号（做题结果/共现/学生投票）才转 RESOLVED
 
-## 3. 题型库聚合
+## 3. 题型库聚合（离线批处理 · 大数据归宿 → `batch` 包）
 
-- [ ] 3.1 聚合任务：扫描 obs → 按 topic_label 聚合并按 kp 拆分年级分布桶 → 达阈值建 CANDIDATE
-- [ ] 3.2 CANDIDATE 升 STABLE 逻辑（≥10 学生 + 近 30 天增长 + 审核），STABLE 条目可补 definition
-- [ ] 3.3 题型库分布桶 `ratio` 计算，供解析管线②作先验
+- [x] 3.0 离线逻辑剥离：聚合逻辑独立到 `application.service.batch` 包 + `package-info.java` 标注「逻辑归宿=大数据平台，当前后端 @Scheduled 过渡实现」（design Decision 11）
+- [x] 3.1 聚合任务：扫描 obs → 按 topic_label 聚合并按 kp 拆分年级分布桶 → 达阈值建 CANDIDATE
+- [x] 3.2 CANDIDATE 升 STABLE 逻辑（≥10 学生 + 近 30 天增长 + 审核），STABLE 条目可补 definition
+- [x] 3.3 题型库分布桶 `ratio` 计算，供解析管线②作先验
 
-## 4. 自动维护闭环
+## 4. 自动维护闭环（离线批处理 · 大数据归宿 → `batch` 包）
 
 - [ ] 4.1 冲突检测：decide 诊断 vs obs 冲突、掌握度矛盾、年级分布异常、低置信、做题结果矛盾 → 打 `CONFLICTED`
 - [ ] 4.2 周期重判任务（`@Scheduled`）：年级锚 + 先验 + LLM 重判（多模型/多温度交叉）→ 高置信自动更新（obs + 题型库统计回流）

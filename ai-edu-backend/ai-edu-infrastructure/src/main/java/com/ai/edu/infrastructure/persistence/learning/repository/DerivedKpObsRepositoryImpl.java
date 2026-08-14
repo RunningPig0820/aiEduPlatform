@@ -51,4 +51,9 @@ public class DerivedKpObsRepositoryImpl implements DerivedKpObsRepository {
     public List<DerivedKpObs> findByTopicLabel(String topicLabel) {
         return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectByTopicLabel(topicLabel));
     }
+
+    @Override
+    public List<DerivedKpObs> findResolved() {
+        return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectResolved());
+    }
 }

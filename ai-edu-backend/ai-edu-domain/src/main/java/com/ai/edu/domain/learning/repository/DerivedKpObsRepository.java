@@ -27,4 +27,9 @@ public interface DerivedKpObsRepository {
      * 按题型 label 查观测（供聚合任务统计）。
      */
     List<DerivedKpObs> findByTopicLabel(String topicLabel);
+
+    /**
+     * 查全部已解析观测（kp_uri 非空，供聚合任务扫描）。
+     */
+    List<DerivedKpObs> findResolved();
 }

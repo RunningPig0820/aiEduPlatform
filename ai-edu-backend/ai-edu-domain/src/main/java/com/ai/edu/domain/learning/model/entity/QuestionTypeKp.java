@@ -61,4 +61,13 @@ public class QuestionTypeKp {
     public void setId(Long id) {
         this.id = id;
     }
+
+    /** 更新分布桶统计（hit_students/hit_count/ratio/grade_range），供聚合任务回写。 */
+    public void updateStats(Integer hitStudents, Integer hitCount, Double ratio, String gradeRange) {
+        this.hitStudents = hitStudents == null ? 0 : hitStudents;
+        this.hitCount = hitCount == null ? 0 : hitCount;
+        this.ratio = ratio == null ? 0.0 : ratio;
+        this.gradeRange = gradeRange;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

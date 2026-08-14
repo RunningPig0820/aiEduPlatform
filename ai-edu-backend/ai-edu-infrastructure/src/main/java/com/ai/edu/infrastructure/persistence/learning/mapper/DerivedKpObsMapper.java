@@ -46,4 +46,8 @@ public interface DerivedKpObsMapper extends BaseMapper<DerivedKpObsPo> {
     /** 按题型 label 查观测（供聚合任务统计）。 */
     @Select("SELECT * FROM t_kp_derived_obs WHERE topic_label = #{topicLabel} AND is_deleted = false ORDER BY id")
     List<DerivedKpObsPo> selectByTopicLabel(@Param("topicLabel") String topicLabel);
+
+    /** 查全部已解析观测（kp_uri 非空，供聚合任务扫描）。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE kp_uri IS NOT NULL AND is_deleted = false ORDER BY id")
+    List<DerivedKpObsPo> selectResolved();
 }
