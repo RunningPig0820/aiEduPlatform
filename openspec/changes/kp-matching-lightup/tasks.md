@@ -15,6 +15,7 @@
 - [x] 2.4 解析结果写 `t_kp_derived_obs`（同生+同题型+同 kp 去重递增 occurrence_count）
 - [x] 2.5 学生澄清交互：低置信/歧义生成学科概念选项（不暴露 kp_uri），学生选择落 `source=student_vote` 观测，跳过弃权
 - [x] 2.6 冷启动弱化：题型库无先验时首条 LLM 消歧标 `WEAK`，不点亮；第二独立信号（做题结果/共现/学生投票）才转 RESOLVED
+- [x] 2.7 obs 接入答疑主流程：`applyMasteryAndErrors` 升级 `resolve(label, studentId)`，掌握度取 status/confidence（不再硬编码 RESOLVED）
 
 ## 3. 题型库聚合（离线批处理 · 大数据归宿 → `batch` 包）
 
@@ -31,9 +32,10 @@
 
 ## 5. 接口层
 
-- [ ] 5.1 `MasteryItemDTO` 增加 `status`(RESOLVED/PENDING) + `confidence`，`StudentMasteryController` 返回
-- [ ] 5.2 新增 `POST /api/kp/resolve`（label + student_grade → {uri, label, confidence, status}）
-- [ ] 5.3 新增 `GET /api/kg/aliases/pending` + `POST /api/kg/aliases/pending/{id}/confirm`（ADMIN/TEACHER）
+- [x] 5.1 `MasteryItemDTO` 增加 `status`(RESOLVED/PENDING) + `confidence`，`StudentMasteryController` 返回
+- [x] 5.2 新增 `POST /api/kp/resolve`（label + student_grade → {uri, label, confidence, status}）
+- [x] 5.3 新增 `GET /api/kg/aliases/pending` + `POST /api/kg/aliases/pending/{id}/confirm`（ADMIN/TEACHER）
+- [x] 5.4 新增 `GET /api/students/{id}/pending-kps`（学生端疑似观测清单，PENDING/WEAK，越权校验）
 
 ## 6. 前端：学生端图谱点亮
 
@@ -44,7 +46,7 @@
 
 ## 7. 测试
 
-- [ ] 7.1 解析管线单测（镜像命中/题型库年级匹配/LLM 消歧/低置信挂起）
-- [ ] 7.2 观测去重计数 + 聚合阈值 + 维护重判单测
-- [ ] 7.3 接口测试（mastery 增强字段、resolve、pending 确认、权限）
-- [ ] 7.4 权威图零写入断言（聚合/维护后 Neo4j 与镜像无变更）
+- [x] 7.1 解析管线单测（镜像命中/题型库年级匹配/LLM 消歧/低置信挂起）
+- [x] 7.2 观测去重计数 + 聚合阈值 + 维护重判单测
+- [x] 7.3 接口测试（mastery 增强字段、resolve、pending 确认、权限）
+- [x] 7.4 权威图零写入断言（聚合/维护后 Neo4j 与镜像无变更）

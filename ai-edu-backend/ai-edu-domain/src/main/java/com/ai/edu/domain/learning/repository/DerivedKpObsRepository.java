@@ -48,4 +48,11 @@ public interface DerivedKpObsRepository {
      * 统计同题型同知识点的去重学生数（第二信号共现检测）。
      */
     int countDistinctStudentsByTopicAndKp(String topicLabel, String kpUri);
+
+    /**
+     * 人工确认挂起观测归属：更新 kp_uri + source=curated + status=RESOLVED。
+     *
+     * @return 影响行数（0 表示观测不存在或已处理）
+     */
+    int confirm(Long id, String kpUri);
 }

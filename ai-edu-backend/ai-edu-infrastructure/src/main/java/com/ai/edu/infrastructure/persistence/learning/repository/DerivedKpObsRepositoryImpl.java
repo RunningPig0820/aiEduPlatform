@@ -72,4 +72,9 @@ public class DerivedKpObsRepositoryImpl implements DerivedKpObsRepository {
     public int countDistinctStudentsByTopicAndKp(String topicLabel, String kpUri) {
         return derivedKpObsMapper.countDistinctStudentsByTopicKp(topicLabel, kpUri);
     }
+
+    @Override
+    public int confirm(Long id, String kpUri) {
+        return derivedKpObsMapper.confirm(id, kpUri);
+    }
 }

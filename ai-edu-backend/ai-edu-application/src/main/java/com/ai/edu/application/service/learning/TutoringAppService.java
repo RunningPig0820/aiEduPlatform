@@ -23,16 +23,19 @@ import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
+import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.ActionType;
 import com.ai.edu.domain.learning.model.valueobject.EndReason;
 import com.ai.edu.domain.learning.model.valueobject.KpKey;
+import com.ai.edu.domain.learning.model.valueobject.KpResolution;
 import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
 import com.ai.edu.domain.learning.model.valueobject.TutoringConstants;
 import com.ai.edu.domain.learning.model.valueobject.TutoringEmotion;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
+import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
@@ -64,6 +67,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -119,6 +123,9 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private StudentKpMasteryRepository masteryRepository;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private DerivedKpObsRepository derivedKpObsRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private ErrorEventRepository errorEventRepository;
@@ -291,18 +298,29 @@ public class TutoringAppService {
         });
     }
 
-    /** 查询学生知识点掌握度（图谱叠加数据源）。 */
+    /** 查询学生知识点掌握度（图谱叠加数据源）。status/confidence 从派生观测关联（掌握度表只存确定的）。 */
     public StudentMasteryDTO getStudentMastery(Long studentId) {
         List<StudentKpMastery> list = masteryRepository.findByStudentId(studentId);
+        Map<String, Integer> confidenceByKp = derivedKpObsRepository.findByStudentId(studentId).stream()
+                .filter(o -> o.getKpUri() != null)
+                .collect(Collectors.toMap(
+                        DerivedKpObs::getKpUri,
+                        DerivedKpObs::getConfidence,
+                        Math::max));
         return StudentMasteryDTO.builder()
                 .studentId(studentId)
                 .items(list.stream()
-                        .map(m -> MasteryItemDTO.builder()
-                                .kpKey(m.getKpKey() == null ? null : m.getKpKey().getValue())
-                                .kpLabel(m.getKpLabel())
-                                .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
-                                .updatedAt(m.getUpdatedAt())
-                                .build())
+                        .map(m -> {
+                            String kpKey = m.getKpKey() == null ? null : m.getKpKey().getValue();
+                            return MasteryItemDTO.builder()
+                                    .kpKey(kpKey)
+                                    .kpLabel(m.getKpLabel())
+                                    .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
+                                    .status("RESOLVED")
+                                    .confidence(confidenceByKp.get(kpKey))
+                                    .updatedAt(m.getUpdatedAt())
+                                    .build();
+                        })
                         .toList())
                 .build();
     }
@@ -570,12 +588,12 @@ public class TutoringAppService {
                 if (item.getKpLabel() == null || item.getKpLabel().isBlank()) {
                     continue;
                 }
-                String uri = kpResolver.resolveLabelToUri(item.getKpLabel());
-                if (uri == null) {
+                KpResolution resolution = kpResolver.resolve(item.getKpLabel(), session.getStudentId());
+                if (!resolution.isResolved() || resolution.getUri() == null) {
                     log.warn("[tutoring] 知识点 label 未命中 URI，不点亮: {}", item.getKpLabel());
                     continue;
                 }
-                KpKey kpKey = KpKey.of(uri);
+                KpKey kpKey = KpKey.of(resolution.getUri());
                 MasterySignal signal = MasterySignal.fromCode(item.getKpLabel(), item.getSignal());
                 StudentKpMastery mastery = masteryRepository.findByStudentAndKp(session.getStudentId(), kpKey)
                         .orElseGet(() -> StudentKpMastery.create(session.getStudentId(), kpKey, item.getKpLabel()));

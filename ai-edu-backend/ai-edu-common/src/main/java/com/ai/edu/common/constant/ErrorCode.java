@@ -45,6 +45,7 @@ public final class ErrorCode {
     public static final String TUTORING_CREATE_FREQUENT = "50004";
     public static final String TUTORING_AGENT_FAILED = "50005";
     public static final String TUTORING_OCR_INVALID = "50006";
+    public static final String KP_OBS_NOT_FOUND = "50007";
 
     // LLM模块 6xxxx
     public static final String LLM_SERVICE_UNAVAILABLE = "60001";

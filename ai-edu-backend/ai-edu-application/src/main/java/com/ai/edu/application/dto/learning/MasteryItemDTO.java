@@ -31,6 +31,12 @@ public class MasteryItemDTO implements Serializable {
     /** 掌握度分值 0-100 */
     private Integer masteryLevel;
 
+    /** 解析状态：RESOLVED（确定）/ PENDING（疑似待确认） */
+    private String status;
+
+    /** 解析置信度 0-100（从派生观测关联） */
+    private Integer confidence;
+
     /** 更新时间 */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;

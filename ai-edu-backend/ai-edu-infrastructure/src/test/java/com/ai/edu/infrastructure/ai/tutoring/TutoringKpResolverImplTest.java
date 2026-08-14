@@ -1,77 +1,132 @@
 package com.ai.edu.infrastructure.ai.tutoring;
 
-import com.ai.edu.infrastructure.persistence.edukg.mapper.KgKnowledgePointMapper;
-import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
-import com.ai.edu.infrastructure.persistence.edukg.util.EntityFactory;
+import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
+import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
+import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.service.KpDisambiguationPort;
+import com.ai.edu.domain.organization.repository.ClassRepository;
+import com.ai.edu.domain.organization.repository.StudentClassRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * 知识点 label → TextbookKP URI 解析实现单测（mock kg 镜像 Mapper）。
+ * 知识点解析管线单测（mock 依赖，验证 ① 镜像精确/LIKE → ② 题型库 → ③ LLM 消歧 → ④ 挂起）。
  */
 class TutoringKpResolverImplTest {
 
-    private static final String KP_URI = "http://edukg.org/knowledge/3.1/textbook/kp1";
+    private static final String KP_URI = "http://edukg.org/knowledge/3.1/kp/math#jsfa";
+    private static final Long STUDENT_ID = 101L;
 
     private TutoringKpResolverImpl resolver;
-    private KgKnowledgePointMapper kgKnowledgePointMapper;
+    private KgKnowledgePointRepository kgRepository;
+    private QuestionTypeRepository questionTypeRepository;
+    private QuestionTypeKpRepository questionTypeKpRepository;
+    private StudentClassRepository studentClassRepository;
+    private ClassRepository classRepository;
+    private DerivedKpObsRepository obsRepository;
+    private KpDisambiguationPort disambiguationPort;
 
     @BeforeEach
     void setUp() {
-        kgKnowledgePointMapper = mock(KgKnowledgePointMapper.class);
+        kgRepository = mock(KgKnowledgePointRepository.class);
+        questionTypeRepository = mock(QuestionTypeRepository.class);
+        questionTypeKpRepository = mock(QuestionTypeKpRepository.class);
+        studentClassRepository = mock(StudentClassRepository.class);
+        classRepository = mock(ClassRepository.class);
+        obsRepository = mock(DerivedKpObsRepository.class);
+        disambiguationPort = mock(KpDisambiguationPort.class);
         resolver = new TutoringKpResolverImpl();
-        setField(resolver, "kgKnowledgePointMapper", kgKnowledgePointMapper);
+        setField(resolver, "kgKnowledgePointRepository", kgRepository);
+        setField(resolver, "questionTypeRepository", questionTypeRepository);
+        setField(resolver, "questionTypeKpRepository", questionTypeKpRepository);
+        setField(resolver, "studentClassRepository", studentClassRepository);
+        setField(resolver, "classRepository", classRepository);
+        setField(resolver, "derivedKpObsRepository", obsRepository);
+        setField(resolver, "kpDisambiguationPort", disambiguationPort);
+        setField(resolver, "confidenceThreshold", 60);
     }
 
     @Test
-    @DisplayName("精确匹配命中 → 返回 URI")
+    @DisplayName("镜像精确命中 → RESOLVED，confidence=100，不调 LLM")
     void exactMatch() {
-        when(kgKnowledgePointMapper.selectByLabel("二元一次方程组")).thenReturn(kp(KP_URI));
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
 
-        String uri = resolver.resolveLabelToUri("二元一次方程组");
+        KpResolution r = resolver.resolve("二元一次方程组", STUDENT_ID);
 
-        assertEquals(KP_URI, uri);
-        verify(kgKnowledgePointMapper, never()).selectByLabelLike(anyString());
+        assertEquals(KpResolution.STATUS_RESOLVED, r.getStatus());
+        assertEquals(KP_URI, r.getUri());
+        assertEquals(100, r.getConfidence());
+        verify(disambiguationPort, never()).disambiguate(anyString(), any());
     }
 
     @Test
-    @DisplayName("精确未命中 → LIKE 模糊命中 → 返回 URI")
+    @DisplayName("镜像 LIKE 命中 → RESOLVED，confidence=80")
     void likeMatchFallback() {
-        when(kgKnowledgePointMapper.selectByLabel("二元一次方程组")).thenReturn(null);
-        when(kgKnowledgePointMapper.selectByLabelLike("二元一次方程组")).thenReturn(kp(KP_URI));
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike("二元一次方程组")).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
 
-        String uri = resolver.resolveLabelToUri("二元一次方程组");
+        KpResolution r = resolver.resolve("二元一次方程组", STUDENT_ID);
 
-        assertEquals(KP_URI, uri);
+        assertEquals(KpResolution.STATUS_RESOLVED, r.getStatus());
+        assertEquals(KP_URI, r.getUri());
+        assertEquals(80, r.getConfidence());
     }
 
     @Test
-    @DisplayName("精确/LIKE 均未命中 → null（待收录，不点亮）")
-    void noMatch() {
-        when(kgKnowledgePointMapper.selectByLabel(anyString())).thenReturn(null);
-        when(kgKnowledgePointMapper.selectByLabelLike(anyString())).thenReturn(null);
+    @DisplayName("镜像未命中 → LLM 消歧高置信 → 冷启动 WEAK")
+    void llmDisambiguateColdStart() {
+        when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike(anyString())).thenReturn(Optional.empty());
+        when(disambiguationPort.disambiguate("鸡兔同笼", null))
+                .thenReturn(KpResolution.resolved("鸡兔同笼", KP_URI, "假设法", 88));
 
-        assertNull(resolver.resolveLabelToUri("不存在的知识点"));
+        KpResolution r = resolver.resolve("鸡兔同笼", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_RESOLVED, r.getStatus());
+        assertEquals(KP_URI, r.getUri());
+        assertEquals(88, r.getConfidence());
+        // 冷启动（题型库无先验）→ 观测标 WEAK
+        verify(obsRepository).upsert(argThat(o -> "WEAK".equals(o.getStatus().name())));
     }
 
     @Test
-    @DisplayName("空 label → 直接 null，不查库")
+    @DisplayName("LLM 低置信/无候选 → PENDING，携带候选")
+    void lowConfidencePending() {
+        when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLikeList("牛吃草")).thenReturn(List.of(kp(KP_URI, "假设法")));
+        when(disambiguationPort.disambiguate("牛吃草", null)).thenReturn(null);
+
+        KpResolution r = resolver.resolve("牛吃草", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
+        assertNull(r.getUri());
+        assertFalse(r.getCandidates().isEmpty());
+        verify(obsRepository).upsert(argThat(o -> "PENDING".equals(o.getStatus().name())));
+    }
+
+    @Test
+    @DisplayName("空 label → PENDING，不查库")
     void blankLabel() {
-        assertNull(resolver.resolveLabelToUri(null));
-        assertNull(resolver.resolveLabelToUri("  "));
-        verify(kgKnowledgePointMapper, never()).selectByLabel(anyString());
+        KpResolution r = resolver.resolve("  ", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
+        verify(kgRepository, never()).findByLabel(anyString());
     }
 
-    private KgKnowledgePointPo kp(String uri) {
-        KgKnowledgePointPo po = EntityFactory.create(KgKnowledgePointPo.class);
-        setField(po, "uri", uri);
-        return po;
+    private KgKnowledgePoint kp(String uri, String label) {
+        return KgKnowledgePoint.create(uri, label);
     }
 
     private void setField(Object target, String fieldName, Object value) {

@@ -147,13 +147,14 @@
 
 **决策**：掌握度显示 = 掌握值 × 置信档位两维。
 
-| 场景 | 掌握值 | 置信档位 | 前端视觉 |
+| 档位（MasteryLevel 五档） | 掌握值 | 语义 | 前端视觉 |
 |---|---|---|---|
-| 解析成功 + mastered | 75 | 确定 | 🟢 绿 |
-| 解析成功 + practicing | 50 | 确定 | 🟡 黄 |
-| 解析成功 + struggling | 25 | 确定 | 🔴 红 |
-| 解析成功但低置信 | 照落 | **疑似** | 半透明/虚线 |
-| 解析失败/挂起 | **不落掌握度** | **疑似** | ⚪ 虚线 +「待确认」角标 |
+| notStarted | 0 | 未开始（还没学） | ⚪ 中性灰 |
+| beginner | 25 | 入门/薄弱 | 🔴 红 |
+| intermediate | 50 | 进阶/练习中 | 🟡 黄 |
+| advanced | 75 | 高级/掌握 | 🟢 绿 |
+| master | 100 | 精通 | 🟢 深绿 |
+| 解析低置信/挂起 | — | **疑似** | ⚪ 虚线 +「待确认」角标 |
 
 - 挂起 label **不落掌握度**（不污染数据），前端渲染"疑似薄弱"待确认态。
 - `MasteryItemDTO` 增加 `status`(RESOLVED/PENDING) + `confidence`；前端再叠加 obs 的 PENDING 列表渲染疑似节点。
@@ -213,6 +214,15 @@
 
 **理由**：聚合/维护本质是离线批处理（不要求实时、obs 无限长尾），理想归宿是大数据平台；当前项目纯 Java DDD 后端未接大数据，故先以 @Scheduled 过渡。数据表（obs/题型库）为中性结构，大数据可直接读写，未来迁移只需替换 batch 包，在线解析管线②与数据表不变。
 
+### 12. 学生端疑似接口 + obs 接入答疑主流程
+
+**决策**：补两个前端对接暴露的缺口：
+
+1. **学生端疑似接口** `GET /api/students/{id}/pending-kps`：返回该生 `status=PENDING/WEAK` 的派生观测（学生权限，studentId 必须等于会话 userId）。学生端"待确认清单"（疑似薄弱点）的数据源。
+2. **obs 接入答疑主流程**：`applyMasteryAndErrors` 升级为调用 `resolve(label, session.getStudentId())`（替代 `resolveLabelToUri` 的 default 兼容路径），使解析产生 obs、年级锚生效；掌握度写入同步取 status/confidence（不再硬编码 RESOLVED）。
+
+**理由**：前端对接暴露两个断层——(a) `getMastery` 硬编码 RESOLVED，学生拿不到自己的疑似点（现有 pending 接口是 ADMIN/TEACHER 专属且返回全体）；(b) 灰度遗留：`resolveLabelToUri` 传 null，obs 派生层未接进答疑主流程，题型库聚合/维护闭环无输入数据。
+
 ## Risks / Trade-offs
 
 - [冷启动种子依赖 LLM] → 题型库空时第一次关联只能靠 LLM。缓解：学生澄清意图（可选）+ 单学科（数学）+ label 接地（复用 mastery_snapshot 已知 label）降噪。
@@ -239,3 +249,4 @@
 3. **聚合阈值初值**：CANDIDATE≥3 / STABLE≥10（默认采纳，可配置）。
 4. **掌握度自动迁移**：本期只打标，是否后续做自动迁移？（默认：本期不做）。
 5. **消费方**（变式题/错题分组）本期不做，题型库先沉淀数据。
+6. **澄清卡数据契约**：候选概念 + 低置信状态从哪来——SSE meta 扩展，还是前端单独调 `POST /api/kp/resolve`？（默认：前端单独调 /api/kp/resolve，接口已返回 candidates，不改 decide meta + Python 契约）。
