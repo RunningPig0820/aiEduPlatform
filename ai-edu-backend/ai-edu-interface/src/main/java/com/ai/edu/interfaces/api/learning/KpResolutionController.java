@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
+import lombok.Data;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,5 +36,25 @@ public class KpResolutionController {
         }
         Long studentId = TutoringAuth.currentStudentId(session);
         return ApiResponse.success(kpAppService.resolve(request.getLabel(), studentId));
+    }
+
+    /** POST /api/kp/vote — 学生澄清投票（选"你想学哪个"），落 source=student_vote 观测。 */
+    @Operation(summary = "学生澄清投票", description = "学生从澄清候选中选择归属概念，落 student_vote 观测")
+    @PostMapping("/vote")
+    public ApiResponse<Void> vote(@RequestBody VoteRequest request, HttpSession session) {
+        Long studentId = TutoringAuth.requireStudent(session);
+        if (request == null || request.getTopicLabel() == null || request.getTopicLabel().isBlank()
+                || request.getSelectedLabel() == null || request.getSelectedLabel().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "topicLabel/selectedLabel 不能为空");
+        }
+        kpAppService.vote(request.getTopicLabel(), studentId, request.getSelectedLabel());
+        return ApiResponse.success();
+    }
+
+    /** 澄清投票请求体。 */
+    @Data
+    public static class VoteRequest {
+        private String topicLabel;
+        private String selectedLabel;
     }
 }

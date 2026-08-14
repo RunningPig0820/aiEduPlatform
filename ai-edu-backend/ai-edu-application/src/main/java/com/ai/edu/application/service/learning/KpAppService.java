@@ -5,6 +5,7 @@ import com.ai.edu.application.dto.learning.KpResolveDTO;
 import com.ai.edu.application.dto.learning.PendingKpAliasDTO;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
+import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.valueobject.DerivedKpStatus;
@@ -77,7 +78,15 @@ public class KpAppService {
         return ConfirmKpAliasDTO.builder().updated(true).status("RESOLVED").build();
     }
 
+    /** 学生澄清投票：学生选择归属概念，落 source=student_vote 观测。 */
+    public void vote(String topicLabel, Long studentId, String selectedLabel) {
+        kpResolver.recordStudentVote(topicLabel, studentId, selectedLabel);
+    }
+
     private PendingKpAliasDTO toPendingDTO(DerivedKpObs o) {
+        String kpLabel = o.getKpUri() == null ? null
+                : kgKnowledgePointRepository.findByUri(o.getKpUri())
+                        .map(KgKnowledgePoint::getLabel).orElse(null);
         return PendingKpAliasDTO.builder()
                 .id(o.getId())
                 .topicLabel(o.getTopicLabel())
@@ -86,7 +95,9 @@ public class KpAppService {
                 .confidence(o.getConfidence())
                 .status(o.getStatus() == null ? null : o.getStatus().name())
                 .kpUri(o.getKpUri())
+                .kpLabel(kpLabel)
                 .firstSeenAt(o.getFirstSeenAt())
+                .updatedAt(o.getUpdatedAt())
                 .build();
     }
 }

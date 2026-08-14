@@ -43,7 +43,14 @@ public class PendingKpAliasDTO implements Serializable {
     /** 若有候选归属 */
     private String kpUri;
 
+    /** 归属知识点名（kpUri 非空时反查镜像，PENDING 为 null） */
+    private String kpLabel;
+
     /** 首次记录时间 */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime firstSeenAt;
+
+    /** 更新时间 */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updatedAt;
 }
