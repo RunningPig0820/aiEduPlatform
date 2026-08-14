@@ -9,12 +9,12 @@
 
 ## 2. 解析管线升级
 
-- [ ] 2.1 重写 `TutoringKpResolverImpl` 为管线：① 镜像精确/LIKE（保留现有）→ ② 题型库年级匹配 → ③ LLM 消歧 → ④ 低置信学生澄清（可选）→ ⑤ PENDING
-- [ ] 2.2 解析时获取学生年级（组织系统 学生→班级→年级；不可得降级纯 LLM 消歧）
-- [ ] 2.3 LLM 消歧接入：给定 label + 候选 kp label 列表（保证正确答案在候选内）→ 返回 kp + confidence（复用 llm-gateway，见 design Open Q2）
-- [ ] 2.4 解析结果写 `t_kp_derived_obs`（同生+同题型+同 kp 去重递增 occurrence_count）
-- [ ] 2.5 学生澄清交互：低置信/歧义生成学科概念选项（不暴露 kp_uri），学生选择落 `source=student_vote` 观测，跳过弃权
-- [ ] 2.6 冷启动弱化：题型库无先验时首条 LLM 消歧标 `WEAK`，不点亮；第二独立信号（做题结果/共现/学生投票）才转 RESOLVED
+- [x] 2.1 重写 `TutoringKpResolverImpl` 为管线：① 镜像精确/LIKE（保留现有）→ ② 题型库年级匹配 → ③ LLM 消歧 → ④ 低置信学生澄清（可选）→ ⑤ PENDING
+- [x] 2.2 解析时获取学生年级（组织系统 学生→班级→年级；不可得降级纯 LLM 消歧）
+- [x] 2.3 LLM 消歧接入：给定 label + 候选 kp label 列表（保证正确答案在候选内）→ 返回 kp + confidence（复用 llm-gateway，见 design Open Q2）
+- [x] 2.4 解析结果写 `t_kp_derived_obs`（同生+同题型+同 kp 去重递增 occurrence_count）
+- [x] 2.5 学生澄清交互：低置信/歧义生成学科概念选项（不暴露 kp_uri），学生选择落 `source=student_vote` 观测，跳过弃权
+- [x] 2.6 冷启动弱化：题型库无先验时首条 LLM 消歧标 `WEAK`，不点亮；第二独立信号（做题结果/共现/学生投票）才转 RESOLVED
 
 ## 3. 题型库聚合
 

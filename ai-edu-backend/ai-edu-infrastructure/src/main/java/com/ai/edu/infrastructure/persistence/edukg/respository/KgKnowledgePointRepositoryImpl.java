@@ -59,6 +59,23 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
     }
 
     @Override
+    public Optional<KgKnowledgePoint> findByLabel(String label) {
+        KgKnowledgePointPo po = kgKnowledgePointMapper.selectByLabel(label);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<KgKnowledgePoint> findByLabelLike(String label) {
+        KgKnowledgePointPo po = kgKnowledgePointMapper.selectByLabelLike(label);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
+
+    @Override
+    public List<KgKnowledgePoint> findByLabelLikeList(String label) {
+        return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByLabelLikeList(label));
+    }
+
+    @Override
     public int upsert(List<KgKnowledgePoint> knowledgePoints) {
         if (knowledgePoints == null || knowledgePoints.isEmpty()) {
             return 0;

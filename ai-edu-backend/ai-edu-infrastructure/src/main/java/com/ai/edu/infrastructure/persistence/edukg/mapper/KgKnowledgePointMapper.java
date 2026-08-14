@@ -28,6 +28,10 @@ public interface KgKnowledgePointMapper extends BaseMapper<KgKnowledgePointPo> {
     @Select("SELECT * FROM t_kg_knowledge_point WHERE label LIKE CONCAT('%', #{label}, '%') AND is_deleted = false LIMIT 1")
     KgKnowledgePointPo selectByLabelLike(@Param("label") String label);
 
+    /** 按知识点名模糊召回多个候选（LLM 消歧候选列表，limit 10）。 */
+    @Select("SELECT * FROM t_kg_knowledge_point WHERE label LIKE CONCAT('%', #{label}, '%') AND is_deleted = false LIMIT 10")
+    List<KgKnowledgePointPo> selectByLabelLikeList(@Param("label") String label);
+
     @Select("<script>" +
             "SELECT * FROM t_kg_knowledge_point WHERE uri IN " +
             "<foreach item='uri' collection='uris' open='(' separator=',' close=')'>#{uri}</foreach>" +

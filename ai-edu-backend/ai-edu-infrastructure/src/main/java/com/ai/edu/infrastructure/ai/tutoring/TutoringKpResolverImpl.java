@@ -1,46 +1,270 @@
 package com.ai.edu.infrastructure.ai.tutoring;
 
+import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
+import com.ai.edu.domain.learning.model.entity.QuestionType;
+import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
+import com.ai.edu.domain.learning.model.valueobject.DerivedKpSource;
+import com.ai.edu.domain.learning.model.valueobject.DerivedKpStatus;
+import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
+import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
+import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
-import com.ai.edu.infrastructure.persistence.edukg.mapper.KgKnowledgePointMapper;
-import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
+import com.ai.edu.domain.llm.model.AiEduChatRequest;
+import com.ai.edu.domain.llm.model.AiEduChatResponse;
+import com.ai.edu.domain.llm.service.LlmGateway;
+import com.ai.edu.domain.organization.model.entity.StudentClass;
+import com.ai.edu.domain.organization.repository.ClassRepository;
+import com.ai.edu.domain.organization.repository.StudentClassRepository;
+import com.ai.edu.domain.shared.valueobject.UserId;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+
 /**
- * 知识点 label → TextbookKP URI 解析实现（kg-sync MySQL 镜像）。
+ * 知识点 label → TextbookKP URI 解析实现（派生层解析管线）。
  *
- * <p>解析链路：精确匹配 → LIKE 模糊 → 未命中记日志返回 null（收尾标记"待收录"，不点亮）。
- * 解析失败不影响答疑主流程。
+ * <p>管线：① kg-sync 镜像精确/LIKE → ② 题型库年级匹配 → ③ LLM 消歧 → ④ 低置信 PENDING（含澄清候选）。
+ * 每次解析写个体派生观测（{@code t_kp_derived_obs}）：命中 source=MIRROR/CATALOG、冷启动 LLM 标 WEAK、
+ * 挂起标 PENDING；权威图谱（Neo4j + 镜像）只读。解析失败不阻断答疑主流程。
  *
- * <p>说明：kg-sync 镜像 {@link KgKnowledgePointPo} 无 subject 列（学科在 KgTextbookPo），
- * 且 label 接地已由 Python 侧经 mastery_snapshot 完成（复用已知知识点名，降低噪声），
- * 故此处按 label 在镜像中解析即可——数学答疑场景下同名知识点歧义可接受，未命中记日志待收录。
+ * <p>跨域访问通过 domain 仓储接口（{@link KgKnowledgePointRepository} 等）而非 mapper，符合 DDD 分层。
  */
 @Slf4j
 @Service
 public class TutoringKpResolverImpl implements TutoringKpResolver {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** 学生澄清投票的中等置信（软信号，≥3 人去重一致才进候选）。 */
+    private static final int STUDENT_VOTE_CONFIDENCE = 60;
+
     @Resource
-    private KgKnowledgePointMapper kgKnowledgePointMapper;
+    private KgKnowledgePointRepository kgKnowledgePointRepository;
+    @Resource
+    private QuestionTypeRepository questionTypeRepository;
+    @Resource
+    private QuestionTypeKpRepository questionTypeKpRepository;
+    @Resource
+    private StudentClassRepository studentClassRepository;
+    @Resource
+    private ClassRepository classRepository;
+    @Resource
+    private LlmGateway llmGateway;
+    @Resource
+    private DerivedKpObsRepository derivedKpObsRepository;
+
+    @Value("${ai-edu.kp.confidence-threshold:60}")
+    private int confidenceThreshold;
 
     @Override
-    public String resolveLabelToUri(String label) {
+    public KpResolution resolve(String label, Long studentId) {
         if (label == null || label.isBlank()) {
+            return KpResolution.pending(label);
+        }
+        Integer grade = resolveGrade(studentId);
+
+        // ① 镜像精确 / LIKE（确定性规则，0 依赖 LLM）
+        Optional<KgKnowledgePoint> exact = kgKnowledgePointRepository.findByLabel(label);
+        if (exact.isPresent() && exact.get().getUri() != null) {
+            writeObs(studentId, label, exact.get().getUri(), grade, 100, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED);
+            return KpResolution.resolved(label, exact.get().getUri(), exact.get().getLabel(), 100);
+        }
+        Optional<KgKnowledgePoint> like = kgKnowledgePointRepository.findByLabelLike(label);
+        if (like.isPresent() && like.get().getUri() != null) {
+            log.debug("知识点 label 模糊命中: {} -> {}", label, like.get().getUri());
+            writeObs(studentId, label, like.get().getUri(), grade, 80, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED);
+            return KpResolution.resolved(label, like.get().getUri(), like.get().getLabel(), 80);
+        }
+
+        // ② 题型库年级匹配（统计先验，数据驱动）
+        KpResolution catalog = resolveByCatalog(label, grade);
+        if (catalog != null) {
+            writeObs(studentId, label, catalog.getUri(), grade, catalog.getConfidence(),
+                    DerivedKpSource.CATALOG, DerivedKpStatus.RESOLVED);
+            return catalog;
+        }
+
+        // ③ LLM 消歧（主裁判，冷启动种子）
+        List<KgKnowledgePoint> candidates = kgKnowledgePointRepository.findByLabelLikeList(label);
+        KpResolution llm = resolveByLlm(label, grade, candidates);
+        if (llm != null && llm.getConfidence() >= confidenceThreshold) {
+            // 冷启动弱化：题型库无先验 → 标 WEAK，不直接点亮，待第二独立信号转 RESOLVED
+            writeObs(studentId, label, llm.getUri(), grade, llm.getConfidence(),
+                    DerivedKpSource.LLM, DerivedKpStatus.WEAK);
+            return llm;
+        }
+
+        // ④ 低置信/歧义 → PENDING（含澄清候选，供学生"你想学哪个"）
+        writeObs(studentId, label, null, grade, 0, DerivedKpSource.LLM, DerivedKpStatus.PENDING);
+        List<String> candidateLabels = candidates.stream()
+                .map(KgKnowledgePoint::getLabel)
+                .distinct()
+                .toList();
+        log.warn("知识点 label 解析失败（挂起，不点亮）: {}", label);
+        return KpResolution.pending(label, candidateLabels);
+    }
+
+    @Override
+    public void recordStudentVote(String topicLabel, Long studentId, String selectedLabel) {
+        if (studentId == null || selectedLabel == null || selectedLabel.isBlank()) {
+            return;
+        }
+        Optional<KgKnowledgePoint> kp = kgKnowledgePointRepository.findByLabel(selectedLabel);
+        if (kp.isEmpty() || kp.get().getUri() == null) {
+            log.warn("学生澄清候选不在镜像，忽略: {}", selectedLabel);
+            return;
+        }
+        Integer grade = resolveGrade(studentId);
+        DerivedKpObs obs = DerivedKpObs.create(studentId, topicLabel, kp.get().getUri(), grade,
+                STUDENT_VOTE_CONFIDENCE, DerivedKpSource.STUDENT_VOTE, DerivedKpStatus.RESOLVED);
+        derivedKpObsRepository.upsert(obs);
+        log.info("学生澄清投票落观测: studentId={}, topic={}, kp={}", studentId, topicLabel, kp.get().getUri());
+    }
+
+    /** 写个体派生观测；studentId 为空（纯解析，resolveLabelToUri 兼容）时不写。 */
+    private void writeObs(Long studentId, String label, String uri, Integer grade, int confidence,
+                          DerivedKpSource source, DerivedKpStatus status) {
+        if (studentId == null) {
+            return;
+        }
+        DerivedKpObs obs = DerivedKpObs.create(studentId, label, uri, grade, confidence, source, status);
+        derivedKpObsRepository.upsert(obs);
+    }
+
+    /** 学生 → 班级 → 年级（组织系统）；不可得返回 null，降级纯 LLM 消歧。 */
+    private Integer resolveGrade(Long studentId) {
+        if (studentId == null) {
             return null;
         }
-        // ① 精确匹配
-        KgKnowledgePointPo po = kgKnowledgePointMapper.selectByLabel(label);
-        if (po != null && po.getUri() != null) {
-            return po.getUri();
+        try {
+            return studentClassRepository.findActiveByStudentId(UserId.of(studentId))
+                    .map(StudentClass::getClassId)
+                    .flatMap(classRepository::findById)
+                    .map(cls -> cls.getGrade().getValue())
+                    .orElse(null);
+        } catch (Exception e) {
+            log.debug("查学生年级失败，降级纯 LLM 消歧: studentId={}", studentId, e);
+            return null;
         }
-        // ② LIKE 模糊匹配
-        po = kgKnowledgePointMapper.selectByLabelLike(label);
-        if (po != null && po.getUri() != null) {
-            log.debug("知识点 label 模糊命中: {} -> {}", label, po.getUri());
-            return po.getUri();
+    }
+
+    /** ② 题型库年级匹配：同题型按学生年级取占比最高 kp。 */
+    private KpResolution resolveByCatalog(String label, Integer grade) {
+        Optional<QuestionType> qt = questionTypeRepository.findByTopicLabel(label);
+        if (qt.isEmpty()) {
+            return null;
         }
-        log.warn("知识点 label 未命中 kg 镜像（待收录，不点亮）: {}", label);
-        return null;
+        List<QuestionTypeKp> kps = questionTypeKpRepository.findByQuestionTypeId(qt.get().getId());
+        if (kps.isEmpty()) {
+            return null;
+        }
+        QuestionTypeKp best = selectByGrade(kps, grade);
+        if (best == null) {
+            return null;
+        }
+        String kpLabel = kgKnowledgePointRepository.findByUri(best.getKpUri())
+                .map(KgKnowledgePoint::getLabel)
+                .orElse(null);
+        int confidence = (int) Math.round(best.getRatio() * 100);
+        return KpResolution.resolved(label, best.getKpUri(), kpLabel, confidence);
+    }
+
+    private QuestionTypeKp selectByGrade(List<QuestionTypeKp> kps, Integer grade) {
+        if (grade == null) {
+            return kps.stream().max(Comparator.comparing(QuestionTypeKp::getRatio)).orElse(null);
+        }
+        return kps.stream()
+                .filter(kp -> gradeInRange(kp.getGradeRange(), grade))
+                .max(Comparator.comparing(QuestionTypeKp::getRatio))
+                .orElseGet(() -> kps.stream().max(Comparator.comparing(QuestionTypeKp::getRatio)).orElse(null));
+    }
+
+    private boolean gradeInRange(String range, Integer grade) {
+        if (range == null || range.isBlank()) {
+            return false;
+        }
+        try {
+            String[] parts = range.split("-");
+            int lo = Integer.parseInt(parts[0].trim());
+            int hi = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : lo;
+            return grade >= lo && grade <= hi;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** ③ LLM 消歧：候选列表（镜像 LIKE 召回）→ 选择题 → 候选内校验防幻觉。 */
+    private KpResolution resolveByLlm(String label, Integer grade, List<KgKnowledgePoint> candidates) {
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        try {
+            String prompt = buildDisambiguationPrompt(label, grade, candidates);
+            AiEduChatResponse response = llmGateway.chat(AiEduChatRequest.of(prompt, 0L)).block();
+            return parseDisambiguationResponse(label, response, candidates);
+        } catch (Exception e) {
+            log.warn("LLM 消歧失败（降级挂起）: label={}", label, e);
+            return null;
+        }
+    }
+
+    private String buildDisambiguationPrompt(String label, Integer grade, List<KgKnowledgePoint> candidates) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是数学知识点消歧助手。给定题型/知识点「").append(label).append("」");
+        if (grade != null) {
+            sb.append("（学生年级：").append(grade).append("年级）");
+        }
+        sb.append("，从下列候选知识点中选出最匹配的一个，并给出置信度 0-100。\n\n候选：\n");
+        for (int i = 0; i < candidates.size(); i++) {
+            KgKnowledgePoint c = candidates.get(i);
+            sb.append(i + 1).append(". ").append(c.getLabel()).append(" (").append(c.getUri()).append(")\n");
+        }
+        sb.append("\n只输出 JSON，格式：{\"kp_uri\":\"<候选中的 uri>\",\"confidence\":<0-100>}。");
+        return sb.toString();
+    }
+
+    private KpResolution parseDisambiguationResponse(String label, AiEduChatResponse response,
+                                                     List<KgKnowledgePoint> candidates) {
+        if (response == null || response.getResponse() == null || response.getResponse().isBlank()) {
+            return null;
+        }
+        String text = response.getResponse().trim();
+        int jsonStart = text.indexOf('{');
+        int jsonEnd = text.lastIndexOf('}');
+        if (jsonStart < 0 || jsonEnd < jsonStart) {
+            return null;
+        }
+        String json = text.substring(jsonStart, jsonEnd + 1);
+        try {
+            JsonNode node = MAPPER.readTree(json);
+            String uri = node.has("kp_uri") ? node.get("kp_uri").asText() : null;
+            int confidence = node.has("confidence") ? node.get("confidence").asInt() : 0;
+            if (uri == null || uri.isBlank()) {
+                return null;
+            }
+            // 候选内校验：LLM 只做选择题，返回候选外 uri 视为幻觉，忽略
+            Optional<KgKnowledgePoint> matched = candidates.stream()
+                    .filter(c -> uri.equals(c.getUri()))
+                    .findFirst();
+            if (matched.isEmpty()) {
+                log.warn("LLM 消歧返回候选外 uri，忽略: {}", uri);
+                return null;
+            }
+            int clamped = Math.min(100, Math.max(0, confidence));
+            return KpResolution.resolved(label, uri, matched.get().getLabel(), clamped);
+        } catch (Exception e) {
+            log.warn("LLM 消歧响应解析失败: {}", text, e);
+            return null;
+        }
     }
 }

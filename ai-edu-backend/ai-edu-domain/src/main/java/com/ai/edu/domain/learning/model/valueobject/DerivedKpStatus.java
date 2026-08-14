@@ -15,6 +15,8 @@ public enum DerivedKpStatus implements ValueObject {
     WEAK,
     /** 已解析确定（可点亮） */
     RESOLVED,
+    /** 挂起待确认（未命中/低置信，kp_uri 空，待学生澄清或人工确认） */
+    PENDING,
     /** 冲突（待重判） */
     CONFLICTED,
     /** 已重判（修正后） */

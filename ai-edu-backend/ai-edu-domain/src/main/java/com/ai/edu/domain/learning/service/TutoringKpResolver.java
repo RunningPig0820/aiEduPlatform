@@ -1,21 +1,43 @@
 package com.ai.edu.domain.learning.service;
 
+import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+
 /**
  * 知识点 label → TextbookKP URI 解析端口。
  *
- * <p>在 kg-sync 的 MySQL 镜像（{@code KgKnowledgePointPo}，subject=math）中解析：
- * 精确匹配 → LIKE 模糊 → 未命中返回 null（记日志 + 收尾标记"待收录"，不点亮）。
- * 解析失败不影响答疑主流程。
+ * <p>解析管线（见实现 {@code TutoringKpResolverImpl}）：
+ * ① kg-sync 镜像精确/LIKE → ② 题型库年级匹配 → ③ LLM 消歧 → ④ 低置信挂起。
+ * 解析失败不影响答疑主流程（PENDING 不报错）。
  *
- * <p>实现位于 Infrastructure 层（{@code TutoringKpResolverImpl}，见任务 8.4）。
+ * <p>实现位于 Infrastructure 层（{@code TutoringKpResolverImpl}）。
  */
 public interface TutoringKpResolver {
 
     /**
-     * label → TextbookKP URI。
+     * label → 解析结果（URI + 置信度 + 状态）。
      *
-     * @param label 知识点名（Python mastery_signals / eval 输出的 label）
+     * @param label     知识点/题型原文（Python mastery_signals / eval 输出的 label）
+     * @param studentId 学生ID（查年级做年级锚；null 则无年级锚，降级纯 LLM 消歧）
+     * @return 解析结果；低置信/歧义返回 {@code status=PENDING}
+     */
+    KpResolution resolve(String label, Long studentId);
+
+    /**
+     * 学生澄清投票：学生从澄清候选中选择归属知识点，落 source=student_vote 观测。
+     *
+     * @param topicLabel    题型/知识点原文
+     * @param studentId     学生ID
+     * @param selectedLabel 学生选择的候选学科概念（须为 resolve 返回的 candidate 之一）
+     */
+    void recordStudentVote(String topicLabel, Long studentId, String selectedLabel);
+
+    /**
+     * 兼容旧调用：label → TextbookKP URI（无年级锚，镜像命中行为不变）。
+     *
+     * @param label 知识点名
      * @return TextbookKP URI；未命中返回 {@code null}
      */
-    String resolveLabelToUri(String label);
+    default String resolveLabelToUri(String label) {
+        return resolve(label, null).getUri();
+    }
 }
