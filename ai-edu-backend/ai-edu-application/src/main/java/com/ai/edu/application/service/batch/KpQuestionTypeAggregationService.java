@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * 知识点题型库聚合服务——从个体派生观测（obs）共现沉淀"知识点的题型"。
+ * 【离线处理 · 大数据归宿】知识点题型库聚合服务——从个体派生观测（obs）共现沉淀"知识点的题型"。
  *
  * <p>聚合：扫描已解析观测 → 按 topic_label 分组 → 达阈值建 CANDIDATE + 按 kp 拆分年级分布桶。
  * 业务隔离：只写 MySQL 派生层（题型库），权威图谱零写入。

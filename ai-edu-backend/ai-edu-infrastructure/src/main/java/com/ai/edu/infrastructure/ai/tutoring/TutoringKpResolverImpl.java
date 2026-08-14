@@ -11,16 +11,12 @@ import com.ai.edu.domain.learning.model.valueobject.KpResolution;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.service.KpDisambiguationPort;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
-import com.ai.edu.domain.llm.model.AiEduChatRequest;
-import com.ai.edu.domain.llm.model.AiEduChatResponse;
-import com.ai.edu.domain.llm.service.LlmGateway;
 import com.ai.edu.domain.organization.model.entity.StudentClass;
 import com.ai.edu.domain.organization.repository.ClassRepository;
 import com.ai.edu.domain.organization.repository.StudentClassRepository;
 import com.ai.edu.domain.shared.valueobject.UserId;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,12 +34,11 @@ import java.util.Optional;
  * 挂起标 PENDING；权威图谱（Neo4j + 镜像）只读。解析失败不阻断答疑主流程。
  *
  * <p>跨域访问通过 domain 仓储接口（{@link KgKnowledgePointRepository} 等）而非 mapper，符合 DDD 分层。
+ * LLM 消歧委托 {@link KpLlmDisambiguator}（与维护闭环共用，DRY）。
  */
 @Slf4j
 @Service
 public class TutoringKpResolverImpl implements TutoringKpResolver {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /** 学生澄清投票的中等置信（软信号，≥3 人去重一致才进候选）。 */
     private static final int STUDENT_VOTE_CONFIDENCE = 60;
@@ -59,9 +54,9 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
     @Resource
     private ClassRepository classRepository;
     @Resource
-    private LlmGateway llmGateway;
-    @Resource
     private DerivedKpObsRepository derivedKpObsRepository;
+    @Resource
+    private KpDisambiguationPort kpDisambiguationPort;
 
     @Value("${ai-edu.kp.confidence-threshold:60}")
     private int confidenceThreshold;
@@ -95,8 +90,7 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
         }
 
         // ③ LLM 消歧（主裁判，冷启动种子）
-        List<KgKnowledgePoint> candidates = kgKnowledgePointRepository.findByLabelLikeList(label);
-        KpResolution llm = resolveByLlm(label, grade, candidates);
+        KpResolution llm = kpDisambiguationPort.disambiguate(label, grade);
         if (llm != null && llm.getConfidence() >= confidenceThreshold) {
             // 冷启动弱化：题型库无先验 → 标 WEAK，不直接点亮，待第二独立信号转 RESOLVED
             writeObs(studentId, label, llm.getUri(), grade, llm.getConfidence(),
@@ -106,6 +100,7 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
 
         // ④ 低置信/歧义 → PENDING（含澄清候选，供学生"你想学哪个"）
         writeObs(studentId, label, null, grade, 0, DerivedKpSource.LLM, DerivedKpStatus.PENDING);
+        List<KgKnowledgePoint> candidates = kgKnowledgePointRepository.findByLabelLikeList(label);
         List<String> candidateLabels = candidates.stream()
                 .map(KgKnowledgePoint::getLabel)
                 .distinct()
@@ -200,71 +195,6 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
             return grade >= lo && grade <= hi;
         } catch (NumberFormatException e) {
             return false;
-        }
-    }
-
-    /** ③ LLM 消歧：候选列表（镜像 LIKE 召回）→ 选择题 → 候选内校验防幻觉。 */
-    private KpResolution resolveByLlm(String label, Integer grade, List<KgKnowledgePoint> candidates) {
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        try {
-            String prompt = buildDisambiguationPrompt(label, grade, candidates);
-            AiEduChatResponse response = llmGateway.chat(AiEduChatRequest.of(prompt, 0L)).block();
-            return parseDisambiguationResponse(label, response, candidates);
-        } catch (Exception e) {
-            log.warn("LLM 消歧失败（降级挂起）: label={}", label, e);
-            return null;
-        }
-    }
-
-    private String buildDisambiguationPrompt(String label, Integer grade, List<KgKnowledgePoint> candidates) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("你是数学知识点消歧助手。给定题型/知识点「").append(label).append("」");
-        if (grade != null) {
-            sb.append("（学生年级：").append(grade).append("年级）");
-        }
-        sb.append("，从下列候选知识点中选出最匹配的一个，并给出置信度 0-100。\n\n候选：\n");
-        for (int i = 0; i < candidates.size(); i++) {
-            KgKnowledgePoint c = candidates.get(i);
-            sb.append(i + 1).append(". ").append(c.getLabel()).append(" (").append(c.getUri()).append(")\n");
-        }
-        sb.append("\n只输出 JSON，格式：{\"kp_uri\":\"<候选中的 uri>\",\"confidence\":<0-100>}。");
-        return sb.toString();
-    }
-
-    private KpResolution parseDisambiguationResponse(String label, AiEduChatResponse response,
-                                                     List<KgKnowledgePoint> candidates) {
-        if (response == null || response.getResponse() == null || response.getResponse().isBlank()) {
-            return null;
-        }
-        String text = response.getResponse().trim();
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart < 0 || jsonEnd < jsonStart) {
-            return null;
-        }
-        String json = text.substring(jsonStart, jsonEnd + 1);
-        try {
-            JsonNode node = MAPPER.readTree(json);
-            String uri = node.has("kp_uri") ? node.get("kp_uri").asText() : null;
-            int confidence = node.has("confidence") ? node.get("confidence").asInt() : 0;
-            if (uri == null || uri.isBlank()) {
-                return null;
-            }
-            // 候选内校验：LLM 只做选择题，返回候选外 uri 视为幻觉，忽略
-            Optional<KgKnowledgePoint> matched = candidates.stream()
-                    .filter(c -> uri.equals(c.getUri()))
-                    .findFirst();
-            if (matched.isEmpty()) {
-                log.warn("LLM 消歧返回候选外 uri，忽略: {}", uri);
-                return null;
-            }
-            int clamped = Math.min(100, Math.max(0, confidence));
-            return KpResolution.resolved(label, uri, matched.get().getLabel(), clamped);
-        } catch (Exception e) {
-            log.warn("LLM 消歧响应解析失败: {}", text, e);
-            return null;
         }
     }
 }

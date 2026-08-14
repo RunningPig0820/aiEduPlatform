@@ -50,4 +50,16 @@ public interface DerivedKpObsMapper extends BaseMapper<DerivedKpObsPo> {
     /** 查全部已解析观测（kp_uri 非空，供聚合任务扫描）。 */
     @Select("SELECT * FROM t_kp_derived_obs WHERE kp_uri IS NOT NULL AND is_deleted = false ORDER BY id")
     List<DerivedKpObsPo> selectResolved();
+
+    /** 按状态查观测（供维护任务扫描）。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE status = #{status} AND is_deleted = false ORDER BY id")
+    List<DerivedKpObsPo> selectByStatus(@Param("status") String status);
+
+    /** 更新观测状态（重判转正 / 转人工）。 */
+    @Update("UPDATE t_kp_derived_obs SET status = #{status}, updated_at = NOW() WHERE id = #{id}")
+    int updateStatus(@Param("id") Long id, @Param("status") String status);
+
+    /** 统计同题型同知识点的去重学生数（第二信号共现检测）。 */
+    @Select("SELECT COUNT(DISTINCT student_id) FROM t_kp_derived_obs WHERE topic_label = #{topicLabel} AND kp_uri = #{kpUri} AND is_deleted = false")
+    int countDistinctStudentsByTopicKp(@Param("topicLabel") String topicLabel, @Param("kpUri") String kpUri);
 }

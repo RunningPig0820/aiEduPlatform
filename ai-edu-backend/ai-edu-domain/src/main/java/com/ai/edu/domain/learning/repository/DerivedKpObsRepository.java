@@ -1,6 +1,7 @@
 package com.ai.edu.domain.learning.repository;
 
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
+import com.ai.edu.domain.learning.model.valueobject.DerivedKpStatus;
 
 import java.util.List;
 
@@ -32,4 +33,19 @@ public interface DerivedKpObsRepository {
      * 查全部已解析观测（kp_uri 非空，供聚合任务扫描）。
      */
     List<DerivedKpObs> findResolved();
+
+    /**
+     * 按状态查观测（供维护任务扫描 WEAK/CONFLICTED）。
+     */
+    List<DerivedKpObs> findByStatus(DerivedKpStatus status);
+
+    /**
+     * 更新观测状态（重判转正 / 转人工）。
+     */
+    void updateStatus(Long id, DerivedKpStatus status);
+
+    /**
+     * 统计同题型同知识点的去重学生数（第二信号共现检测）。
+     */
+    int countDistinctStudentsByTopicAndKp(String topicLabel, String kpUri);
 }

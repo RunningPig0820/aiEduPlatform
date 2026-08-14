@@ -1,6 +1,7 @@
 package com.ai.edu.infrastructure.persistence.learning.repository;
 
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
+import com.ai.edu.domain.learning.model.valueobject.DerivedKpStatus;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.infrastructure.persistence.learning.mapper.DerivedKpObsMapper;
 import com.ai.edu.infrastructure.persistence.learning.po.DerivedKpObsPo;
@@ -55,5 +56,20 @@ public class DerivedKpObsRepositoryImpl implements DerivedKpObsRepository {
     @Override
     public List<DerivedKpObs> findResolved() {
         return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectResolved());
+    }
+
+    @Override
+    public List<DerivedKpObs> findByStatus(DerivedKpStatus status) {
+        return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectByStatus(status.name()));
+    }
+
+    @Override
+    public void updateStatus(Long id, DerivedKpStatus status) {
+        derivedKpObsMapper.updateStatus(id, status.name());
+    }
+
+    @Override
+    public int countDistinctStudentsByTopicAndKp(String topicLabel, String kpUri) {
+        return derivedKpObsMapper.countDistinctStudentsByTopicKp(topicLabel, kpUri);
     }
 }
