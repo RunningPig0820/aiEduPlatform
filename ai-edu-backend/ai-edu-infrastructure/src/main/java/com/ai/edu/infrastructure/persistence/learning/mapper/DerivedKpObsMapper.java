@@ -1,0 +1,49 @@
+package com.ai.edu.infrastructure.persistence.learning.mapper;
+
+import com.ai.edu.infrastructure.persistence.learning.po.DerivedKpObsPo;
+import com.baomidou.dynamic.datasource.annotation.DS;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
+
+/**
+ * 个体派生观测 Mapper（路由 ai_edu_learning 库）。
+ *
+ * <p>UPSERT 幂等：student_id + topic_label + kp_uri 唯一（uk_student_topic_kp）。
+ * kp_uri 为空（PENDING）不参与 UNIQUE 约束，去重经 selectPending + incrementOccurrence 处理。
+ */
+@Mapper
+@DS("learning")
+public interface DerivedKpObsMapper extends BaseMapper<DerivedKpObsPo> {
+
+    /**
+     * 观测 UPSERT（kp_uri 非空时经 UNIQUE 去重，命中则 occurrence_count +1，保留 first_seen_at）。
+     */
+    @Insert("INSERT INTO t_kp_derived_obs (student_id, topic_label, kp_uri, student_grade, confidence, source, status, occurrence_count, first_seen_at, created_by, modified_by, is_deleted) " +
+            "VALUES (#{studentId}, #{topicLabel}, #{kpUri}, #{studentGrade}, #{confidence}, #{source}, #{status}, 1, NOW(), #{createdBy}, #{modifiedBy}, 0) " +
+            "ON DUPLICATE KEY UPDATE occurrence_count = occurrence_count + 1, updated_at = NOW(), modified_by = VALUES(modified_by)")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    int upsert(DerivedKpObsPo po);
+
+    /** 查 PENDING 观测（kp_uri 为空），供去重判断。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE student_id = #{studentId} AND topic_label = #{topicLabel} AND kp_uri IS NULL AND is_deleted = false LIMIT 1")
+    DerivedKpObsPo selectPending(@Param("studentId") Long studentId, @Param("topicLabel") String topicLabel);
+
+    /** PENDING 观测去重命中时递增 occurrence_count。 */
+    @Update("UPDATE t_kp_derived_obs SET occurrence_count = occurrence_count + 1, updated_at = NOW() WHERE id = #{id}")
+    int incrementOccurrence(@Param("id") Long id);
+
+    /** 按学生查全部观测（供学生端疑似节点叠加）。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE student_id = #{studentId} AND is_deleted = false ORDER BY id")
+    List<DerivedKpObsPo> selectByStudentId(@Param("studentId") Long studentId);
+
+    /** 按题型 label 查观测（供聚合任务统计）。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE topic_label = #{topicLabel} AND is_deleted = false ORDER BY id")
+    List<DerivedKpObsPo> selectByTopicLabel(@Param("topicLabel") String topicLabel);
+}
