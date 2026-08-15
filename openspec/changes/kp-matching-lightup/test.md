@@ -63,6 +63,8 @@
 | MAS-002 | 越权查询 | Session=STUDENT_ID | studentId=ADMIN_ID | 抛出 PERMISSION_DENIED |
 | MAS-003 | 无记录返回空列表 | 新学生 | studentId=新学生，Session=同 | `items=[]`，code 成功 |
 | MAS-004 | 未登录 | 无 Session | studentId=STUDENT_ID | 抛出 UNAUTHORIZED |
+| MAS-005 | 携带学段字段 | 掌握点「二元一次方程组」归属初中教材 | studentId=STUDENT_ID | `items[]` 含 `stage=middle`、`chapterLabel`、`sectionLabel` |
+| MAS-006 | 无归属 stage 为空 | 知识点未挂小节/章节 | studentId=STUDENT_ID | `stage=null`，kpKey/kpLabel 仍正常返回 |
 
 ### 3.3 挂起清单 `GET /api/kg/aliases/pending`
 
@@ -94,6 +96,26 @@
 | MAI-002 | 低置信进人工 | 重判仍低置信/无年级锚 | 运行维护任务 | status=HUMAN_REVIEW |
 | MAI-003 | 权威图零写入 | 执行聚合 + 维护后 | — | kg-sync 镜像行数不变、Neo4j 无写调用 |
 
+### 3.6 全量知识点分页 `POST /api/kg/knowledge-points`
+
+| 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
+|---------|---------|---------|------|---------|
+| OVW-001 | 按学段分页返回 | kg 镜像有初中教材知识点 | `{stage: middle, page: 1, size: 20}` | items 含 kpUri/kpLabel/stage/chapterLabel/sectionLabel，total=总数 |
+| OVW-002 | 无知识点返回空 | 某学段无教材 | `{stage: high}` | items=[]，total=0 |
+| OVW-003 | 分页越界 | 初中知识点 10 条 | `{stage: middle, page: 99, size: 20}` | items=[]，不报错 |
+| OVW-004 | 参数错误 | — | `{stage: "invalid"}` | 抛出 INVALID_PARAMS |
+| OVW-005 | 未登录 | 无 Session | `{stage: middle}` | 抛出 UNAUTHORIZED |
+
+### 3.7 题型库分页 + 关联知识点
+
+| 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
+|---------|---------|---------|------|---------|
+| QTP-001 | 分页列题型 | 题型库有 STABLE/CANDIDATE 条目 | `GET /api/kp/question-types?page=1&size=20` | items 含 id/topicLabel/status/hitCount，total=总数 |
+| QTP-002 | 空题型库 | 无题型条目 | 同上 | items=[]，total=0 |
+| QTP-003 | 题型关联知识点 | 题型 id=1 有分布桶 | `GET /api/kp/question-types/1/knowledge-points` | 返回 kpUri/kpLabel/gradeRange/ratio/hitCount，kpLabel 反查自镜像 |
+| QTP-004 | 题型不存在 | id 不存在 | `GET /api/kp/question-types/999/knowledge-points` | 抛出 10002（实体不存在） |
+| QTP-005 | 未登录 | 无 Session | 任一 | 抛出 UNAUTHORIZED |
+
 ---
 
 ## 4. 错误码对照表
@@ -115,11 +137,13 @@
 | 模块 | 正常 | 边界 | 异常 | 合计 |
 |------|------|------|------|------|
 | RES（解析） | 6 | 3 | 3 | 12 |
-| MAS（掌握度） | 2 | 1 | 1 | 4 |
+| MAS（掌握度） | 3 | 2 | 1 | 6 |
 | PEN（挂起清单） | 2 | 0 | 2 | 4 |
 | CFM（挂起确认） | 2 | 0 | 3 | 5 |
 | AGG/MAI（聚合维护） | 3 | 1 | 2 | 6 |
-| **合计** | **15** | **5** | **11** | **31** |
+| OVW（全量知识点分页） | 1 | 2 | 2 | 5 |
+| QTP（题型库分页） | 2 | 1 | 2 | 5 |
+| **合计** | **19** | **9** | **15** | **43** |
 
 ---
 
@@ -132,8 +156,10 @@
 | 1 | `KpResolutionResolverTest` | 解析管线（镜像/题型库/LLM/挂起/去重） |
 | 2 | `KpAggregationMaintenanceTest` | 聚合阈值 + 维护重判 + 零写入断言 |
 | 3 | `KpResolutionControllerTest` | resolve 接口（含权限/参数） |
-| 4 | `StudentMasteryLightupTest` | mastery 增强字段 + 越权 |
+| 4 | `StudentMasteryLightupTest` | mastery 增强字段 + stage + 越权 |
 | 5 | `KpAliasReviewControllerTest` | pending / confirm 接口 |
+| 6 | `KgKnowledgeOverviewControllerTest` | 全量知识点分页 + 权限 |
+| 7 | `KpQuestionTypeControllerTest` | 题型库分页 + 关联知识点 + kpLabel 反查 |
 
 ---
 
@@ -155,5 +181,5 @@
 cd ai-edu-backend && mvn test
 
 # 运行本 change 相关
-mvn test -Dtest='KpResolutionResolverTest,KpAggregationMaintenanceTest,KpResolutionControllerTest,StudentMasteryLightupTest,KpAliasReviewControllerTest'
+mvn test -Dtest='KpResolutionResolverTest,KpAggregationMaintenanceTest,KpResolutionControllerTest,StudentMasteryLightupTest,KpAliasReviewControllerTest,KgKnowledgeOverviewControllerTest,KpQuestionTypeControllerTest'
 ```

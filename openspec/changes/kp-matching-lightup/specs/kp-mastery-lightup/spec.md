@@ -39,3 +39,15 @@
 #### Scenario: 人工确认挂起题型
 - **WHEN** 管理员将挂起的「鸡兔同笼」确认归属假设法 URI
 - **THEN** 观测转 RESOLVED，题型库假设法分布桶命中数增加，后续解析命中假设法
+
+### Requirement: 掌握度携带学段与章节归属
+
+`GET /api/students/{id}/mastery` 返回的每项 SHALL 额外携带 `stage`(primary/middle/high)、`chapterLabel`、`sectionLabel`。stage 从 kpKey(URI) 反查归属教材的 `KgTextbook.stage`；chapterLabel/sectionLabel 从归属章节/小节反查。无归属时三者 SHALL 为 null，不影响 kpKey/kpLabel/masteryLevel 其余字段。
+
+#### Scenario: 掌握度项携带学段
+- **WHEN** 学生掌握点「二元一次方程组」归属于初中教材
+- **THEN** 该项 stage=middle，chapterLabel/sectionLabel 为该知识点所属章节/小节名
+
+#### Scenario: 无归属知识点 stage 为空
+- **WHEN** 某知识点未挂到任何小节/章节（kp→section 关联缺失）
+- **THEN** 该项 stage=null，kpKey/kpLabel/masteryLevel 仍正常返回

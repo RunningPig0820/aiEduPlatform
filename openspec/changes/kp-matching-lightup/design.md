@@ -223,6 +223,36 @@
 
 **理由**：前端对接暴露两个断层——(a) `getMastery` 硬编码 RESOLVED，学生拿不到自己的疑似点（现有 pending 接口是 ADMIN/TEACHER 专属且返回全体）；(b) 灰度遗留：`resolveLabelToUri` 传 null，obs 派生层未接进答疑主流程，题型库聚合/维护闭环无输入数据。
 
+### 13. 知识点学段/章节归属反查（mastery stage 字段）
+
+**决策**：`MasteryItemDTO` 增加 `stage`（primary/middle/high）+ 可选 `chapterLabel`/`sectionLabel`。反查链路沿用现有 `getKnowledgePointDetail` 的 kp→section→chapter 两级，再延伸一跳 chapter→textbook 取 stage：
+
+```
+kp_uri → t_kg_section_kp → t_kg_chapter_section → t_kg_textbook_chapter → t_kg_textbook(stage)
+```
+
+**批量反查**：新增值对象 `KgKpPlacement`（kpUri/stage/chapterLabel/sectionLabel）+ `KgKnowledgePointRepository.findPlacementByUris(List<String>)`，Mapper 一条 LEFT JOIN SQL 批量反查（`getStudentMastery` 一次返回多 kp，避免 N+1）。一个 kp 挂多个 section 时取首个非空 stage（跨教材同 kp 罕见，取先收录）。
+
+**理由**：学生掌握点天然跨年级（三年级可问初中内容），"按年级框定范围"的前提不成立；学段是更宽更稳的分组粒度。`stage` 已在 `KgTextbook.stage`（与 `KgStageEnum` code 对齐），零 schema 变更，纯反查。
+
+### 14. 全量知识点分页接口（学生端知识点总览）
+
+**决策**：新增 `POST /api/kg/knowledge-points`（body `{stage, page, size}`，对齐现有 kg 接口全 POST body 风格），按学段分页列教材知识点，每项带 `kpUri`/`kpLabel`/`stage`/`chapterLabel`/`sectionLabel`。
+
+**实现**：Mapper 反向 JOIN（`t_kg_textbook`[stage 过滤] → `t_kg_textbook_chapter` → `t_kg_chapter_section` → `t_kg_section_kp` → `t_kg_knowledge_point`）+ COUNT 分页。数据源 kg 镜像只读。
+
+**权限**：登录即可（学生端），路径 `/api/kg`（区别于 `/api/auth/kg` 管理前缀）。
+
+**理由**：知识点总览是"全量知识地图"底图（1000+ 条），按学段分页避免一次拉全量；`chapterLabel`/`sectionLabel` 供前端"学段→章节→知识点"二次分组。
+
+### 15. 题型库分页 + 关联知识点接口（题型分析）
+
+**决策**：新增两个接口：
+- `GET /api/kp/question-types?page=1&size=20`：分页列题型（`id`/`topicLabel`/`status`/`hitCount` + `total`），`QuestionTypeRepository` 补 `findPage`。
+- `GET /api/kp/question-types/{id}/knowledge-points`：该题型关联知识点（`QuestionTypeKpRepository.findByQuestionTypeId` 已有 + `kgKnowledgePointRepository.findByUris` 反查 kpLabel），返回 `kpUri`/`kpLabel`/`gradeRange`/`ratio`/`hitCount`。
+
+**理由**：题型分析页需"题型库浏览 + 通过题型看关联知识点"。`QuestionType`/`QuestionTypeKp` 目前只有 `kp_uri` 无 name，`kpLabel` 从 kg 镜像反查（不冗余存 name，权威标签唯一来源 kg 镜像）。
+
 ## Risks / Trade-offs
 
 - [冷启动种子依赖 LLM] → 题型库空时第一次关联只能靠 LLM。缓解：学生澄清意图（可选）+ 单学科（数学）+ label 接地（复用 mastery_snapshot 已知 label）降噪。

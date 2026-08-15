@@ -50,3 +50,12 @@
 - [x] 7.2 观测去重计数 + 聚合阈值 + 维护重判单测
 - [x] 7.3 接口测试（mastery 增强字段、resolve、pending 确认、权限）
 - [x] 7.4 权威图零写入断言（聚合/维护后 Neo4j 与镜像无变更）
+
+## 8. 前端学习报告数据契约（stage 字段 + 全量知识点分页 + 题型库分页）
+
+- [x] 8.1 [①] `MasteryItemDTO` 增加 `stage`/`chapterLabel`/`sectionLabel`；新增值对象 `KgKpPlacement`（kpUri+stage+chapterLabel+sectionLabel）+ `KgKnowledgePointRepository.findPlacementByUris(List<String>)` 批量反查（Mapper 一条 LEFT JOIN：kp→section→chapter→textbook）
+- [x] 8.2 [①] `TutoringAppService.getStudentMastery` 组装时批量反查 stage 填入（复用 8.1 的 findPlacementByUris，避免 N+1）
+- [x] 8.3 [②] 新增 `POST /api/kg/knowledge-points`（按 stage 分页列教材知识点，返回 kpUri/kpLabel/stage/chapterLabel/sectionLabel + total/page/size）；Mapper 反向 JOIN（textbook[stage]→chapter→section→kp）+ COUNT
+- [x] 8.4 [③a] `QuestionTypeRepository` 增加分页查询 `findPage`；新增 `GET /api/kp/question-types`（page/size，返回 id/topicLabel/status/hitCount + total）
+- [x] 8.5 [③b] 新增 `GET /api/kp/question-types/{id}/knowledge-points`：`findByQuestionTypeId` + `kgKnowledgePointRepository.findByUris` 反查 kpLabel，返回 kpUri/kpLabel/gradeRange/ratio/hitCount
+- [x] 8.6 [测试] 三接口 + stage 反查的单测/接口测试（分页边界、kp 无归属 stage=null、越权、kpLabel 反查）

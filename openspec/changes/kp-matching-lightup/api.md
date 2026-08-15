@@ -13,6 +13,9 @@
 - [2. 学生掌握度 mastery（增强）](#2-学生掌握度-mastery增强)
 - [3. 挂起清单 pending](#3-挂起清单-pending)
 - [4. 挂起确认 confirm](#4-挂起确认-confirm)
+- [5. 全量知识点分页 knowledge-points](#5-全量知识点分页-knowledge-points)
+- [6. 题型库分页 question-types](#6-题型库分页-question-types)
+- [7. 题型关联知识点 question-types-kp](#7-题型关联知识点-question-types-kp)
 - [错误码说明](#错误码说明)
 - [前端调用注意事项](#前端调用注意事项)
 
@@ -166,6 +169,9 @@ const result = await response.json(); // { code, message, data: { uri, status, .
       "masteryLevel": 75,
       "status": "RESOLVED",
       "confidence": 92,
+      "stage": "middle",
+      "chapterLabel": "二元一次方程组",
+      "sectionLabel": "8.1 二元一次方程组",
       "updatedAt": "2026-08-12T10:30:00"
     }
   ]
@@ -181,6 +187,9 @@ const result = await response.json(); // { code, message, data: { uri, status, .
 | items[].masteryLevel | Integer | 掌握度 0-100 |
 | items[].status | String | `RESOLVED`（确定）/ `PENDING`（疑似待确认） |
 | items[].confidence | Integer | 解析置信度 0-100 |
+| items[].stage | String/null | 学段 primary/middle/high（从 kpKey 反查归属教材；无归属为 null） |
+| items[].chapterLabel | String/null | 归属章节名（无归属为 null） |
+| items[].sectionLabel | String/null | 归属小节名（无归属为 null） |
 | items[].updatedAt | String | 更新时间 |
 
 ### 请求示例
@@ -358,6 +367,168 @@ const result = await response.json();
 | 20004 | 权限不足 | 非 ADMIN/TEACHER |
 | 10001 | 参数错误 | kp_uri 为空或镜像中不存在 |
 | 50007 | 观测不存在 | id 不存在或已处理 |
+
+---
+
+## 5. 全量知识点分页 knowledge-points
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `POST` |
+| 接口路径 | `/api/kg/knowledge-points` |
+| Content-Type | `application/json` |
+| 需要登录 | 是（Session，学生/教师/管理员均可） |
+
+按学段分页列教材知识点，供学生端"知识点总览"知识地图底图（学段→章节→知识点分组）。数据源 kg 镜像只读。
+
+### 请求参数
+
+**RequestBody**
+
+```json
+{ "stage": "middle", "page": 1, "size": 20 }
+```
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+|------|------|------|------|------|
+| stage | String | 是 | — | 学段：primary / middle / high |
+| page | Integer | 否 | 1 | 页码（从 1 起） |
+| size | Integer | 否 | 20 | 每页条数（上限 100） |
+
+### 响应参数
+
+```json
+{
+  "items": [
+    {
+      "kpUri": "http://edukg.org/knowledge/3.1/kp/math#...",
+      "kpLabel": "二元一次方程组",
+      "stage": "middle",
+      "chapterLabel": "二元一次方程组",
+      "sectionLabel": "8.1 二元一次方程组"
+    }
+  ],
+  "total": 532,
+  "page": 1,
+  "size": 20
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items[].kpUri | String | 知识点 URI |
+| items[].kpLabel | String | 知识点名 |
+| items[].stage | String | 学段 |
+| items[].chapterLabel | String/null | 归属章节名（无归属为 null） |
+| items[].sectionLabel | String/null | 归属小节名（无归属为 null） |
+| total | Long | 该学段知识点总数 |
+| page / size | Integer | 回显分页参数 |
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 10004 | 未登录 | 未携带 Session |
+| 10001 | 参数错误 | stage 非 primary/middle/high |
+
+---
+
+## 6. 题型库分页 question-types
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kp/question-types` |
+| 需要登录 | 是（Session） |
+
+分页列出聚合题型库条目，供学生端"题型分析"页。
+
+### 请求参数（Query）
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+|------|------|------|------|------|
+| page | Integer | 否 | 1 | 页码 |
+| size | Integer | 否 | 20 | 每页条数（上限 100） |
+
+### 响应参数
+
+```json
+{
+  "items": [
+    { "id": 1, "topicLabel": "鸡兔同笼", "status": "STABLE", "hitCount": 42 }
+  ],
+  "total": 128,
+  "page": 1,
+  "size": 20
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items[].id | Long | 题型 ID |
+| items[].topicLabel | String | 题型名 |
+| items[].status | String | `CANDIDATE` / `STABLE` |
+| items[].hitCount | Integer | 总命中次数 |
+| total | Long | 题型总数 |
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 10004 | 未登录 | 未携带 Session |
+
+---
+
+## 7. 题型关联知识点 question-types-kp
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/kp/question-types/{id}/knowledge-points` |
+| 需要登录 | 是（Session） |
+
+查某题型的关联知识点分布（题型→知识点，kpLabel 从 kg 镜像反查）。
+
+### 请求参数（Path）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Long | 是 | 题型 ID |
+
+### 响应参数
+
+```json
+[
+  {
+    "kpUri": "http://edukg.org/knowledge/3.1/kp/math#...",
+    "kpLabel": "二元一次方程组",
+    "gradeRange": "7-8",
+    "ratio": 0.8,
+    "hitCount": 34
+  }
+]
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| kpUri | String | 知识点 URI |
+| kpLabel | String | 知识点名（kg 镜像反查） |
+| gradeRange | String/null | 该 kp 覆盖年级段 |
+| ratio | Double | 该 kp 占比 |
+| hitCount | Integer | 该分布桶命中次数 |
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 10004 | 未登录 | 未携带 Session |
+| 10002 | 实体不存在 | 题型 ID 不存在 |
 
 ---
 

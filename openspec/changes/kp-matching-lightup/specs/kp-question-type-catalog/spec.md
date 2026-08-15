@@ -51,3 +51,15 @@ CANDIDATE 条目在去重学生数 ≥ 10 且近 30 天仍增长时 SHALL 可被
 #### Scenario: 修正回流先验
 - **WHEN** 一批观测从二元一次方程组修正为假设法
 - **THEN** 题型库「鸡兔同笼」的假设法分布桶 hit_students 增加，后续解析先验随之偏向假设法
+
+### Requirement: 题型库分页查询与关联知识点查询
+
+系统 SHALL 提供 `GET /api/kp/question-types`（page/size 分页，返回 id/topicLabel/status/hitCount + total）与 `GET /api/kp/question-types/{id}/knowledge-points`（返回该题型的关联知识点 kpUri/kpLabel/gradeRange/ratio/hitCount）。其中 kpLabel 从 kg 镜像按 kpUri 反查，SHALL NOT 冗余存知识点 name（权威标签唯一来源 kg 镜像）。
+
+#### Scenario: 分页列题型
+- **WHEN** 调用 `GET /api/kp/question-types?page=1&size=20`
+- **THEN** 返回题型条目（含 topicLabel/status/hitCount）与 total，按分页返回
+
+#### Scenario: 题型关联知识点
+- **WHEN** 调用 `GET /api/kp/question-types/{id}/knowledge-points` 且该题型有分布桶
+- **THEN** 返回各桶 kpUri + 反查的 kpLabel + gradeRange + ratio + hitCount

@@ -11,8 +11,9 @@ AI 答疑已经能识别学生薄弱的知识点（decide 输出 `question_kps` 
 - **新增聚合题型库** `t_kp_question_type`：跨学生共现沉淀"知识点的题型"，带**年级分布**，CANDIDATE→审核→STABLE。
 - **新增自动维护闭环**：冲突检测（decide 诊断 vs 派生标注 / 掌握度矛盾 / 年级分布异常）→ 自动重判 → 修正回流为先验 → 全体学生受益。
 - **信任模型**：LLM 主裁判（默认解析/重判）+ 学生意图信号（低置信"你想学哪个"可选澄清，`source=student_vote`）+ 人工边界仲裁（仅极少数边界，找懂学科的人）；LLM 判断强制接客观信号校准，防自证循环。
-- **掌握度 DTO 增强**：`MasteryItemDTO` 增加 `status`(RESOLVED/PENDING) 与 `confidence`，前端可渲染"疑似待确认"态。
+- **掌握度 DTO 增强**：`MasteryItemDTO` 增加 `status`(RESOLVED/PENDING)、`confidence`、`stage`(primary/middle/high，含可选 `chapterLabel`/`sectionLabel`)，前端可渲染"疑似待确认"态并按学段分组。
 - **新增接口**：`POST /api/kp/resolve`（解析外露）、`GET/POST /api/kg/aliases/pending`（挂起审核）。
+- **前端学习报告数据契约（本期补）**：① `mastery` 补 `stage` 按学段分组；② 新增 `POST /api/kg/knowledge-points` 按学段分页列全量知识点（知识地图底图）；③ 新增 `GET /api/kp/question-types`（题型库分页）+ `GET /api/kp/question-types/{id}/knowledge-points`（题型关联知识点），支撑题型分析页。
 - **学生端图谱页**：复用现有 `KnowledgeGraph` 组件开学生路由，按 `node.id(uri)` 叠加掌握度点亮（绿/黄/红 + 疑似虚线态）。
 - **权威图谱零写入**：Neo4j 与 kg-sync MySQL 镜像保持只读，派生层只借 `kp_uri` 走权威图结构。
 
@@ -23,6 +24,7 @@ AI 答疑已经能识别学生薄弱的知识点（decide 输出 `question_kps` 
 - `kp-topic-resolution`: 题型/知识点 label → TextbookKP URI 的解析管线（年级锚、别名表、LLM 消歧、统计先验、挂起队列），供答疑内嵌与外露接口复用。
 - `kp-question-type-catalog`: 个体派生观测 + 聚合题型库 + 自动维护闭环，从答疑数据里沉淀"知识点的题型"，业务隔离。
 - `kp-mastery-lightup`: 图谱掌握度点亮：掌握度数据增强、学生端图谱页、挂起审核管理面。
+- `kg-knowledge-overview`: 按学段分页列全量教材知识点（带章节/小节归属），供学生端"知识点总览"知识地图底图。
 
 ### Modified Capabilities
 
@@ -35,6 +37,7 @@ AI 答疑已经能识别学生薄弱的知识点（decide 输出 `question_kps` 
   - 新增领域模型 + 2 张表（`t_kp_derived_obs`、`t_kp_question_type`）+ Flyway 迁移（learning 库）。
   - 掌握度 DTO 增加 `status`/`confidence`（`MasteryItemDTO`）。
   - 新增 `KpResolutionController` / 审核接口；`DecideRequest` 增加 `student_grade`（开放决策，见 design）。
+  - 掌握度 DTO 增加 `stage` + 反查值对象 `KgKpPlacement`；新增 `POST /api/kg/knowledge-points`、`GET /api/kp/question-types`(+`/{id}/knowledge-points`)。
   - 维护闭环为周期任务（Spring `@Scheduled`）。
 - **Frontend**（`aiEduPlatformFront`）：
   - 学生端图谱页（新路由）+ `KnowledgeGraph` 组件复用 + 消费 `getStudentMastery`（当前定义了但无人调用）。
