@@ -27,14 +27,16 @@ public class KgKnowledgeOverviewAppService {
 
     /** 按学段分页列教材知识点。 */
     public PageDTO<KgKnowledgePointPageItemDTO> page(String stage, int page, int size) {
-        validateStage(stage);
-        long total = kgKnowledgePointRepository.countByStage(stage);
+        KgStageEnum stageEnum = resolveStage(stage);
+        // 库里 t_kg_textbook.stage 存中文 label，查询前 code → 中文
+        String stageLabel = stageEnum.getLabel();
+        long total = kgKnowledgePointRepository.countByStage(stageLabel);
         List<KgKnowledgePointPageItemDTO> items = kgKnowledgePointRepository
-                .findPageByStage(stage, (page - 1) * size, size).stream()
+                .findPageByStage(stageLabel, (page - 1) * size, size).stream()
                 .map(p -> KgKnowledgePointPageItemDTO.builder()
                         .kpUri(p.getKpUri())
                         .kpLabel(p.getKpLabel())
-                        .stage(p.getStage())
+                        .stage(stageEnum.getCode())
                         .chapterLabel(p.getChapterLabel())
                         .sectionLabel(p.getSectionLabel())
                         .build())
@@ -43,15 +45,12 @@ public class KgKnowledgeOverviewAppService {
                 .items(items).total(total).page(page).size(size).build();
     }
 
-    private void validateStage(String stage) {
-        if (stage == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMS, "stage 不能为空");
+    /** 校验 stage code 并返回枚举；非法抛 INVALID_PARAMS。 */
+    private KgStageEnum resolveStage(String stage) {
+        KgStageEnum e = KgStageEnum.fromCode(stage);
+        if (e == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "stage 非法，应为 primary/middle/high");
         }
-        for (KgStageEnum e : KgStageEnum.values()) {
-            if (e.getCode().equals(stage)) {
-                return;
-            }
-        }
-        throw new BusinessException(ErrorCode.INVALID_PARAMS, "stage 非法，应为 primary/middle/high");
+        return e;
     }
 }

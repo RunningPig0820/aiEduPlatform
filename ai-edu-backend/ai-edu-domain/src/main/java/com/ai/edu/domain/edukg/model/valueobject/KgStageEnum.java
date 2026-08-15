@@ -21,4 +21,30 @@ public enum KgStageEnum {
         this.label = label;
         this.orderIndex = orderIndex;
     }
+
+    /** code → 枚举（未知或 null 返回 null）。 */
+    public static KgStageEnum fromCode(String code) {
+        if (code == null) {
+            return null;
+        }
+        for (KgStageEnum e : values()) {
+            if (e.code.equals(code)) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /** 中文 label → 枚举（未知或 null 返回 null）。 */
+    public static KgStageEnum fromLabel(String label) {
+        if (label == null) {
+            return null;
+        }
+        for (KgStageEnum e : values()) {
+            if (e.label.equals(label)) {
+                return e;
+            }
+        }
+        return null;
+    }
 }

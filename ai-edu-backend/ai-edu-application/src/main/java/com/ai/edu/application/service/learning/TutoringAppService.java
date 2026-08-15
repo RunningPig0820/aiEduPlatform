@@ -17,6 +17,7 @@ import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
+import com.ai.edu.domain.edukg.model.valueobject.KgStageEnum;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
@@ -333,7 +334,7 @@ public class TutoringAppService {
                                     .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
                                     .status("RESOLVED")
                                     .confidence(confidenceByKp.get(kpKey))
-                                    .stage(placement == null ? null : placement.getStage())
+                                    .stage(toStageCode(placement == null ? null : placement.getStage()))
                                     .chapterLabel(placement == null ? null : placement.getChapterLabel())
                                     .sectionLabel(placement == null ? null : placement.getSectionLabel())
                                     .updatedAt(m.getUpdatedAt())
@@ -341,6 +342,12 @@ public class TutoringAppService {
                         })
                         .toList())
                 .build();
+    }
+
+    /** 中文 stage label → code（未知原样返回，null 返回 null）。 */
+    private static String toStageCode(String label) {
+        KgStageEnum e = KgStageEnum.fromLabel(label);
+        return e == null ? label : e.getCode();
     }
 
     // ==================== OCR 前置 ====================

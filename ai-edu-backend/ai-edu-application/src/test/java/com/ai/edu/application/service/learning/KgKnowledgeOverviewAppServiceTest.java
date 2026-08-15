@@ -32,13 +32,14 @@ class KgKnowledgeOverviewAppServiceTest {
     }
 
     @Test
-    @DisplayName("page — 按学段分页返回 kpUri/kpLabel/stage/chapter/section + total")
+    @DisplayName("page — code→中文查库、中文→code 返回（stage 映射）")
     void page_shouldReturnPagedPoints() {
+        // 模拟库里 t_kg_textbook.stage 存中文 label
         KgKpPlacement p = KgKpPlacement.builder()
-                .kpUri("kp-uri-1").kpLabel("二元一次方程组").stage("middle")
+                .kpUri("kp-uri-1").kpLabel("二元一次方程组").stage("初中")
                 .chapterLabel("二元一次方程组").sectionLabel("8.1 二元一次方程组").build();
-        when(kgKnowledgePointRepository.countByStage("middle")).thenReturn(532L);
-        when(kgKnowledgePointRepository.findPageByStage("middle", 0, 20)).thenReturn(List.of(p));
+        when(kgKnowledgePointRepository.countByStage("初中")).thenReturn(532L);
+        when(kgKnowledgePointRepository.findPageByStage("初中", 0, 20)).thenReturn(List.of(p));
 
         PageDTO<KgKnowledgePointPageItemDTO> result = service.page("middle", 1, 20);
 
