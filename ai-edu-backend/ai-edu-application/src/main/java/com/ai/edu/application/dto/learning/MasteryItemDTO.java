@@ -37,6 +37,15 @@ public class MasteryItemDTO implements Serializable {
     /** 解析置信度 0-100（从派生观测关联） */
     private Integer confidence;
 
+    /** 学段 primary/middle/high（从 kpKey 反查归属教材；无归属为 null） */
+    private String stage;
+
+    /** 归属章节名（无归属为 null） */
+    private String chapterLabel;
+
+    /** 归属小节名（无归属为 null） */
+    private String sectionLabel;
+
     /** 更新时间 */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;

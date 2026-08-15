@@ -7,6 +7,7 @@ import com.ai.edu.infrastructure.persistence.learning.po.QuestionTypePo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,5 +33,21 @@ public class QuestionTypeRepositoryImpl implements QuestionTypeRepository {
     public Optional<QuestionType> findByTopicLabel(String topicLabel) {
         QuestionTypePo po = questionTypeMapper.selectByTopicLabel(topicLabel);
         return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<QuestionType> findById(Long id) {
+        QuestionTypePo po = questionTypeMapper.selectActiveById(id);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
+
+    @Override
+    public List<QuestionType> findPage(int offset, int limit) {
+        return QuestionTypePo.toEntityList(questionTypeMapper.selectPage(offset, limit));
+    }
+
+    @Override
+    public long count() {
+        return questionTypeMapper.count();
     }
 }

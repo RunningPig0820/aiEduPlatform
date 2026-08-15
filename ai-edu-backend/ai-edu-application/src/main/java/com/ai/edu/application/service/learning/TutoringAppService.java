@@ -16,6 +16,8 @@ import com.ai.edu.application.dto.learning.sse.SseMetaDTO;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
+import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.EvalInfo;
@@ -67,6 +69,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -123,6 +126,9 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private StudentKpMasteryRepository masteryRepository;
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private KgKnowledgePointRepository kgKnowledgePointRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private DerivedKpObsRepository derivedKpObsRepository;
@@ -307,17 +313,29 @@ public class TutoringAppService {
                         DerivedKpObs::getKpUri,
                         DerivedKpObs::getConfidence,
                         Math::max));
+        // stage/chapter/section 归属批量反查（kpKey → 教材 → 学段），避免 N+1
+        List<String> kpUris = list.stream()
+                .map(m -> m.getKpKey() == null ? null : m.getKpKey().getValue())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<String, KgKpPlacement> placementByKp = kgKnowledgePointRepository.findPlacementByUris(kpUris).stream()
+                .collect(Collectors.toMap(KgKpPlacement::getKpUri, p -> p, (a, b) -> a));
         return StudentMasteryDTO.builder()
                 .studentId(studentId)
                 .items(list.stream()
                         .map(m -> {
                             String kpKey = m.getKpKey() == null ? null : m.getKpKey().getValue();
+                            KgKpPlacement placement = placementByKp.get(kpKey);
                             return MasteryItemDTO.builder()
                                     .kpKey(kpKey)
                                     .kpLabel(m.getKpLabel())
                                     .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
                                     .status("RESOLVED")
                                     .confidence(confidenceByKp.get(kpKey))
+                                    .stage(placement == null ? null : placement.getStage())
+                                    .chapterLabel(placement == null ? null : placement.getChapterLabel())
+                                    .sectionLabel(placement == null ? null : placement.getSectionLabel())
                                     .updatedAt(m.getUpdatedAt())
                                     .build();
                         })

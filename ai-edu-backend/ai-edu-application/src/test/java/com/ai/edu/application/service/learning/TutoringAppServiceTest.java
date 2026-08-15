@@ -8,6 +8,7 @@ import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.EvalInfo;
@@ -63,6 +64,7 @@ class TutoringAppServiceTest {
     private TutoringAppService service;
     private TutoringSessionRepository sessionRepository;
     private StudentKpMasteryRepository masteryRepository;
+    private KgKnowledgePointRepository kgKnowledgePointRepository;
     private DerivedKpObsRepository derivedKpObsRepository;
     private ErrorEventRepository errorEventRepository;
     private TutoringSessionCache sessionCache;
@@ -77,6 +79,7 @@ class TutoringAppServiceTest {
         service = new TutoringAppService();
         sessionRepository = mock(TutoringSessionRepository.class);
         masteryRepository = mock(StudentKpMasteryRepository.class);
+        kgKnowledgePointRepository = mock(KgKnowledgePointRepository.class);
         derivedKpObsRepository = mock(DerivedKpObsRepository.class);
         errorEventRepository = mock(ErrorEventRepository.class);
         sessionCache = mock(TutoringSessionCache.class);
@@ -88,6 +91,7 @@ class TutoringAppServiceTest {
 
         service.setTutoringSessionRepository(sessionRepository);
         service.setMasteryRepository(masteryRepository);
+        service.setKgKnowledgePointRepository(kgKnowledgePointRepository);
         service.setDerivedKpObsRepository(derivedKpObsRepository);
         service.setErrorEventRepository(errorEventRepository);
         service.setSessionCache(sessionCache);
@@ -111,6 +115,7 @@ class TutoringAppServiceTest {
                 .thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         when(kpResolver.resolve(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
         when(derivedKpObsRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
+        when(kgKnowledgePointRepository.findPlacementByUris(anyList())).thenReturn(List.of());
         when(masteryRepository.findByStudentAndKp(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
         when(masteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(transcriptArchiver.archive(any(), any(), any(), anyList(), any(), any()))

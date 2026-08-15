@@ -9,6 +9,8 @@ import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 /**
  * 聚合题型库主表 Mapper（路由 ai_edu_learning 库）。
  *
@@ -32,4 +34,16 @@ public interface QuestionTypeMapper extends BaseMapper<QuestionTypePo> {
     /** 按题型 label 查条目。 */
     @Select("SELECT * FROM t_kp_question_type WHERE topic_label = #{topicLabel} AND is_deleted = false LIMIT 1")
     QuestionTypePo selectByTopicLabel(@Param("topicLabel") String topicLabel);
+
+    /** 按主键查条目（带逻辑删除过滤，避免与 BaseMapper.selectById 语义冲突）。 */
+    @Select("SELECT * FROM t_kp_question_type WHERE id = #{id} AND is_deleted = false LIMIT 1")
+    QuestionTypePo selectActiveById(@Param("id") Long id);
+
+    /** 分页列题型（按 id 升序）。 */
+    @Select("SELECT * FROM t_kp_question_type WHERE is_deleted = false ORDER BY id LIMIT #{limit} OFFSET #{offset}")
+    List<QuestionTypePo> selectPage(@Param("offset") int offset, @Param("limit") int limit);
+
+    /** 题型总数。 */
+    @Select("SELECT COUNT(*) FROM t_kp_question_type WHERE is_deleted = false")
+    long count();
 }

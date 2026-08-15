@@ -1,6 +1,7 @@
 package com.ai.edu.domain.edukg.repository;
 
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
 
 import java.util.List;
 import java.util.Optional;
@@ -52,4 +53,20 @@ public interface KgKnowledgePointRepository {
     int countActive();
 
     void updateStatus(String uri, String status);
+
+    /**
+     * 批量反查知识点归属（kp→section→chapter→textbook 的 stage/chapter/section 投影）。
+     * 供掌握度 stage 字段与知识点总览分页复用；一个 kp 挂多个 section 时取首个非空 stage。
+     */
+    List<KgKpPlacement> findPlacementByUris(List<String> kpUris);
+
+    /**
+     * 按学段分页列教材知识点（带章节/小节归属），供知识点总览。
+     */
+    List<KgKpPlacement> findPageByStage(String stage, int offset, int limit);
+
+    /**
+     * 某学段教材知识点总数（分页 total）。
+     */
+    long countByStage(String stage);
 }

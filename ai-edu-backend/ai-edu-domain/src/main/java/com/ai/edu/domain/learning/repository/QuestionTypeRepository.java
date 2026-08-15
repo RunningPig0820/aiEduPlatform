@@ -2,6 +2,7 @@ package com.ai.edu.domain.learning.repository;
 
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,4 +21,19 @@ public interface QuestionTypeRepository {
      * 按题型 label 查条目。
      */
     Optional<QuestionType> findByTopicLabel(String topicLabel);
+
+    /**
+     * 按主键查条目。
+     */
+    Optional<QuestionType> findById(Long id);
+
+    /**
+     * 分页列题型（按 id 升序）。
+     */
+    List<QuestionType> findPage(int offset, int limit);
+
+    /**
+     * 题型总数（分页 total）。
+     */
+    long count();
 }

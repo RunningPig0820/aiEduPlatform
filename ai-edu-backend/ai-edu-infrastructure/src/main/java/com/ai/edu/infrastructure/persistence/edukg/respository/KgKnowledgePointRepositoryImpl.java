@@ -1,6 +1,7 @@
 package com.ai.edu.infrastructure.persistence.edukg.respository;
 
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgKnowledgePointMapper;
 import com.ai.edu.infrastructure.persistence.edukg.mapper.KgSectionKPMapper;
@@ -8,7 +9,10 @@ import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -128,5 +132,28 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
         }
         // 第二次查询：用 uris 查知识点实体
         return KgKnowledgePointPo.toEntityList(kgKnowledgePointMapper.selectByUris(kpUris));
+    }
+
+    @Override
+    public List<KgKpPlacement> findPlacementByUris(List<String> kpUris) {
+        if (kpUris == null || kpUris.isEmpty()) {
+            return List.of();
+        }
+        // 一个 kp 可能挂多个 section（跨教材），取首个非空 stage 去重
+        Map<String, KgKpPlacement> byKp = new LinkedHashMap<>();
+        for (KgKpPlacement p : kgKnowledgePointMapper.selectPlacementByUris(kpUris)) {
+            byKp.putIfAbsent(p.getKpUri(), p);
+        }
+        return new ArrayList<>(byKp.values());
+    }
+
+    @Override
+    public List<KgKpPlacement> findPageByStage(String stage, int offset, int limit) {
+        return kgKnowledgePointMapper.selectPageByStage(stage, offset, limit);
+    }
+
+    @Override
+    public long countByStage(String stage) {
+        return kgKnowledgePointMapper.countByStage(stage);
     }
 }
