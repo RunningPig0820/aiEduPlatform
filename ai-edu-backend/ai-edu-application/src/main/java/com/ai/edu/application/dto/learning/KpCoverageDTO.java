@@ -10,13 +10,13 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 学生题型掌握度响应（掌握度主体翻转：题型粒度，api.md 接口 2）。
+ * 学生知识点派生覆盖度响应（掌握度主体翻转：知识点总览知识地图着色数据源）。
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class StudentMasteryDTO implements Serializable {
+public class KpCoverageDTO implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -24,6 +24,6 @@ public class StudentMasteryDTO implements Serializable {
     /** 学生 ID */
     private Long studentId;
 
-    /** 题型掌握度列表 */
-    private List<MasteryItemDTO> items;
+    /** 知识点覆盖度列表（按 kpUri 叠加到知识图谱节点） */
+    private List<KpCoverageItemDTO> items;
 }

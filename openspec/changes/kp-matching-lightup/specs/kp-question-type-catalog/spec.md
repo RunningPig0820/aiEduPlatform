@@ -24,6 +24,18 @@
 - **WHEN** 「牛吃草」仅 1 名学生命中 1 次
 - **THEN** 题型库不创建条目，仅保留个体观测
 
+### Requirement: 离线 LLM 自动关联题型↔知识点
+
+离线聚合任务 SHALL 在计数聚合基础上，对达阈值的题型调用 LLM 自动关联：输入题型名 + obs 共现 `(kp_uri, 命中次数, 年级分布桶)`，输出规范化的题型→kp 分布（ratio 归一化和=1），据此建/更新 CANDIDATE。LLM 关联结果 SHALL NOT 直接 STABLE，需第二独立信号（多生共现 / 投票达标 / 做题结果佐证）才升 STABLE 进解析先验。
+
+#### Scenario: LLM 自动关联建候选
+- **WHEN** 题型「鸡兔同笼」累积 ≥N 名学生的 obs 共现（二元一次方程组、假设法）
+- **THEN** 离线任务调用 LLM 归纳分布，输出 ratio 归一化的 kp 分布，建/更新 CANDIDATE 及分布桶
+
+#### Scenario: LLM 关联不直接稳定
+- **WHEN** LLM 关联结果仅单来源（无第二独立信号）
+- **THEN** 保持 CANDIDATE，不升 STABLE 进解析先验
+
 ### Requirement: 审核升级为稳定题型
 
 CANDIDATE 条目在去重学生数 ≥ 10 且近 30 天仍增长时 SHALL 可被审核升为 STABLE（"知识点的题型"），审核可补 definition。STABLE 条目的 kp 分布 SHALL 作为解析先验被复用。
@@ -63,3 +75,11 @@ CANDIDATE 条目在去重学生数 ≥ 10 且近 30 天仍增长时 SHALL 可被
 #### Scenario: 题型关联知识点
 - **WHEN** 调用 `GET /api/kp/question-types/{id}/knowledge-points` 且该题型有分布桶
 - **THEN** 返回各桶 kpUri + 反查的 kpLabel + gradeRange + ratio + hitCount
+
+### Requirement: 分布桶 ratio 归一化
+
+同一题型的分布桶 `ratio` SHALL 归一化（该题型各 kp 桶 ratio 之和 = 1），使知识点派生覆盖度 `coverage(kp) = Σ(题型掌握度 × ratio)` 定义良好。聚合/维护更新分布桶时 SHALL 重新归一化。
+
+#### Scenario: 分布桶归一化
+- **WHEN** 题型「鸡兔同笼」分布为 假设法 38 次、二元一次方程组 21 次
+- **THEN** 两桶 ratio 分别为 0.64 / 0.36，和为 1

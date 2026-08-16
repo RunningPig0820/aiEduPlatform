@@ -3,7 +3,7 @@
 ## 1. 测试概述
 
 ### 1.1 测试目标
-验证解析管线（resolve）、掌握度增强（mastery）、挂起审核（pending/confirm）及派生层聚合/维护的业务场景，覆盖正常、边界与异常路径，并断言**权威图谱零写入**。
+验证解析管线（resolve）、题型掌握度翻转（mastery 题型粒度 + kp-coverage 知识点派生覆盖度）、挂起审核（pending/confirm）及派生层聚合/维护的业务场景，覆盖正常、边界与异常路径，并断言**权威图谱零写入**。
 
 ### 1.2 测试方式
 - **集成测试**：直接注入 Controller / 应用服务，调用真实方法。
@@ -54,17 +54,17 @@
 | RES-010 | 学生澄清跳过弃权 | 同上，呈现澄清选项 | 学生选「跳过」 | 不落 student_vote 观测，label 转 PENDING |
 | RES-011 | 冷启动首条弱化 | 题型库空，镜像未命中，LLM 高置信(90)命中假设法 | 「鸡兔同笼」首条 | 落 obs(status=WEAK)，不点亮、不进题型库先验 |
 | RES-012 | 票权重-LLM高置信覆盖学生票 | LLM 置信 90 命中 URI_FY | 学生想选假设法 | 直接 RESOLVED，不问学生，学生票不覆盖 |
+| RES-013 | 冷启动 LLM 生成候选名 + 镜像校验 | 题型库空，镜像名 LIKE 无召回，LLM 生成「二元一次方程组」「假设法」，「二元一次方程组」镜像命中、「假设法」未命中 | `{label: LABEL_JT}` | 保留「二元一次方程组」候选；单候选 RESOLVED 标 WEAK |
+| RES-014 | LLM 候选名全未命中镜像 | LLM 生成候选名镜像校验全不命中 | `{label: LABEL_JT}` | `status=PENDING`，candidates=[]，不返回镜像不存在 kp |
 
-### 3.2 学生掌握度 `GET /api/students/{id}/mastery`（增强）
+### 3.2 题型掌握度 `GET /api/students/{id}/mastery`
 
 | 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
 |---------|---------|---------|------|---------|
-| MAS-001 | 正常返回增强字段 | 学生有掌握度记录 | studentId=STUDENT_ID，Session=STUDENT_ID | `items[]` 含 `status`、`confidence` 字段 |
+| MAS-001 | 正常返回题型掌握度 | 学生有题型掌握度记录 | studentId=STUDENT_ID，Session=STUDENT_ID | `items[]` 含 `topicKey`、`topicLabel`、`masteryLevel`、`status`、`confidence` |
 | MAS-002 | 越权查询 | Session=STUDENT_ID | studentId=ADMIN_ID | 抛出 PERMISSION_DENIED |
 | MAS-003 | 无记录返回空列表 | 新学生 | studentId=新学生，Session=同 | `items=[]`，code 成功 |
 | MAS-004 | 未登录 | 无 Session | studentId=STUDENT_ID | 抛出 UNAUTHORIZED |
-| MAS-005 | 携带学段字段 | 掌握点「二元一次方程组」归属初中教材 | studentId=STUDENT_ID | `items[]` 含 `stage=middle`、`chapterLabel`、`sectionLabel` |
-| MAS-006 | 无归属 stage 为空 | 知识点未挂小节/章节 | studentId=STUDENT_ID | `stage=null`，kpKey/kpLabel 仍正常返回 |
 
 ### 3.3 挂起清单 `GET /api/kg/aliases/pending`
 
@@ -92,6 +92,8 @@
 | AGG-001 | 达阈值进候选 | 同一 label 3 名学生命中共 6 次 | 触发聚合 | 题型库建 CANDIDATE + 分布桶 |
 | AGG-002 | 未达阈值不聚合 | 仅 1 名学生命中 1 次 | 触发聚合 | 题型库无新条目 |
 | AGG-003 | 升级稳定 | CANDIDATE ≥10 学生 + 近 30 天增长 | 审核通过 | 升 STABLE，解析先验可用 |
+| AGG-004 | LLM 自动关联建候选 | 题型「鸡兔同笼」累积 ≥N 名学生 obs 共现（二元一次方程组、假设法） | 离线任务调用 LLM | LLM 输出归一化 kp 分布，建/更新 CANDIDATE + 分布桶 |
+| AGG-005 | LLM 关联不直接稳定 | LLM 关联仅单来源（无第二独立信号） | 离线任务 | 保持 CANDIDATE，不升 STABLE 进先验 |
 | MAI-001 | 冲突观测自动重判 | decide 诊断 vs 观测冲突（CONFLICTED） | 运行维护任务 | 高置信则更新 obs + 题型库统计回流 |
 | MAI-002 | 低置信进人工 | 重判仍低置信/无年级锚 | 运行维护任务 | status=HUMAN_REVIEW |
 | MAI-003 | 权威图零写入 | 执行聚合 + 维护后 | — | kg-sync 镜像行数不变、Neo4j 无写调用 |
@@ -116,6 +118,22 @@
 | QTP-004 | 题型不存在 | id 不存在 | `GET /api/kp/question-types/999/knowledge-points` | 抛出 10002（实体不存在） |
 | QTP-005 | 未登录 | 无 Session | 任一 | 抛出 UNAUTHORIZED |
 
+### 3.8 掌握度主体翻转（服务层 + 覆盖度接口）
+
+| 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
+|---------|---------|---------|------|---------|
+| NORM-001 | 题型归一化 | — | normalize("鸡兔同笼问题") vs normalize("鸡兔同笼") | 同一 topic_key |
+| NORM-002 | 归一化空白/全角半角 | — | normalize("鸡 兔 同 笼") / 全角写法 | 归一化到规范 topic_key |
+| TPM-001 | 题型掌握度落库 | 学生产生「鸡兔同笼」mastered 信号 | `applyMasteryAndErrors` | `t_student_topic_mastery` 落 topic_key + 75，RESOLVED |
+| TPM-002 | 同题型取 max 单调不减 | 该生已有鸡兔同笼 75 | 再遇 practicing 信号 | 保持 75 不降 |
+| COV-001 | 聚合题型按 ratio 派生 | 学生鸡兔同笼掌握 75，题型库鸡兔同笼→二元一次方程组 ratio 0.8 | `kp-coverage` | coverage=60，masteryLevel=50 |
+| COV-002 | 未聚合题型按单观测派生 | 学生相遇问题掌握 50，obs 单观测相遇问题→kp | `kp-coverage` | coverage=50 |
+| COV-003 | 无映射回退旧 KP 掌握度 | 某 kp 仅旧 `t_student_kp_mastery` 记录 | `kp-coverage` | coverage=旧 masteryLevel |
+| COV-004 | 携带学段字段 | kp 归属初中教材 | `kp-coverage` | `items[]` 含 stage=middle、chapterLabel、sectionLabel |
+| COV-005 | 无归属 stage 为空 | kp 未挂小节/章节 | `kp-coverage` | stage=null，kpUri/coverage 仍正常返回 |
+| COV-006 | 越权查询 | Session=STUDENT_ID | studentId=ADMIN_ID | 抛出 PERMISSION_DENIED |
+| COV-007 | 未登录 | 无 Session | studentId=STUDENT_ID | 抛出 UNAUTHORIZED |
+
 ---
 
 ## 4. 错误码对照表
@@ -136,14 +154,15 @@
 
 | 模块 | 正常 | 边界 | 异常 | 合计 |
 |------|------|------|------|------|
-| RES（解析） | 6 | 3 | 3 | 12 |
-| MAS（掌握度） | 3 | 2 | 1 | 6 |
+| RES（解析） | 8 | 3 | 3 | 14 |
+| MAS（题型掌握度） | 1 | 1 | 2 | 4 |
+| 翻转（NORM/TPM/COV） | 8 | 1 | 2 | 11 |
 | PEN（挂起清单） | 2 | 0 | 2 | 4 |
 | CFM（挂起确认） | 2 | 0 | 3 | 5 |
-| AGG/MAI（聚合维护） | 3 | 1 | 2 | 6 |
+| AGG/MAI（聚合维护） | 5 | 1 | 2 | 8 |
 | OVW（全量知识点分页） | 1 | 2 | 2 | 5 |
 | QTP（题型库分页） | 2 | 1 | 2 | 5 |
-| **合计** | **19** | **9** | **15** | **43** |
+| **合计** | **29** | **9** | **18** | **56** |
 
 ---
 
@@ -156,10 +175,14 @@
 | 1 | `KpResolutionResolverTest` | 解析管线（镜像/题型库/LLM/挂起/去重） |
 | 2 | `KpAggregationMaintenanceTest` | 聚合阈值 + 维护重判 + 零写入断言 |
 | 3 | `KpResolutionControllerTest` | resolve 接口（含权限/参数） |
-| 4 | `StudentMasteryLightupTest` | mastery 增强字段 + stage + 越权 |
-| 5 | `KpAliasReviewControllerTest` | pending / confirm 接口 |
-| 6 | `KgKnowledgeOverviewControllerTest` | 全量知识点分页 + 权限 |
-| 7 | `KpQuestionTypeControllerTest` | 题型库分页 + 关联知识点 + kpLabel 反查 |
+| 4 | `TopicKeyNormalizerTest` | 题型归一化（空白/全角半角/去末尾语气词） |
+| 5 | `StudentTopicMasteryTest` | 题型掌握度落库 + 取 max 单调不减 |
+| 6 | `StudentMasteryLightupTest` | mastery 题型掌握度接口 + 越权 |
+| 7 | `KpCoverageAppServiceTest` | 知识点派生覆盖度（ratio/单观测/回退旧表） |
+| 8 | `KpCoverageControllerTest` | kp-coverage 接口（stage/越权） |
+| 9 | `KpAliasReviewControllerTest` | pending / confirm 接口 |
+| 10 | `KgKnowledgeOverviewControllerTest` | 全量知识点分页 + 权限 |
+| 11 | `KpQuestionTypeControllerTest` | 题型库分页 + 关联知识点 + kpLabel 反查 |
 
 ---
 
@@ -181,5 +204,5 @@
 cd ai-edu-backend && mvn test
 
 # 运行本 change 相关
-mvn test -Dtest='KpResolutionResolverTest,KpAggregationMaintenanceTest,KpResolutionControllerTest,StudentMasteryLightupTest,KpAliasReviewControllerTest,KgKnowledgeOverviewControllerTest,KpQuestionTypeControllerTest'
+mvn test -Dtest='KpResolutionResolverTest,KpAggregationMaintenanceTest,KpResolutionControllerTest,TopicKeyNormalizerTest,StudentTopicMasteryTest,StudentMasteryLightupTest,KpCoverageAppServiceTest,KpCoverageControllerTest,KpAliasReviewControllerTest,KgKnowledgeOverviewControllerTest,KpQuestionTypeControllerTest'
 ```

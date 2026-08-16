@@ -8,7 +8,6 @@ import com.ai.edu.domain.learning.service.KpDisambiguationPort;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -42,10 +41,9 @@ public class KpMaintenanceService {
     private int confidenceThreshold;
 
     /**
-     * 维护闭环（周期）：第二信号转正 → 冲突重判 → 统计回流。
-     * 凌晨 3:37 触发（避开聚合 3:17）。
+     * 维护闭环：第二信号转正 → 冲突重判 → 统计回流。
+     * 由 {@code KpBatchScheduler} 周期触发（凌晨 3:37），也可手动调用。
      */
-    @Scheduled(cron = "0 37 3 * * ?")
     public void maintain() {
         promoteWeakByCooccurrence();
         rejudgeConflicted();

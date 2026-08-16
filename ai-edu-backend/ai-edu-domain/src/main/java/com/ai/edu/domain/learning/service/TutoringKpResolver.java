@@ -28,8 +28,9 @@ public interface TutoringKpResolver {
      * @param topicLabel    题型/知识点原文
      * @param studentId     学生ID
      * @param selectedLabel 学生选择的候选学科概念（须为 resolve 返回的 candidate 之一）
+     * @return true 已落观测；false 候选无法解析到知识点（精确/LIKE 均未命中，调用方应报错而非静默）
      */
-    void recordStudentVote(String topicLabel, Long studentId, String selectedLabel);
+    boolean recordStudentVote(String topicLabel, Long studentId, String selectedLabel);
 
     /**
      * 兼容旧调用：label → TextbookKP URI（无年级锚，镜像命中行为不变）。

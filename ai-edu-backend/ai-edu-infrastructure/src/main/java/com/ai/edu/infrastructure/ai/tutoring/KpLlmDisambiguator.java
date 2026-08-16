@@ -7,17 +7,20 @@ import com.ai.edu.domain.learning.service.KpDisambiguationPort;
 import com.ai.edu.domain.llm.model.AiEduChatRequest;
 import com.ai.edu.domain.llm.model.AiEduChatResponse;
 import com.ai.edu.domain.llm.service.LlmGateway;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * 知识点 LLM 消歧组件——给定题型 label + 学生年级，从候选知识点中选最匹配（选择题 + 候选内校验防幻觉）。
+ * 知识点 LLM 消歧组件——冷启动两段式：LLM 生成候选名 + 镜像校验。
+ *
+ * <p>题型名（"鸡兔同笼"）与知识点名是两套词汇，靠「知识点名 LIKE 题型名」召回候选是死路，
+ * 故冷启动时让 LLM 生成候选知识点名，再回镜像校验（最终 kp 必在镜像，防幻觉）。
  *
  * <p>解析管线③（冷启动消歧）与维护闭环（重判）共用本组件（DRY）。纯消歧，不写 obs。
  */
@@ -25,7 +28,8 @@ import java.util.Optional;
 @Component
 public class KpLlmDisambiguator implements KpDisambiguationPort {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    /** 单候选命中时的置信度（LLM 只提名一个且镜像校验通过；冷启动仍由调用方标 WEAK）。 */
+    private static final int SINGLE_CANDIDATE_CONFIDENCE = 70;
 
     @Resource
     private LlmGateway llmGateway;
@@ -33,73 +37,85 @@ public class KpLlmDisambiguator implements KpDisambiguationPort {
     private KgKnowledgePointRepository kgKnowledgePointRepository;
 
     /**
-     * LLM 消歧：label + 年级 → 候选（镜像 LIKE 召回）→ 选择题 → 候选内校验。
+     * 两段式消歧：LLM 生成候选名 → 镜像校验。
      *
-     * @return 解析结果（RESOLVED + 置信度）；失败/无候选返回 null（降级挂起）
+     * @return 单候选 → RESOLVED；多候选 → PENDING 携带候选；零命中/失败 → null
      */
     @Override
     public KpResolution disambiguate(String label, Integer grade) {
-        List<KgKnowledgePoint> candidates = kgKnowledgePointRepository.findByLabelLikeList(label);
-        if (candidates.isEmpty()) {
-            return null;
-        }
         try {
-            String prompt = buildDisambiguationPrompt(label, grade, candidates);
-            AiEduChatResponse response = llmGateway.chat(AiEduChatRequest.of(prompt, 0L)).block();
-            return parseDisambiguationResponse(label, response, candidates);
+            List<String> names = generateCandidateNames(label, grade);
+            if (names.isEmpty()) {
+                return null;
+            }
+            List<KgKnowledgePoint> verified = verifyAgainstMirror(names);
+            if (verified.isEmpty()) {
+                log.warn("LLM 生成候选名全部未命中镜像: label={}", label);
+                return null;
+            }
+            if (verified.size() == 1) {
+                KgKnowledgePoint kp = verified.get(0);
+                return KpResolution.resolved(label, kp.getUri(), kp.getLabel(), SINGLE_CANDIDATE_CONFIDENCE);
+            }
+            List<String> candidates = verified.stream()
+                    .map(KgKnowledgePoint::getLabel)
+                    .distinct()
+                    .toList();
+            return KpResolution.pending(label, candidates);
         } catch (Exception e) {
             log.warn("LLM 消歧失败（降级挂起）: label={}", label, e);
             return null;
         }
     }
 
-    private String buildDisambiguationPrompt(String label, Integer grade, List<KgKnowledgePoint> candidates) {
+    /** ① LLM 生成候选知识点名（自由文本，每行一个）。 */
+    private List<String> generateCandidateNames(String label, Integer grade) {
+        AiEduChatResponse response = llmGateway.chat(AiEduChatRequest.of(buildPrompt(label, grade), 0L)).block();
+        if (response == null || response.getResponse() == null || response.getResponse().isBlank()) {
+            return List.of();
+        }
+        return parseNames(response.getResponse());
+    }
+
+    private String buildPrompt(String label, Integer grade) {
         StringBuilder sb = new StringBuilder();
         sb.append("你是数学知识点消歧助手。给定题型/知识点「").append(label).append("」");
         if (grade != null) {
             sb.append("（学生年级：").append(grade).append("年级）");
         }
-        sb.append("，从下列候选知识点中选出最匹配的一个，并给出置信度 0-100。\n\n候选：\n");
-        for (int i = 0; i < candidates.size(); i++) {
-            KgKnowledgePoint c = candidates.get(i);
-            sb.append(i + 1).append(". ").append(c.getLabel()).append(" (").append(c.getUri()).append(")\n");
-        }
-        sb.append("\n只输出 JSON，格式：{\"kp_uri\":\"<候选中的 uri>\",\"confidence\":<0-100>}。");
+        sb.append("，请列出它最可能对应的 1~5 个教材知识点名，每行一个，只输出知识点名，不要编号、不要解释。");
         return sb.toString();
     }
 
-    private KpResolution parseDisambiguationResponse(String label, AiEduChatResponse response,
-                                                     List<KgKnowledgePoint> candidates) {
-        if (response == null || response.getResponse() == null || response.getResponse().isBlank()) {
-            return null;
-        }
-        String text = response.getResponse().trim();
-        int jsonStart = text.indexOf('{');
-        int jsonEnd = text.lastIndexOf('}');
-        if (jsonStart < 0 || jsonEnd < jsonStart) {
-            return null;
-        }
-        String json = text.substring(jsonStart, jsonEnd + 1);
-        try {
-            JsonNode node = MAPPER.readTree(json);
-            String uri = node.has("kp_uri") ? node.get("kp_uri").asText() : null;
-            int confidence = node.has("confidence") ? node.get("confidence").asInt() : 0;
-            if (uri == null || uri.isBlank()) {
-                return null;
+    /** 解析 LLM 文本为候选名列表（去编号/bullet/空行，去重，限 5 个）。 */
+    private List<String> parseNames(String text) {
+        return Arrays.stream(text.split("\\R"))
+                .map(String::trim)
+                .map(s -> s.replaceFirst("^\\s*[0-9]+[.、)）:：]?\\s*", ""))
+                .map(s -> s.replaceFirst("^[-*•·]\\s*", ""))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .filter(s -> !s.equalsIgnoreCase("无") && !s.equalsIgnoreCase("没有"))
+                .distinct()
+                .limit(5)
+                .toList();
+    }
+
+    /** ② 镜像校验：候选名 exact → LIKE 兜底，命中才保留；去重（同 uri 只留一次）。 */
+    private List<KgKnowledgePoint> verifyAgainstMirror(List<String> names) {
+        List<KgKnowledgePoint> verified = new ArrayList<>();
+        for (String name : names) {
+            Optional<KgKnowledgePoint> kp = kgKnowledgePointRepository.findByLabel(name)
+                    .filter(k -> k.getUri() != null)
+                    .or(() -> kgKnowledgePointRepository.findByLabelLike(name).filter(k -> k.getUri() != null));
+            if (kp.isEmpty()) {
+                continue;
             }
-            // 候选内校验：LLM 只做选择题，返回候选外 uri 视为幻觉，忽略
-            Optional<KgKnowledgePoint> matched = candidates.stream()
-                    .filter(c -> uri.equals(c.getUri()))
-                    .findFirst();
-            if (matched.isEmpty()) {
-                log.warn("LLM 消歧返回候选外 uri，忽略: {}", uri);
-                return null;
+            String uri = kp.get().getUri();
+            if (verified.stream().noneMatch(v -> uri.equals(v.getUri()))) {
+                verified.add(kp.get());
             }
-            int clamped = Math.min(100, Math.max(0, confidence));
-            return KpResolution.resolved(label, uri, matched.get().getLabel(), clamped);
-        } catch (Exception e) {
-            log.warn("LLM 消歧响应解析失败: {}", text, e);
-            return null;
         }
+        return verified;
     }
 }

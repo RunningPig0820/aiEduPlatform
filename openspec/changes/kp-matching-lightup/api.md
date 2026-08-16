@@ -1,8 +1,8 @@
 # 知识点匹配与点亮 API 接口文档
 
-> 更新日期: 2026-08-13
+> 更新日期: 2026-08-15
 >
-> 涉及模块：`kp-topic-resolution`（解析）、`kp-mastery-lightup`（点亮/审核）、`kp-question-type-catalog`（派生层）。
+> 涉及模块：`kp-topic-resolution`（解析）、`kp-mastery-lightup`（题型掌握度/知识点派生覆盖度/审核）、`kp-question-type-catalog`（派生层）。
 
 ---
 
@@ -10,12 +10,13 @@
 
 - [通用响应结构](#通用响应结构)
 - [1. 题型解析 resolve](#1-题型解析-resolve)
-- [2. 学生掌握度 mastery（增强）](#2-学生掌握度-mastery增强)
-- [3. 挂起清单 pending](#3-挂起清单-pending)
-- [4. 挂起确认 confirm](#4-挂起确认-confirm)
-- [5. 全量知识点分页 knowledge-points](#5-全量知识点分页-knowledge-points)
-- [6. 题型库分页 question-types](#6-题型库分页-question-types)
-- [7. 题型关联知识点 question-types-kp](#7-题型关联知识点-question-types-kp)
+- [2. 题型掌握度 mastery](#2-题型掌握度-mastery)
+- [3. 知识点派生覆盖度 kp-coverage](#3-知识点派生覆盖度-kp-coverage)
+- [4. 挂起清单 pending](#4-挂起清单-pending)
+- [5. 挂起确认 confirm](#5-挂起确认-confirm)
+- [6. 全量知识点分页 knowledge-points](#6-全量知识点分页-knowledge-points)
+- [7. 题型库分页 question-types](#7-题型库分页-question-types)
+- [8. 题型关联知识点 question-types-kp](#8-题型关联知识点-question-types-kp)
 - [错误码说明](#错误码说明)
 - [前端调用注意事项](#前端调用注意事项)
 
@@ -52,7 +53,7 @@
 | Content-Type | `application/json` |
 | 需要登录 | 是（Session） |
 
-将 AI 识别的题型/知识点 label 解析到教材知识点 URI，复用答疑内嵌的同一解析管线（镜像 → 题型库年级匹配 → LLM 消歧 → PENDING）。低置信返回 `status=PENDING`，**不报错**。
+将 AI 识别的题型 label 解析到教材知识点 URI，复用答疑内嵌的同一解析管线（镜像 → 题型库年级匹配 → LLM 消歧 → PENDING）。低置信返回 `status=PENDING`，**不报错**。
 
 ### 请求参数
 
@@ -67,7 +68,7 @@
 
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 |------|------|------|----------|------|
-| label | String | 是 | 非空 | AI 识别的题型/知识点原文 |
+| label | String | 是 | 非空 | AI 识别的题型原文 |
 | student_grade | Integer | 否 | 1-12 | 学生年级，用于年级锚（缺省走纯 LLM 消歧） |
 
 ### 响应参数
@@ -134,7 +135,7 @@ const result = await response.json(); // { code, message, data: { uri, status, .
 
 ---
 
-## 2. 学生掌握度 mastery（增强）
+## 2. 题型掌握度 mastery
 
 ### 基本信息
 
@@ -145,7 +146,7 @@ const result = await response.json(); // { code, message, data: { uri, status, .
 | Content-Type | — |
 | 需要登录 | 是（路径 studentId 必须等于 Session userId） |
 
-图谱点亮数据源：返回该学生全部已记录知识点掌握度，图谱按 `kpKey`(URI) 匹配节点渲染。
+**掌握度主体已翻转为题型**：返回该学生全部题型掌握度（学生掌握的是题型，不是知识点）。知识点视图见 [3. 知识点派生覆盖度](#3-知识点派生覆盖度-kp-coverage)。
 
 ### 请求参数
 
@@ -164,14 +165,11 @@ const result = await response.json(); // { code, message, data: { uri, status, .
   "studentId": 101,
   "items": [
     {
-      "kpKey": "http://edukg.org/knowledge/3.1/kp/math#renjiao-g2s-...",
-      "kpLabel": "二元一次方程组",
+      "topicKey": "鸡兔同笼",
+      "topicLabel": "鸡兔同笼",
       "masteryLevel": 75,
       "status": "RESOLVED",
       "confidence": 92,
-      "stage": "middle",
-      "chapterLabel": "二元一次方程组",
-      "sectionLabel": "8.1 二元一次方程组",
       "updatedAt": "2026-08-12T10:30:00"
     }
   ]
@@ -181,15 +179,12 @@ const result = await response.json(); // { code, message, data: { uri, status, .
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | studentId | Long | 学生 ID |
-| items | Array | 掌握度列表 |
-| items[].kpKey | String | 知识点 URI（图谱节点匹配键） |
-| items[].kpLabel | String | 知识点名 |
-| items[].masteryLevel | Integer | 掌握度 0-100 |
+| items | Array | 题型掌握度列表 |
+| items[].topicKey | String | 归一化题型标识（幂等主键） |
+| items[].topicLabel | String | 题型展示名 |
+| items[].masteryLevel | Integer | 掌握度四档 0/25/50/75 |
 | items[].status | String | `RESOLVED`（确定）/ `PENDING`（疑似待确认） |
 | items[].confidence | Integer | 解析置信度 0-100 |
-| items[].stage | String/null | 学段 primary/middle/high（从 kpKey 反查归属教材；无归属为 null） |
-| items[].chapterLabel | String/null | 归属章节名（无归属为 null） |
-| items[].sectionLabel | String/null | 归属小节名（无归属为 null） |
 | items[].updatedAt | String | 更新时间 |
 
 ### 请求示例
@@ -204,8 +199,7 @@ curl http://localhost:8080/api/students/101/mastery \
 ```javascript
 const response = await fetch(`/api/students/${studentId}/mastery`, { credentials: 'include' });
 const result = await response.json();
-const uriToItem = Object.fromEntries(result.data.items.map(i => [i.kpKey, i]));
-// 渲染：node.id 命中 kpKey 即按档位着色
+// 按题型四档渲染（已掌握 75 / 练习中 50 / 待巩固 25 / 待确认 status=PENDING）
 ```
 
 ### 常见错误
@@ -217,7 +211,90 @@ const uriToItem = Object.fromEntries(result.data.items.map(i => [i.kpKey, i]));
 
 ---
 
-## 3. 挂起清单 pending
+## 3. 知识点派生覆盖度 kp-coverage
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/students/{studentId}/kp-coverage` |
+| Content-Type | — |
+| 需要登录 | 是（路径 studentId 必须等于 Session userId） |
+
+返回该学生的**知识点派生覆盖度**：`coverage(kp) = Σ(题型掌握度 × ratio)`，供"知识点总览"知识地图着色（学段→章节→知识点，按覆盖度标色）。连续值 `coverage` 供详情，离散值 `masteryLevel` 供列表/图谱着色。
+
+### 请求参数
+
+**Path**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| studentId | Long | 是 | 学生 ID，必须与会话 userId 一致 |
+
+### 响应参数
+
+成功时 `data` 返回：
+
+```json
+{
+  "studentId": 101,
+  "items": [
+    {
+      "kpUri": "http://edukg.org/knowledge/3.1/kp/math#...",
+      "kpLabel": "二元一次方程组",
+      "coverage": 60,
+      "masteryLevel": 50,
+      "status": "RESOLVED",
+      "confidence": 88,
+      "stage": "middle",
+      "chapterLabel": "二元一次方程组",
+      "sectionLabel": "8.1 二元一次方程组"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| studentId | Long | 学生 ID |
+| items | Array | 知识点覆盖度列表 |
+| items[].kpUri | String | 知识点 URI（图谱节点匹配键） |
+| items[].kpLabel | String | 知识点名（kg 镜像反查） |
+| items[].coverage | Integer | 派生覆盖度 0-75（连续值，详情用） |
+| items[].masteryLevel | Integer | 离散四档 0/25/50/75（列表/图谱着色用） |
+| items[].status | String | `RESOLVED` / `PENDING`（疑似待确认） |
+| items[].confidence | Integer | 覆盖该 kp 的题型中最高置信度 |
+| items[].stage | String/null | 学段 primary/middle/high（无归属为 null） |
+| items[].chapterLabel | String/null | 归属章节名（无归属为 null） |
+| items[].sectionLabel | String/null | 归属小节名（无归属为 null） |
+
+### 请求示例
+
+**cURL:**
+```bash
+curl http://localhost:8080/api/students/101/kp-coverage \
+  -H "Cookie: SESSION=<session>"
+```
+
+**JavaScript (fetch):**
+```javascript
+const response = await fetch(`/api/students/${studentId}/kp-coverage`, { credentials: 'include' });
+const result = await response.json();
+const uriToCoverage = Object.fromEntries(result.data.items.map(i => [i.kpUri, i]));
+// 渲染：node.id 命中 kpUri 即按 coverage/masteryLevel 着色
+```
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 10004 | 未登录 | 未携带 Session |
+| 20004 | 权限不足 | 非 STUDENT 角色，或路径 studentId ≠ 会话 userId |
+
+---
+
+## 4. 挂起清单 pending
 
 ### 基本信息
 
@@ -289,7 +366,7 @@ const result = await response.json();
 
 ---
 
-## 4. 挂起确认 confirm
+## 5. 挂起确认 confirm
 
 ### 基本信息
 
@@ -370,7 +447,7 @@ const result = await response.json();
 
 ---
 
-## 5. 全量知识点分页 knowledge-points
+## 6. 全量知识点分页 knowledge-points
 
 ### 基本信息
 
@@ -435,7 +512,7 @@ const result = await response.json();
 
 ---
 
-## 6. 题型库分页 question-types
+## 7. 题型库分页 question-types
 
 ### 基本信息
 
@@ -483,7 +560,7 @@ const result = await response.json();
 
 ---
 
-## 7. 题型关联知识点 question-types-kp
+## 8. 题型关联知识点 question-types-kp
 
 ### 基本信息
 
@@ -520,7 +597,7 @@ const result = await response.json();
 | kpUri | String | 知识点 URI |
 | kpLabel | String | 知识点名（kg 镜像反查） |
 | gradeRange | String/null | 该 kp 覆盖年级段 |
-| ratio | Double | 该 kp 占比 |
+| ratio | Double | 该 kp 占比（同题型各桶 ratio 归一化和=1） |
 | hitCount | Integer | 该分布桶命中次数 |
 
 ### 常见错误
@@ -560,16 +637,21 @@ const result = await response.json();
 ### 1. Session 管理
 
 - 所有接口请求必须携带 `credentials: 'include'`。
-- 学生端 `mastery` 的路径 `studentId` 必须取当前登录会话的 userId，否则返回 20004。
+- 学生端 `mastery` / `kp-coverage` 的路径 `studentId` 必须取当前登录会话的 userId，否则返回 20004。
 
-### 2. 图谱点亮匹配规则
+### 2. 掌握度两个视图
 
-- 图谱节点 `node.id` == `mastery.items[].kpKey`(URI) 即匹配。
+- **题型掌握度**（`GET /api/students/{id}/mastery`）：按题型四档展示（已掌握 75 / 练习中 50 / 待巩固 25 / 待确认 status=PENDING）。
+- **知识点派生覆盖度**（`GET /api/students/{id}/kp-coverage`）：按知识点展示，`coverage` 连续值 + `masteryLevel` 离散四档。
+
+### 3. 图谱点亮匹配规则
+
+- 图谱节点 `node.id` == `kp-coverage.items[].kpUri`(URI) 即匹配。
 - 档位：`masteryLevel ≥ 75` 绿（掌握）/ `= 50` 黄（练习中）/ `≤ 25` 红（薄弱）。
 - `status=PENDING` 或低置信 → 疑似态（虚线 + 「待确认」角标），**不按确认薄弱渲染**。
-- 无掌握度数据节点保持中性灰。
+- 无覆盖度数据节点保持中性灰。
 
-### 3. resolve 的 status 语义
+### 4. resolve 的 status 语义
 
 - `RESOLVED`：可直接用于展示/点亮。
 - `PENDING`：进入挂起队列，前端可提示"待确认"，**不应**写入掌握度。

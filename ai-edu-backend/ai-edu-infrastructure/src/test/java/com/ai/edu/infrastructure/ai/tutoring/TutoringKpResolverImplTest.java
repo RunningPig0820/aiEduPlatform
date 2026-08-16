@@ -2,7 +2,10 @@ package com.ai.edu.infrastructure.ai.tutoring;
 
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.learning.model.entity.QuestionType;
+import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
@@ -54,7 +57,6 @@ class TutoringKpResolverImplTest {
         setField(resolver, "classRepository", classRepository);
         setField(resolver, "derivedKpObsRepository", obsRepository);
         setField(resolver, "kpDisambiguationPort", disambiguationPort);
-        setField(resolver, "confidenceThreshold", 60);
     }
 
     @Test
@@ -123,6 +125,67 @@ class TutoringKpResolverImplTest {
 
         assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
         verify(kgRepository, never()).findByLabel(anyString());
+    }
+
+    @Test
+    @DisplayName("题型库关联召回候选：题型名命中题型库 → candidates 来自题型→知识点映射（名称 LIKE 无召回也不空）")
+    void candidatesFromQuestionTypeKp() {
+        when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLikeList("鸡兔同笼")).thenReturn(List.of()); // 名称 LIKE 无召回
+        when(disambiguationPort.disambiguate("鸡兔同笼", null)).thenReturn(null);
+
+        QuestionType qt = QuestionType.create("鸡兔同笼", QuestionTypeStatus.CANDIDATE, null);
+        qt.setId(10L);
+        when(questionTypeRepository.findByTopicLabel("鸡兔同笼")).thenReturn(Optional.of(qt));
+        // 两个分布桶 → 无年级锚歧义，② 返回 null，④ 从题型→知识点映射召回候选
+        QuestionTypeKp kp1 = QuestionTypeKp.create(10L, KP_URI, "7-8");
+        QuestionTypeKp kp2 = QuestionTypeKp.create(10L, "http://other", "4-6");
+        when(questionTypeKpRepository.findByQuestionTypeId(10L)).thenReturn(List.of(kp1, kp2));
+        when(kgRepository.findByUri(KP_URI)).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
+        when(kgRepository.findByUri("http://other")).thenReturn(Optional.of(kp("http://other", "假设法")));
+
+        KpResolution r = resolver.resolve("鸡兔同笼", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
+        assertTrue(r.getCandidates().contains("二元一次方程组"));
+        assertTrue(r.getCandidates().contains("假设法"));
+    }
+
+    @Test
+    @DisplayName("vote：精确未命中但 LIKE 命中 → 落观测返回 true")
+    void voteLikeFallback() {
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike("二元一次方程组"))
+                .thenReturn(Optional.of(kp(KP_URI, "章前引言和二元一次方程组")));
+
+        boolean recorded = resolver.recordStudentVote("鸡兔同笼", STUDENT_ID, "二元一次方程组");
+
+        assertTrue(recorded);
+        verify(obsRepository).upsert(argThat(o ->
+                KP_URI.equals(o.getKpUri()) && "STUDENT_VOTE".equals(o.getSource().name())));
+    }
+
+    @Test
+    @DisplayName("vote：精确/LIKE 均未命中 → 返回 false 不落观测")
+    void voteNotFound() {
+        when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike(anyString())).thenReturn(Optional.empty());
+
+        boolean recorded = resolver.recordStudentVote("鸡兔同笼", STUDENT_ID, "二元一次方程组");
+
+        assertFalse(recorded);
+        verify(obsRepository, never()).upsert(any());
+    }
+
+    @Test
+    @DisplayName("依赖异常 → 降级 PENDING 不抛出（不 10000）")
+    void resolveExceptionDegrades() {
+        when(kgRepository.findByLabel(anyString())).thenThrow(new RuntimeException("db down"));
+
+        KpResolution r = resolver.resolve("二元一次方程", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
     }
 
     private KgKnowledgePoint kp(String uri, String label) {

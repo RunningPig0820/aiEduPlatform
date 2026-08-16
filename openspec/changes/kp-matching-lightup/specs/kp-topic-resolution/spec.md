@@ -17,8 +17,20 @@
 - **THEN** 解析器返回「二元一次方程组」URI，confidence 按占比加权
 
 #### Scenario: 均未命中则走 LLM 消歧
-- **WHEN** label 未命中镜像与题型库，解析器携带镜像 LIKE 召回 + 题型库候选 label 列表调用 LLM
+- **WHEN** label 未命中镜像与题型库，解析器走两段式 LLM 消歧（生成候选名 + 镜像校验，见下）
 - **THEN** LLM 返回最匹配 kp + 置信度，解析器按置信度决定 RESOLVED 或 PENDING
+
+### Requirement: 冷启动 LLM 消歧（生成候选名 + 镜像校验）
+
+题型库无先验且镜像名 LIKE 无召回时，解析器 SHALL 走两段式 LLM 消歧：① LLM 生成候选知识点名（给定题型 label + 年级上下文）；② Java 用镜像 exact/LIKE 校验候选名，命中才保留。SHALL NOT 返回镜像不存在的 kp（LLM 只生成 name 候选，最终 kp 必经镜像校验）。校验后：单候选 SHALL 直接 RESOLVED（冷启动标 WEAK）；多候选 SHALL 返回 PENDING 携带候选；零命中 SHALL 返回 PENDING 无候选。
+
+#### Scenario: 题型名冷启动经 LLM 生成候选并校验
+- **WHEN** label「鸡兔同笼」未命中镜像与题型库，LLM 生成候选名「二元一次方程组」「假设法」，镜像校验「二元一次方程组」命中、「假设法」未命中
+- **THEN** 保留「二元一次方程组」作候选；单候选 RESOLVED 标 WEAK
+
+#### Scenario: LLM 生成候选名全部未命中镜像
+- **WHEN** LLM 生成的候选名镜像校验全不命中
+- **THEN** 返回 PENDING 无候选，不返回任何镜像不存在的 kp
 
 ### Requirement: 年级锚参与解析
 

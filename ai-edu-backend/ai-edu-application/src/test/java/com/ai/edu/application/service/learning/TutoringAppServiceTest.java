@@ -8,7 +8,6 @@ import com.ai.edu.application.dto.learning.TutoringSessionDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionListItemDTO;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
-import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.EvalInfo;
@@ -16,15 +15,17 @@ import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
-import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.EndReason;
-import com.ai.edu.domain.learning.model.valueobject.KpKey;
 import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
+import com.ai.edu.domain.learning.model.valueobject.TopicKey;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
+import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
 import com.ai.edu.domain.learning.service.TutoringConfig;
@@ -64,7 +65,7 @@ class TutoringAppServiceTest {
     private TutoringAppService service;
     private TutoringSessionRepository sessionRepository;
     private StudentKpMasteryRepository masteryRepository;
-    private KgKnowledgePointRepository kgKnowledgePointRepository;
+    private StudentTopicMasteryRepository studentTopicMasteryRepository;
     private DerivedKpObsRepository derivedKpObsRepository;
     private ErrorEventRepository errorEventRepository;
     private TutoringSessionCache sessionCache;
@@ -79,7 +80,7 @@ class TutoringAppServiceTest {
         service = new TutoringAppService();
         sessionRepository = mock(TutoringSessionRepository.class);
         masteryRepository = mock(StudentKpMasteryRepository.class);
-        kgKnowledgePointRepository = mock(KgKnowledgePointRepository.class);
+        studentTopicMasteryRepository = mock(StudentTopicMasteryRepository.class);
         derivedKpObsRepository = mock(DerivedKpObsRepository.class);
         errorEventRepository = mock(ErrorEventRepository.class);
         sessionCache = mock(TutoringSessionCache.class);
@@ -91,7 +92,7 @@ class TutoringAppServiceTest {
 
         service.setTutoringSessionRepository(sessionRepository);
         service.setMasteryRepository(masteryRepository);
-        service.setKgKnowledgePointRepository(kgKnowledgePointRepository);
+        service.setStudentTopicMasteryRepository(studentTopicMasteryRepository);
         service.setDerivedKpObsRepository(derivedKpObsRepository);
         service.setErrorEventRepository(errorEventRepository);
         service.setSessionCache(sessionCache);
@@ -115,7 +116,9 @@ class TutoringAppServiceTest {
                 .thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         when(kpResolver.resolve(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
         when(derivedKpObsRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
-        when(kgKnowledgePointRepository.findPlacementByUris(anyList())).thenReturn(List.of());
+        when(studentTopicMasteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
+        when(studentTopicMasteryRepository.findByStudentAndTopic(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
+        when(studentTopicMasteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(masteryRepository.findByStudentAndKp(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
         when(masteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(transcriptArchiver.archive(any(), any(), any(), anyList(), any(), any()))
@@ -697,10 +700,10 @@ class TutoringAppServiceTest {
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").subscribe();
 
-        verify(masteryRepository).upsert(argThat(m ->
-                m.getKpKey().getValue().equals(KP_URI)
+        verify(studentTopicMasteryRepository).upsert(argThat(m ->
+                m.getTopicKey().getValue().equals("二元一次方程组")
                         && m.getMasteryLevel().getValue() == 50
-                        && m.getKpLabel().equals("二元一次方程组")));
+                        && m.getTopicLabel().equals("二元一次方程组")));
     }
 
     // ==================== requestAnswer() ====================
@@ -840,18 +843,17 @@ class TutoringAppServiceTest {
     }
 
     @Test
-    @DisplayName("getStudentMastery: 映射掌握度列表")
+    @DisplayName("getStudentMastery: 映射题型掌握度列表")
     void getStudentMastery_mapsItems() {
-        StudentKpMastery mastery = StudentKpMastery.create(STUDENT_ID, KpKey.of(KP_URI), "二元一次方程组");
-        mastery.applySignal(com.ai.edu.domain.learning.model.valueobject.MasterySignal.of(
-                "二元一次方程组", com.ai.edu.domain.learning.model.valueobject.MasterySignal.Level.MASTERED));
-        when(masteryRepository.findByStudentId(STUDENT_ID)).thenReturn(List.of(mastery));
+        StudentTopicMastery mastery = StudentTopicMastery.create(STUDENT_ID, TopicKey.of("鸡兔同笼"), "鸡兔同笼");
+        mastery.applySignal(MasterySignal.of("鸡兔同笼", MasterySignal.Level.MASTERED));
+        when(studentTopicMasteryRepository.findByStudentId(STUDENT_ID)).thenReturn(List.of(mastery));
 
         StudentMasteryDTO dto = service.getStudentMastery(STUDENT_ID);
 
         assertEquals(STUDENT_ID, dto.getStudentId());
         assertEquals(1, dto.getItems().size());
-        assertEquals(KP_URI, dto.getItems().get(0).getKpKey());
+        assertEquals("鸡兔同笼", dto.getItems().get(0).getTopicKey());
         assertEquals(75, dto.getItems().get(0).getMasteryLevel());
     }
 

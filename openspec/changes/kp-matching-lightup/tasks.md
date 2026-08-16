@@ -59,3 +59,20 @@
 - [x] 8.4 [③a] `QuestionTypeRepository` 增加分页查询 `findPage`；新增 `GET /api/kp/question-types`（page/size，返回 id/topicLabel/status/hitCount + total）
 - [x] 8.5 [③b] 新增 `GET /api/kp/question-types/{id}/knowledge-points`：`findByQuestionTypeId` + `kgKnowledgePointRepository.findByUris` 反查 kpLabel，返回 kpUri/kpLabel/gradeRange/ratio/hitCount
 - [x] 8.6 [测试] 三接口 + stage 反查的单测/接口测试（分页边界、kp 无归属 stage=null、越权、kpLabel 反查）
+
+## 9. 掌握度主体翻转：题型直接观测 + 知识点派生覆盖度
+
+- [x] 9.1 [领域模型] 新增 `StudentTopicMastery` 实体（student_id + topic_key 唯一、mastery_level 四档、status/confidence）+ `TopicKey` 值对象 + `TopicKeyNormalizer` 归一化工具（全角半角/空白折叠/去末尾语气词标点）；`StudentTopicMasteryRepository` 接口 + `findByStudentId`/`upsert`
+- [x] 9.2 [基础设施] `t_student_topic_mastery` Flyway 迁移（learning 库，UNIQUE(student_id, topic_key)）+ MyBatis-Plus 实现 + PO/Mapper；`TopicKeyNormalizer` 实现放 domain（纯函数，可单测）
+- [x] 9.3 [应用] `applyMasteryAndErrors` 改写：`MasterySignalItem.kpLabel` 语义翻为题型 label → `topicKey = normalize(label)` 落 `t_student_topic_mastery`（UPSERT 取 max）；`kpResolver.resolve(label)` 仍产出 `kp_uri` 落 `t_kp_derived_obs`（供派生），不再写 `t_student_kp_mastery`
+- [x] 9.4 [应用] 新增 `KpCoverageAppService`：计算知识点派生覆盖度 `coverage = clamp(Σ 题型掌握度 × ratio, 0, 75)`；ratio 优先 `t_kp_question_type_kp`、未聚合回退 obs 单观测（ratio=1）、无题型映射回退旧 `t_student_kp_mastery`
+- [x] 9.5 [接口] `GET /api/students/{id}/mastery` 改返回题型掌握度（topicKey/topicLabel/masteryLevel/status/confidence/updatedAt）；新增 `GET /api/students/{id}/kp-coverage`（kpUri/kpLabel/coverage/masteryLevel/status/confidence + stage/chapterLabel/sectionLabel，越权校验同 mastery）
+- [x] 9.6 [测试] 题型归一化（空白/全角半角/去末尾标点，保留「问题」后缀）、题型掌握度落库取 max、派生覆盖度（聚合 ratio / 未聚合单观测 / 无映射回退旧表 / clamp）、两接口（越权/空列表）
+
+## 10. 冷启动 LLM 消歧 + 离线 LLM 聚合（题型库自我生长）
+
+- [x] 10.1 [在线] `KpLlmDisambiguator` 改两段式：① LLM 生成候选知识点名（给定题型 label + 年级上下文）；② `kgKnowledgePointRepository.findByLabel`/`findByLabelLike` 回镜像校验，命中才保留；单候选→RESOLVED，多候选→PENDING 携带候选，零命中→PENDING 无候选
+- [x] 10.2 [在线] `TutoringKpResolverImpl.resolve` ③ 分支不再依赖 `findByLabelLikeList` 预筛候选（改走 10.1 两段式）；冷启动首条仍标 WEAK（Decision 9）
+- [x] 10.3 [离线] `KpQuestionTypeAggregationService` 加 LLM 自动关联：达阈值的题型，LLM 输入 obs 共现 `(kp_uri, 命中次数, 年级分布桶)` → 输出 kp 分布 ratio（归一化和=1）→ 建/更新 CANDIDATE
+- [x] 10.4 [离线] 冷启动弱化：LLM 关联结果不直接 STABLE，第二独立信号（多生共现 / 投票达标 / 做题结果佐证）才升 STABLE 进解析先验（由既有 `promoteToStable` 门禁保证：聚合只产 CANDIDATE，STABLE 需 ≥10 学生 + 审核）
+- [x] 10.5 [测试] 两段式消歧（生成+校验、校验不过丢弃、多候选澄清、LIKE 兜底、LLM 失败降级）、LLM 聚合建候选（归一化、剔除幻觉、失败降级）、WEAK 转正

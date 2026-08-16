@@ -16,9 +16,6 @@ import com.ai.edu.application.dto.learning.sse.SseMetaDTO;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.common.exception.TutoringAgentException;
-import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
-import com.ai.edu.domain.edukg.model.valueobject.KgStageEnum;
-import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.ActionMeta;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.EvalInfo;
@@ -29,11 +26,13 @@ import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.ActionType;
 import com.ai.edu.domain.learning.model.valueobject.EndReason;
 import com.ai.edu.domain.learning.model.valueobject.KpKey;
 import com.ai.edu.domain.learning.model.valueobject.KpResolution;
+import com.ai.edu.domain.learning.model.valueobject.TopicKey;
 import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
 import com.ai.edu.domain.learning.model.valueobject.TutoringConstants;
 import com.ai.edu.domain.learning.model.valueobject.TutoringEmotion;
@@ -41,8 +40,10 @@ import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
+import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
+import com.ai.edu.domain.learning.service.TopicKeyNormalizer;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
@@ -71,6 +72,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -129,7 +131,7 @@ public class TutoringAppService {
     private StudentKpMasteryRepository masteryRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
-    private KgKnowledgePointRepository kgKnowledgePointRepository;
+    private StudentTopicMasteryRepository studentTopicMasteryRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private DerivedKpObsRepository derivedKpObsRepository;
@@ -305,49 +307,59 @@ public class TutoringAppService {
         });
     }
 
-    /** 查询学生知识点掌握度（图谱叠加数据源）。status/confidence 从派生观测关联（掌握度表只存确定的）。 */
+    /** 查询学生题型掌握度（掌握度主体翻转：题型粒度）。status/confidence 从派生观测关联（掌握度表只存确定的）。 */
     public StudentMasteryDTO getStudentMastery(Long studentId) {
-        List<StudentKpMastery> list = masteryRepository.findByStudentId(studentId);
-        Map<String, Integer> confidenceByKp = derivedKpObsRepository.findByStudentId(studentId).stream()
-                .filter(o -> o.getKpUri() != null)
+        List<StudentTopicMastery> topics = studentTopicMasteryRepository.findByStudentId(studentId);
+        List<DerivedKpObs> obsList = derivedKpObsRepository.findByStudentId(studentId);
+        // confidence：归一化 topic_key → 该生派生观测最高置信度
+        Map<String, Integer> confidenceByTopic = obsList.stream()
+                .filter(o -> o.getTopicLabel() != null && o.getConfidence() != null)
                 .collect(Collectors.toMap(
-                        DerivedKpObs::getKpUri,
+                        o -> TopicKeyNormalizer.normalize(o.getTopicLabel()),
                         DerivedKpObs::getConfidence,
                         Math::max));
-        // stage/chapter/section 归属批量反查（kpKey → 教材 → 学段），避免 N+1
-        List<String> kpUris = list.stream()
-                .map(m -> m.getKpKey() == null ? null : m.getKpKey().getValue())
+        Set<String> confirmedKeys = topics.stream()
+                .map(t -> t.getTopicKey() == null ? null : t.getTopicKey().getValue())
                 .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        Map<String, KgKpPlacement> placementByKp = kgKnowledgePointRepository.findPlacementByUris(kpUris).stream()
-                .collect(Collectors.toMap(KgKpPlacement::getKpUri, p -> p, (a, b) -> a));
-        return StudentMasteryDTO.builder()
-                .studentId(studentId)
-                .items(list.stream()
-                        .map(m -> {
-                            String kpKey = m.getKpKey() == null ? null : m.getKpKey().getValue();
-                            KgKpPlacement placement = placementByKp.get(kpKey);
-                            return MasteryItemDTO.builder()
-                                    .kpKey(kpKey)
-                                    .kpLabel(m.getKpLabel())
-                                    .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
-                                    .status("RESOLVED")
-                                    .confidence(confidenceByKp.get(kpKey))
-                                    .stage(toStageCode(placement == null ? null : placement.getStage()))
-                                    .chapterLabel(placement == null ? null : placement.getChapterLabel())
-                                    .sectionLabel(placement == null ? null : placement.getSectionLabel())
-                                    .updatedAt(m.getUpdatedAt())
-                                    .build();
-                        })
-                        .toList())
-                .build();
-    }
+                .collect(Collectors.toSet());
 
-    /** 中文 stage label → code（未知原样返回，null 返回 null）。 */
-    private static String toStageCode(String label) {
-        KgStageEnum e = KgStageEnum.fromLabel(label);
-        return e == null ? label : e.getCode();
+        List<MasteryItemDTO> items = new ArrayList<>();
+        for (StudentTopicMastery t : topics) {
+            if (t.getTopicKey() == null) {
+                continue; // 防御：topic_key 不应为空，跳过脏数据
+            }
+            items.add(MasteryItemDTO.builder()
+                    .topicKey(t.getTopicKey().getValue())
+                    .topicLabel(t.getTopicLabel())
+                    .masteryLevel(t.getMasteryLevel() == null ? 0 : t.getMasteryLevel().getValue())
+                    .status("RESOLVED")
+                    .confidence(confidenceByTopic.get(t.getTopicKey().getValue()))
+                    .updatedAt(t.getUpdatedAt())
+                    .build());
+        }
+        // PENDING 题型（obs kp_uri=null，且未在 confirmed 中）作为"待确认"项并入
+        Map<String, DerivedKpObs> pendingByTopic = new LinkedHashMap<>();
+        for (DerivedKpObs o : obsList) {
+            if (o.getKpUri() != null || o.getTopicLabel() == null) {
+                continue;
+            }
+            String key = TopicKeyNormalizer.normalize(o.getTopicLabel());
+            if (!confirmedKeys.contains(key)) {
+                pendingByTopic.putIfAbsent(key, o);
+            }
+        }
+        for (Map.Entry<String, DerivedKpObs> e : pendingByTopic.entrySet()) {
+            DerivedKpObs o = e.getValue();
+            items.add(MasteryItemDTO.builder()
+                    .topicKey(e.getKey())
+                    .topicLabel(o.getTopicLabel())
+                    .masteryLevel(0)
+                    .status("PENDING")
+                    .confidence(o.getConfidence())
+                    .updatedAt(o.getUpdatedAt())
+                    .build());
+        }
+        return StudentMasteryDTO.builder().studentId(studentId).items(items).build();
     }
 
     // ==================== OCR 前置 ====================
@@ -603,7 +615,7 @@ public class TutoringAppService {
         applyMasteryAndErrors(session, action, allowedType, lastUserContent);
     }
 
-    /** 掌握度 UPSERT（label→URI，未命中记日志不点亮）+ eval.correct=false 写错误事件。 */
+    /** 题型掌握度 UPSERT（label 归一化为 topic_key 落题型掌握度，未命中记日志不落）+ eval.correct=false 写错误事件。 */
     private void applyMasteryAndErrors(TutoringSession session, ActionMeta action,
                                        ActionType allowedType, String lastUserContent) {
         boolean completed = (allowedType == ActionType.END)
@@ -613,22 +625,24 @@ public class TutoringAppService {
                 if (item.getKpLabel() == null || item.getKpLabel().isBlank()) {
                     continue;
                 }
+                // 掌握度主体翻转：label 是题型，归一化后作掌握度主键；resolve 仍产出 kp_uri 落 obs（供覆盖度派生）
                 KpResolution resolution = kpResolver.resolve(item.getKpLabel(), session.getStudentId());
                 if (!resolution.isResolved() || resolution.getUri() == null) {
-                    log.warn("[tutoring] 知识点 label 未命中 URI，不点亮: {}", item.getKpLabel());
+                    log.warn("[tutoring] 题型 label 未命中 URI，不落题型掌握度（PENDING 已在 obs）: {}", item.getKpLabel());
                     continue;
                 }
-                KpKey kpKey = KpKey.of(resolution.getUri());
+                TopicKey topicKey = TopicKey.of(TopicKeyNormalizer.normalize(item.getKpLabel()));
                 MasterySignal signal = MasterySignal.fromCode(item.getKpLabel(), item.getSignal());
-                StudentKpMastery mastery = masteryRepository.findByStudentAndKp(session.getStudentId(), kpKey)
-                        .orElseGet(() -> StudentKpMastery.create(session.getStudentId(), kpKey, item.getKpLabel()));
+                StudentTopicMastery mastery = studentTopicMasteryRepository
+                        .findByStudentAndTopic(session.getStudentId(), topicKey)
+                        .orElseGet(() -> StudentTopicMastery.create(session.getStudentId(), topicKey, item.getKpLabel()));
                 mastery.applySignal(signal);
                 if (completed) {
                     mastery.raiseByCorrection();
                 }
                 // evidence 列是 JSON 类型，写入合法 JSON（原 "session_N" 非法 JSON 导致 MySQL 拒绝）
                 mastery.recordSession(session.getId(), "{\"session_id\":" + session.getId() + "}");
-                masteryRepository.upsert(mastery);
+                studentTopicMasteryRepository.upsert(mastery);
             }
         }
         // B3: 错误事件门控——仅 decide 原始 type 为 hint/approach（真实评估学生作答）且

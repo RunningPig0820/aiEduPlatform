@@ -78,9 +78,11 @@ public class KpAppService {
         return ConfirmKpAliasDTO.builder().updated(true).status("RESOLVED").build();
     }
 
-    /** 学生澄清投票：学生选择归属概念，落 source=student_vote 观测。 */
+    /** 学生澄清投票：学生选择归属概念，落 source=student_vote 观测；候选无法解析到知识点时报错（不静默）。 */
     public void vote(String topicLabel, Long studentId, String selectedLabel) {
-        kpResolver.recordStudentVote(topicLabel, studentId, selectedLabel);
+        if (!kpResolver.recordStudentVote(topicLabel, studentId, selectedLabel)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "候选知识点不存在，无法投票");
+        }
     }
 
     private PendingKpAliasDTO toPendingDTO(DerivedKpObs o) {

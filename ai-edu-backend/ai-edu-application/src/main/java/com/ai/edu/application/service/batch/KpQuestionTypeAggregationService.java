@@ -1,18 +1,22 @@
 package com.ai.edu.application.service.batch;
 
+import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
+import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
+import com.ai.edu.domain.learning.model.valueobject.TopicKpHint;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.service.KpTopicAggregationPort;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +45,10 @@ public class KpQuestionTypeAggregationService {
     private QuestionTypeRepository questionTypeRepository;
     @Resource
     private QuestionTypeKpRepository questionTypeKpRepository;
+    @Resource
+    private KgKnowledgePointRepository kgKnowledgePointRepository;
+    @Resource
+    private KpTopicAggregationPort topicAggregationPort;
 
     @Value("${ai-edu.kp.aggregation.candidate-students:3}")
     private int candidateStudents;
@@ -50,10 +58,9 @@ public class KpQuestionTypeAggregationService {
     private int stableStudents;
 
     /**
-     * 聚合任务（周期）：扫描已解析观测 → 达阈值建 CANDIDATE + 分布桶。
-     * 凌晨 3:17 触发（避开整点）。
+     * 聚合：扫描已解析观测 → 达阈值建 CANDIDATE + 分布桶。
+     * 由 {@code KpBatchScheduler} 周期触发（凌晨 3:17），也可手动/大数据作业调用。
      */
-    @Scheduled(cron = "0 17 3 * * ?")
     public void aggregate() {
         List<DerivedKpObs> obs = derivedKpObsRepository.findResolved();
         if (obs.isEmpty()) {
@@ -71,7 +78,7 @@ public class KpQuestionTypeAggregationService {
         log.info("题型库聚合完成，扫描 {} 条观测，{} 个题型", obs.size(), byTopic.size());
     }
 
-    /** 单个题型聚合：达阈值建 CANDIDATE + 按 kp 拆分分布桶。 */
+    /** 单个题型聚合：达阈值建 CANDIDATE + 按 kp 拆分分布桶（多桶时 LLM 归纳 ratio）。 */
     private void aggregateTopic(String topicLabel, List<DerivedKpObs> obs) {
         int distinctStudents = (int) obs.stream().map(DerivedKpObs::getStudentId).distinct().count();
         int totalHits = obs.stream().mapToInt(this::hitCount).sum();
@@ -86,16 +93,48 @@ public class KpQuestionTypeAggregationService {
 
         Map<String, List<DerivedKpObs>> byKp = obs.stream()
                 .collect(Collectors.groupingBy(DerivedKpObs::getKpUri));
+        // 多桶时 LLM 自动关联归纳 ratio（单桶/LLM 不可用降级纯计数）
+        Map<String, Double> refined = refineDistribution(topicLabel, byKp);
         for (Map.Entry<String, List<DerivedKpObs>> kpEntry : byKp.entrySet()) {
-            upsertBucket(qt.getId(), kpEntry.getKey(), kpEntry.getValue(), totalHits);
+            double ratio = (refined != null && refined.containsKey(kpEntry.getKey()))
+                    ? refined.get(kpEntry.getKey())
+                    : countRatio(kpEntry.getValue(), totalHits);
+            upsertBucket(qt.getId(), kpEntry.getKey(), kpEntry.getValue(), ratio);
         }
     }
 
-    /** 分布桶：按 kp 统计 hit_students/hit_count/ratio，grade_range 取学生年级 min-max。 */
-    private void upsertBucket(Long questionTypeId, String kpUri, List<DerivedKpObs> obs, int totalHits) {
+    /** LLM 自动关联：把共现桶组装成 hint 交 LLM 归纳归一化 ratio；单桶/失败返回 null。 */
+    private Map<String, Double> refineDistribution(String topicLabel, Map<String, List<DerivedKpObs>> byKp) {
+        if (byKp.size() <= 1) {
+            return null;
+        }
+        List<TopicKpHint> hints = new ArrayList<>();
+        for (Map.Entry<String, List<DerivedKpObs>> e : byKp.entrySet()) {
+            String kpUri = e.getKey();
+            String kpLabel = kgKnowledgePointRepository.findByUri(kpUri)
+                    .map(KgKnowledgePoint::getLabel).orElse(null);
+            hints.add(TopicKpHint.builder()
+                    .kpUri(kpUri)
+                    .kpLabel(kpLabel)
+                    .hitCount(e.getValue().stream().mapToInt(this::hitCount).sum())
+                    .gradeRange(computeGradeRange(e.getValue()))
+                    .build());
+        }
+        return topicAggregationPort.refineDistribution(topicLabel, hints);
+    }
+
+    /** 纯计数 ratio（降级兜底）。 */
+    private double countRatio(List<DerivedKpObs> obs, int totalHits) {
+        if (totalHits <= 0) {
+            return 0.0;
+        }
+        return (double) obs.stream().mapToInt(this::hitCount).sum() / totalHits;
+    }
+
+    /** 分布桶：按 kp 统计 hit_students/hit_count，ratio 由调用方给定（LLM 归纳或纯计数），grade_range 取学生年级 min-max。 */
+    private void upsertBucket(Long questionTypeId, String kpUri, List<DerivedKpObs> obs, double ratio) {
         int kpStudents = (int) obs.stream().map(DerivedKpObs::getStudentId).distinct().count();
         int kpHits = obs.stream().mapToInt(this::hitCount).sum();
-        double ratio = totalHits > 0 ? (double) kpHits / totalHits : 0.0;
         String gradeRange = computeGradeRange(obs);
         QuestionTypeKp kp = QuestionTypeKp.create(questionTypeId, kpUri, gradeRange);
         kp.updateStats(kpStudents, kpHits, ratio, gradeRange);

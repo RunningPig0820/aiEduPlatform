@@ -1,9 +1,11 @@
 package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
+import com.ai.edu.application.dto.learning.KpCoverageDTO;
 import com.ai.edu.application.dto.learning.PendingKpAliasDTO;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.service.learning.KpAppService;
+import com.ai.edu.application.service.learning.KpCoverageAppService;
 import com.ai.edu.application.service.learning.TutoringAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -37,8 +39,11 @@ public class StudentMasteryController {
     @Resource
     private KpAppService kpAppService;
 
-    /** GET /api/students/{studentId}/mastery — 图谱前端按 kp_key(URI) 叠加掌握度。 */
-    @Operation(summary = "查询学生掌握度", description = "返回该学生全部已记录知识点掌握度，图谱按 kpKey 匹配节点 URI 渲染")
+    @Resource
+    private KpCoverageAppService kpCoverageAppService;
+
+    /** GET /api/students/{studentId}/mastery — 题型掌握度（掌握度主体翻转：题型粒度）。 */
+    @Operation(summary = "查询学生题型掌握度", description = "返回该学生全部题型掌握度（topicKey/topicLabel/masteryLevel/status/confidence）")
     @GetMapping("/{studentId}/mastery")
     public ApiResponse<StudentMasteryDTO> getMastery(@PathVariable Long studentId, HttpSession session) {
         Long sessionUserId = TutoringAuth.requireStudent(session);
@@ -46,6 +51,17 @@ public class StudentMasteryController {
             throw new BusinessException(ErrorCode.PERMISSION_DENIED, "无权访问他人掌握度");
         }
         return ApiResponse.success(tutoringAppService.getStudentMastery(sessionUserId));
+    }
+
+    /** GET /api/students/{studentId}/kp-coverage — 知识点派生覆盖度（知识点总览知识地图着色）。 */
+    @Operation(summary = "查询学生知识点派生覆盖度", description = "返回该学生知识点派生覆盖度（coverage 连续值 + masteryLevel 离散四档 + 学段归属）")
+    @GetMapping("/{studentId}/kp-coverage")
+    public ApiResponse<KpCoverageDTO> getKpCoverage(@PathVariable Long studentId, HttpSession session) {
+        Long sessionUserId = TutoringAuth.requireStudent(session);
+        if (!sessionUserId.equals(studentId)) {
+            throw new BusinessException(ErrorCode.PERMISSION_DENIED, "无权访问他人数据");
+        }
+        return ApiResponse.success(kpCoverageAppService.getKpCoverage(sessionUserId));
     }
 
     /** GET /api/students/{studentId}/pending-kps — 学生端"待确认清单"（疑似薄弱点）数据源。 */
