@@ -1,16 +1,21 @@
 package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
+import com.ai.edu.common.constant.ErrorCode;
+import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
+import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
+import com.ai.edu.domain.learning.service.TutoringLlmPort;
+import com.ai.edu.domain.shared.service.FileStorageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,6 +51,8 @@ class KpQuestionAnalysisAppServiceTest {
     private QuestionTypeKpRepository questionTypeKpRepository;
     private KgKnowledgePointRepository kgRepository;
     private DerivedKpObsRepository obsRepository;
+    private FileStorageService fileStorageService;
+    private TutoringLlmPort tutoringLlmPort;
 
     @BeforeEach
     void setUp() {
@@ -54,6 +62,8 @@ class KpQuestionAnalysisAppServiceTest {
         questionTypeKpRepository = mock(QuestionTypeKpRepository.class);
         kgRepository = mock(KgKnowledgePointRepository.class);
         obsRepository = mock(DerivedKpObsRepository.class);
+        fileStorageService = mock(FileStorageService.class);
+        tutoringLlmPort = mock(TutoringLlmPort.class);
         service = new KpQuestionAnalysisAppService();
         setField(service, "questionUnderstandingPort", understandingPort);
         setField(service, "tutoringKpResolver", kpResolver);
@@ -61,6 +71,8 @@ class KpQuestionAnalysisAppServiceTest {
         setField(service, "questionTypeKpRepository", questionTypeKpRepository);
         setField(service, "kgKnowledgePointRepository", kgRepository);
         setField(service, "derivedKpObsRepository", obsRepository);
+        setField(service, "fileStorageService", fileStorageService);
+        setField(service, "tutoringLlmPort", tutoringLlmPort);
     }
 
     @Test
@@ -127,6 +139,68 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("PENDING", dto.getStatus());
         assertNull(dto.getTopicLabel());
         assertTrue(dto.getKnowledgePoints().isEmpty());
+    }
+
+    @Test
+    @DisplayName("图片：Python 看图识别题型 → 题型库命中 → 权威分布")
+    void image_catalogHit() {
+        when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
+        when(fileStorageService.generatePresignedUrl(anyString(), anyInt())).thenReturn("http://cos/signed");
+        when(questionTypeRepository.findTopTopicLabels(20)).thenReturn(List.of("鸡兔同笼"));
+        when(tutoringLlmPort.understandQuestion(eq("http://cos/signed"), any(), eq(4)))
+                .thenReturn(QuestionUnderstandResult.builder()
+                        .topicLabels(List.of("鸡兔同笼")).questionKps(List.of("二元一次方程组")).build());
+        when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.of(qt(5L, "鸡兔同笼")));
+        when(questionTypeKpRepository.findByQuestionTypeId(5L)).thenReturn(List.of(bucket("uri-A", null, 1.0)));
+        when(kgRepository.findByUri("uri-A")).thenReturn(Optional.of(kp("uri-A", "鸡兔同笼")));
+
+        QuestionAnalysisDTO dto = service.analyzeImage(new byte[]{1}, "q.png", STUDENT_ID);
+
+        assertEquals("RESOLVED", dto.getStatus());
+        assertEquals("鸡兔同笼", dto.getTopicLabel());
+        verify(fileStorageService).uploadToObjectKey(anyString(), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("图片：题库 miss → Python 顺带知识点展示（镜像校验，不强求）")
+    void image_questionKpsShown() {
+        when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
+        when(fileStorageService.generatePresignedUrl(anyString(), anyInt())).thenReturn("http://cos/signed");
+        when(questionTypeRepository.findTopTopicLabels(20)).thenReturn(List.of("鸡兔同笼"));
+        when(tutoringLlmPort.understandQuestion(anyString(), any(), any()))
+                .thenReturn(QuestionUnderstandResult.builder()
+                        .topicLabels(List.of("鸡兔同笼")).questionKps(List.of("二元一次方程组")).build());
+        when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp("uri-er", "二元一次方程组")));
+
+        QuestionAnalysisDTO dto = service.analyzeImage(new byte[]{1}, "q.png", STUDENT_ID);
+
+        assertEquals("RESOLVED", dto.getStatus());
+        assertEquals(1, dto.getKnowledgePoints().size());
+        assertEquals("二元一次方程组", dto.getKnowledgePoints().get(0).getKpLabel());
+    }
+
+    @Test
+    @DisplayName("图片：Python 识别失败（空 topicLabels）→ PENDING 不报错")
+    void image_failed_pending() {
+        when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
+        when(fileStorageService.generatePresignedUrl(anyString(), anyInt())).thenReturn("http://cos/signed");
+        when(questionTypeRepository.findTopTopicLabels(20)).thenReturn(List.of());
+        when(tutoringLlmPort.understandQuestion(anyString(), any(), any()))
+                .thenReturn(QuestionUnderstandResult.builder().topicLabels(List.of()).questionKps(List.of()).build());
+
+        QuestionAnalysisDTO dto = service.analyzeImage(new byte[]{1}, "q.png", STUDENT_ID);
+
+        assertEquals("PENDING", dto.getStatus());
+        assertNull(dto.getTopicLabel());
+    }
+
+    @Test
+    @DisplayName("图片：非法格式 → 抛 TUTORING_OCR_INVALID")
+    void image_invalidFormat() {
+        BusinessException ex = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
+                () -> service.analyzeImage(new byte[]{1}, "q.gif", STUDENT_ID));
+        assertEquals(ErrorCode.TUTORING_OCR_INVALID, ex.getCode());
     }
 
     private QuestionType qt(Long id, String label) {

@@ -52,6 +52,12 @@ public interface TutoringConfig {
     /** Python OCR 端点路径。 */
     String ocrPath();
 
+    /** 图片题目理解调用超时（视觉模型看图，30s 兜底）。 */
+    Duration questionUnderstandTimeout();
+
+    /** Python 图片题目理解端点路径（POST /api/tutoring/question-understand，视觉模型看图）。 */
+    String questionUnderstandPath();
+
     /** 默认配置（回退值，与 TutoringConstants 对齐；测试/未注入时使用）。 */
     static TutoringConfig defaults() {
         return new TutoringConfig() {
@@ -113,6 +119,16 @@ public interface TutoringConfig {
             @Override
             public String ocrPath() {
                 return "/api/ocr/recognize";
+            }
+
+            @Override
+            public Duration questionUnderstandTimeout() {
+                return Duration.ofSeconds(30);
+            }
+
+            @Override
+            public String questionUnderstandPath() {
+                return "/api/tutoring/question-understand";
             }
         };
     }

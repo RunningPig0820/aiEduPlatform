@@ -57,3 +57,12 @@
 - [x] 11.1 [P1 稳定性] 封闭域池确定 + `KpConstrainedAssociator` 池内排序确定性（`sorted(pool.indexOf)`，LLM 顺序打乱不影响 top-1）；新增 `sortsByPoolOrder` 用例
 - [x] 11.2 [P1 聚合手动触发] `POST /api/kp/aggregation/run`（ADMIN，`@PreAuthorize("hasRole('ADMIN')")`）→ `KpQuestionTypeAggregationService.aggregate()`，联调即时验证题型库沉淀；controller 测试覆盖
 - [ ] 11.3 [P2 管理端审核] 学生题型 ↔ 年级知识点对照页 + LLM 批量关联 + 人工校准喂题型库（**独立功能点，暂缓，需产品立项**；现有 `KpAliasReviewController` 可作基础）
+
+## 12. 图片题目多模态直看（2026-08-17 Python 拍板方案 B）
+
+- [x] 12.1 [契约] `QuestionUnderstandRequest`/`QuestionUnderstandResult`（domain contract）：imageUrl/topicHint/grade → topicLabels/questionKps（camelCase，与 Python 约定一致）
+- [x] 12.2 [Python 客户端] `TutoringLlmPort.understandQuestion` + `TutoringLlmClient` 实现（WebClient JSON → Python `/api/tutoring/question-understand`，retry + 30s 超时，失败降级空 → PENDING）；`TutoringConfig`/`TutoringProperties` 加 path/timeout
+- [x] 12.3 [无会话上传] `KpQuestionAnalysisAppService.uploadAnalyzeImage`：COS 上传（路径 `tutoring/questions/{studentId}/analyze/{ts}.ext`，无 sessionId 依赖）+ 格式白名单校验 + 签名 URL
+- [x] 12.4 [编排] `analyzeImage`：上传 → topicHint=findTopTopicLabels(20) → 调 Python 看图 → ①题型库命中权威 → ②questionKps 顺带展示（镜像校验）→ ③PENDING 挂起
+- [x] 12.5 [端点] `POST /api/kp/analyze-question/image`（multipart file，STUDENT）；`analyze-question` DTO 一致
+- [x] 12.6 [测试] image 编排 4 用例 + controller 2 用例全绿；全量回归 BUILD SUCCESS

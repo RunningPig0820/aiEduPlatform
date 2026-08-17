@@ -14,11 +14,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.Data;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 /**
  * 题型解析接口（POST /api/kp/resolve）——将 AI 识别的题型/知识点 label 解析到教材知识点 URI。
@@ -53,6 +58,23 @@ public class KpResolutionController {
     public ApiResponse<Void> runAggregation() {
         kpQuestionTypeAggregationService.aggregate();
         return ApiResponse.success();
+    }
+
+    /** POST /api/kp/analyze-question/image — 图片题目分析：multipart 图片 → 视觉模型直接看图 → 题型+知识点（不经 OCR）。 */
+    @Operation(summary = "图片题目分析", description = "图片直接走多模态视觉模型看图（OCR 仅前端失败兜底）")
+    @PostMapping(value = "/analyze-question/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<QuestionAnalysisDTO> analyzeQuestionImage(@RequestParam("file") MultipartFile file,
+                                                                 HttpSession session) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "file 不能为空");
+        }
+        Long studentId = TutoringAuth.requireStudent(session);
+        try {
+            return ApiResponse.success(kpQuestionAnalysisAppService
+                    .analyzeImage(file.getBytes(), file.getOriginalFilename(), studentId));
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "图片读取失败");
+        }
     }
 
     /** POST /api/kp/analyze-question — 单题分析：题目文本 → 题型名 → 关联知识点清单（纯分析不写观测）。 */

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 
@@ -60,6 +61,27 @@ class KpQuestionAnalysisControllerTest {
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
         verify(aggregationService).aggregate();
+    }
+
+    @Test
+    @DisplayName("analyze-question/image：学生 + 图片 → 返回单题分析")
+    void analyzeImage_success() {
+        QuestionAnalysisDTO dto = QuestionAnalysisDTO.resolved("鸡兔同笼", 60, List.of());
+        when(appService.analyzeImage(any(), anyString(), eq(STUDENT_ID))).thenReturn(dto);
+        MockMultipartFile file = new MockMultipartFile("file", "q.png", "image/png", new byte[]{1});
+
+        ApiResponse<QuestionAnalysisDTO> response = controller.analyzeQuestionImage(file, loginSession());
+
+        assertEquals(ErrorCode.SUCCESS, response.getCode());
+        verify(appService).analyzeImage(any(), anyString(), eq(STUDENT_ID));
+    }
+
+    @Test
+    @DisplayName("analyze-question/image：file 为空 → 10001")
+    void analyzeImage_emptyFile_rejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.analyzeQuestionImage(new MockMultipartFile("file", "", "", new byte[0]), loginSession()));
+        assertEquals(ErrorCode.INVALID_PARAMS, ex.getCode());
     }
 
     @Test

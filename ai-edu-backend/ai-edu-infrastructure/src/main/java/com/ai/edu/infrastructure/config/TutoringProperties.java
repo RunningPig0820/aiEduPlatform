@@ -96,6 +96,16 @@ public class TutoringProperties implements TutoringConfig {
         return python.getOcrPath();
     }
 
+    @Override
+    public Duration questionUnderstandTimeout() {
+        return timeout.getQuestionUnderstand();
+    }
+
+    @Override
+    public String questionUnderstandPath() {
+        return python.getQuestionUnderstandPath();
+    }
+
     @Data
     public static class Guardrail {
         /** 轮次上限（≤ 领域硬上限 20） */
@@ -117,6 +127,7 @@ public class TutoringProperties implements TutoringConfig {
         private Duration decide = Duration.ofSeconds(15);
         private Duration generate = Duration.ofSeconds(60);
         private Duration ocr = Duration.ofSeconds(30);
+        private Duration questionUnderstand = Duration.ofSeconds(30);
     }
 
     @Data
@@ -130,5 +141,6 @@ public class TutoringProperties implements TutoringConfig {
         private String decidePath = "/api/tutoring/decide";
         private String generatePath = "/api/tutoring/generate";
         private String ocrPath = "/api/ocr/recognize";
+        private String questionUnderstandPath = "/api/tutoring/question-understand";
     }
 }

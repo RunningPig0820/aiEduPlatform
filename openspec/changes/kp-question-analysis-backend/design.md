@@ -174,6 +174,24 @@ analyze 存疑 PENDING
 - `KgKnowledgePointRepository.findLabelsByStage(stage)`：按学段取知识点 label 池（D8 ③ 用，全量教材知识点）。
 - `POST /api/kg/knowledge-points` 支持 `keyword` 参数：`WHERE label LIKE CONCAT('%', #{keyword}, '%')`（在 stage 过滤内）→ 前端 `KpSearchSelector` 空候选时手动搜教材知识点确认（选中 kpLabel 走 vote，镜像天然可 vote）。
 
+### D13. 图片题目多模态直看（2026-08-17 Python 拍板方案 B）
+
+图片题目默认走**多模态视觉模型直接看图**（不经 OCR，OCR 仅前端失败兜底）。Python 已拍板方案 B：新增 stateless 端点 `POST /api/tutoring/question-understand`，**模型 Python 侧写死**（TUTORING_DECIDE_MODEL = `doubao-seed-2-0-mini-260428`，Java 不指定模型，模型是 Java 黑盒；方舟开通 ID 若不同，改 Python `question_understand.py` 一行，Java 无感）。
+
+```
+Java POST /api/kp/analyze-question/image (multipart)
+  → 无会话上传 COS（tutoring/questions/{studentId}/analyze/{ts}.ext，无 sessionId 依赖）
+  → generatePresignedUrl（Python 要签名 URL，getUrl 非签名不可用）
+  → 传 topicHint=findTopTopicLabels(20)（视觉识别命名朝题型库收敛）
+  → 调 Python /api/tutoring/question-understand { image_url, topic_hint, grade }
+  → 返回 { topic_labels, question_kps }
+  → ①题型库命中权威 → ②questionKps 顺带展示（镜像校验，不强求）→ ③PENDING 挂起
+```
+
+- **为什么不经 `/api/llm/chat`（方案 A）**：不是所有模型都是视觉功能——通用 chat 路由到非视觉模型图就废了。方案 B 模型写死视觉 + 独立端点，非视觉风险天然隔离。
+- **契约字段（snake_case，tutoring 域统一）**：请求 `image_url`/`topic_hint`/`grade`；响应 `topic_labels`/`question_kps`。Java `QuestionUnderstandRequest/Result` 已加 `@JsonProperty` 映射。
+- **降级**：topic_labels 空 = 识别失败 → PENDING（与文本路径一致，不报错）。
+
 ### D12. 前端范围降级（2026-08-17 前端告知）
 
 前端本期降级为「**贴题 → 识别题型（核心）+ 知识点顺带参考（有则展示，无则不强求）**」，知识点关联的确认/搜索/待确认闭环转后续独立功能「题型↔知识点关联完善」。

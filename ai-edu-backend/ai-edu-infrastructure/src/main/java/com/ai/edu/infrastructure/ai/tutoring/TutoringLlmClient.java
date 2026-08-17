@@ -4,6 +4,8 @@ import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
+import com.ai.edu.domain.learning.model.contract.QuestionUnderstandRequest;
+import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
 import jakarta.annotation.Resource;
@@ -18,6 +20,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 /**
  * 答疑 Python agent 客户端（WebClient，复用 llm-gateway internalToken 模式）。
@@ -101,6 +105,26 @@ public class TutoringLlmClient implements TutoringLlmPort {
         } catch (Exception e) {
             log.error("[tutoring] OCR 调用失败: {}", e.getMessage(), e);
             throw new TutoringAgentException("题目识别服务暂不可用", e);
+        }
+    }
+
+    @Override
+    public QuestionUnderstandResult understandQuestion(String imageUrl, List<String> topicHint, Integer grade) {
+        log.info("[tutoring] question-understand 调用（视觉看图）, url={}", imageUrl);
+        try {
+            QuestionUnderstandRequest request = QuestionUnderstandRequest.builder()
+                    .imageUrl(imageUrl).topicHint(topicHint).grade(grade).build();
+            return Mono.defer(() -> tutoringWebClient.post()
+                    .uri(config().questionUnderstandPath())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(QuestionUnderstandResult.class))
+                    .retry(config().agentRetry())
+                    .block(config().questionUnderstandTimeout());
+        } catch (Exception e) {
+            log.error("[tutoring] question-understand 调用失败（降级空，调用方 PENDING）: {}", e.getMessage(), e);
+            return QuestionUnderstandResult.builder().topicLabels(List.of()).questionKps(List.of()).build();
         }
     }
 

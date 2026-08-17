@@ -136,6 +136,42 @@ if (result.code === '00000') {
 
 ---
 
+### 1.1 图片题目分析 analyze-question/image
+
+**基本信息**
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `POST` |
+| 接口路径 | `/api/kp/analyze-question/image` |
+| Content-Type | `multipart/form-data` |
+| 需要登录 | 是（STUDENT） |
+
+**用途**：图片题目（粘贴/拖拽/拍图）→ **多模态视觉模型直接看图**（不经 OCR；OCR 仅前端失败兜底按钮）→ 识别题型 + 顺带知识点。响应与文本版 `analyze-question` 完全一致。
+
+**请求参数**（multipart）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| file | File | 是 | 图片（jpg/jpeg/png/webp/bmp，≤ 30s 超时） |
+
+**响应**：与 `analyze-question` 相同（`{ topicLabel, status, confidence, knowledgePoints, candidates }`）；识别失败 → `status=PENDING`（不报错）。
+
+**后端流程**：上传 COS（签名 URL）→ 传 topicHint（题型库常用名收敛）→ Python 视觉模型看图 → 题型库命中权威 / questionKps 顺带展示 / PENDING 挂起。
+
+**契约（Java ↔ Python，tutoring 域 snake_case）**：请求 `{ image_url, topic_hint, grade }` → 响应 `{ topic_labels, question_kps }`。**视觉模型由 Python 侧写死**（TUTORING_DECIDE_MODEL），Java 不指定模型。
+
+**请求示例**（cURL）:
+```bash
+curl -X POST http://localhost:8080/api/kp/analyze-question/image \
+  -H "Cookie: SESSION=<your-session>" \
+  -F "file=@question.png"
+```
+
+**常见错误**：`50006` 图片格式不支持；`10001` file 为空。
+
+---
+
 ## 2. 复用接口
 
 以下接口已就绪（`kp-matching-lightup`），题型分析页直接复用：
