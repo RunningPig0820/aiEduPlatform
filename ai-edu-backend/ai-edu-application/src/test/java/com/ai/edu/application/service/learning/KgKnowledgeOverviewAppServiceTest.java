@@ -14,6 +14,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -41,7 +42,7 @@ class KgKnowledgeOverviewAppServiceTest {
         when(kgKnowledgePointRepository.countByStage("初中")).thenReturn(532L);
         when(kgKnowledgePointRepository.findPageByStage("初中", 0, 20)).thenReturn(List.of(p));
 
-        PageDTO<KgKnowledgePointPageItemDTO> result = service.page("middle", 1, 20);
+        PageDTO<KgKnowledgePointPageItemDTO> result = service.page("middle", 1, 20, null);
 
         assertEquals(532L, result.getTotal());
         assertEquals(1, result.getItems().size());
@@ -53,16 +54,33 @@ class KgKnowledgeOverviewAppServiceTest {
     }
 
     @Test
+    @DisplayName("page — keyword 过滤（label LIKE，前端搜索兜底）")
+    void keyword_shouldFilter() {
+        KgKpPlacement p = KgKpPlacement.builder()
+                .kpUri("kp-uri-1").kpLabel("二元一次方程组").stage("初中")
+                .chapterLabel("二元一次方程组").sectionLabel("8.1 二元一次方程组").build();
+        when(kgKnowledgePointRepository.countByStageAndKeyword("初中", "二元一次")).thenReturn(1L);
+        when(kgKnowledgePointRepository.findPageByStageAndKeyword("初中", "二元一次", 0, 20)).thenReturn(List.of(p));
+
+        PageDTO<KgKnowledgePointPageItemDTO> result = service.page("middle", 1, 20, "二元一次");
+
+        assertEquals(1L, result.getTotal());
+        assertEquals("二元一次方程组", result.getItems().get(0).getKpLabel());
+        verify(kgKnowledgePointRepository).countByStageAndKeyword("初中", "二元一次");
+        verify(kgKnowledgePointRepository).findPageByStageAndKeyword("初中", "二元一次", 0, 20);
+    }
+
+    @Test
     @DisplayName("page — 非法 stage 抛 10003")
     void invalidStage_shouldThrow() {
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.page("invalid", 1, 20));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.page("invalid", 1, 20, null));
         assertEquals("10003", ex.getCode());
     }
 
     @Test
     @DisplayName("page — 空 stage 抛 10003")
     void nullStage_shouldThrow() {
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.page(null, 1, 20));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.page(null, 1, 20, null));
         assertEquals("10003", ex.getCode());
     }
 }

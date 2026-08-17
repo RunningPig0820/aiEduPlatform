@@ -35,6 +35,11 @@ public interface DerivedKpObsRepository {
     List<DerivedKpObs> findResolved();
 
     /**
+     * 按多题型 label 查已解析观测（kp_uri 非空；聚合变体合并按 canonical+别名 union 重建）。
+     */
+    List<DerivedKpObs> findResolvedByTopicLabels(java.util.Collection<String> topicLabels);
+
+    /**
      * 按状态查观测（供维护任务扫描 WEAK/CONFLICTED）。
      */
     List<DerivedKpObs> findByStatus(DerivedKpStatus status);
@@ -55,4 +60,27 @@ public interface DerivedKpObsRepository {
      * @return 影响行数（0 表示观测不存在或已处理）
      */
     int confirm(Long id, String kpUri);
+
+    /**
+     * 学生澄清投票转正：把该生该题型的 PENDING 观测更新为 RESOLVED
+     * （kp_uri + source=student_vote + confidence），使待确认清单即时消失。
+     *
+     * @return 影响行数（0 表示无 PENDING 观测，调用方应新建 RESOLVED 观测）
+     */
+    int resolvePendingByStudentTopic(Long studentId, String topicLabel, String kpUri, int confidence);
+
+    /**
+     * 存疑挂起：该生该题型无 PENDING 观测时插入一条（去重防刷屏，kp_uri 为空不参与唯一约束）。
+     * 供 analyze-question 存疑结果持久化，学生选择/后续维护任务补充。
+     *
+     * @return 影响行数（0 表示已存在 PENDING 观测，幂等）
+     */
+    int upsertPendingIfAbsent(Long studentId, String topicLabel, Integer grade);
+
+    /**
+     * 存疑重判转 WEAK：更新 kp_uri + source=llm + status=WEAK（冷启动弱确定，待第二信号共现转正，不直接 RESOLVED 防幻觉污染）。
+     *
+     * @return 影响行数
+     */
+    int resolveWeakByMaintenance(Long id, String kpUri, int confidence);
 }

@@ -305,3 +305,23 @@ CREATE TABLE IF NOT EXISTS `t_student_topic_mastery` (
     UNIQUE INDEX `uk_student_topic` (`student_id`, `topic_key`) COMMENT '同一学生题型唯一（UPSERT 幂等）',
     INDEX `idx_student` (`student_id`) COMMENT '按学生查题型掌握度（掌握度列表/覆盖度派生）'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生题型掌握度表';
+
+-- =====================================================
+-- 12. 题型库变体别名表（相似题型名收敛到 canonical 题型）
+-- 来源：Flyway V16__create_t_kp_question_type_alias.sql
+-- 注意：spring.flyway.enabled=false，需手动在 ai_edu_learning 库执行
+-- alias_label 唯一；聚合时按 kp 分布重叠判定变体后插入；findByTopicLabelOrAlias 命中同一 canonical
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `t_kp_question_type_alias` (
+    `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `alias_label`      VARCHAR(255) NOT NULL COMMENT '变体题型名（鸡兔同笼），UNIQUE',
+    `question_type_id` BIGINT       NOT NULL COMMENT 'canonical 题型ID（t_kp_question_type.id）',
+    `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `created_by`       BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID',
+    `modified_by`      BIGINT       NOT NULL DEFAULT 0 COMMENT '修改人',
+    `is_deleted`       TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0-未删除，1-已删除',
+    PRIMARY KEY (`id`),
+    UNIQUE INDEX `uk_alias_label` (`alias_label`) COMMENT '变体题型名唯一（UPSERT 幂等）',
+    INDEX `idx_question_type` (`question_type_id`) COMMENT '按 canonical 题型查别名'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='题型库变体别名表';

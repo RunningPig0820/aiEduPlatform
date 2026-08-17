@@ -35,6 +35,13 @@ public interface QuestionTypeMapper extends BaseMapper<QuestionTypePo> {
     @Select("SELECT * FROM t_kp_question_type WHERE topic_label = #{topicLabel} AND is_deleted = false LIMIT 1")
     QuestionTypePo selectByTopicLabel(@Param("topicLabel") String topicLabel);
 
+    /** 按 canonical 或别名命中题型（变体名 → canonical；canonical 优先）。 */
+    @Select("SELECT qt.* FROM t_kp_question_type qt " +
+            "LEFT JOIN t_kp_question_type_alias a ON a.question_type_id = qt.id AND a.is_deleted = false " +
+            "WHERE qt.is_deleted = false AND (qt.topic_label = #{topicLabel} OR a.alias_label = #{topicLabel}) " +
+            "ORDER BY (qt.topic_label = #{topicLabel}) DESC LIMIT 1")
+    QuestionTypePo selectByTopicLabelOrAlias(@Param("topicLabel") String topicLabel);
+
     /** 按主键查条目（带逻辑删除过滤，避免与 BaseMapper.selectById 语义冲突）。 */
     @Select("SELECT * FROM t_kp_question_type WHERE id = #{id} AND is_deleted = false LIMIT 1")
     QuestionTypePo selectActiveById(@Param("id") Long id);
@@ -46,4 +53,12 @@ public interface QuestionTypeMapper extends BaseMapper<QuestionTypePo> {
     /** 题型总数。 */
     @Select("SELECT COUNT(*) FROM t_kp_question_type WHERE is_deleted = false")
     long count();
+
+    /** 按命中数降序取常用题型名（题目理解参考词表，limit 上限）。 */
+    @Select("SELECT topic_label FROM t_kp_question_type WHERE is_deleted = false ORDER BY hit_count DESC, hit_students DESC LIMIT #{limit}")
+    List<String> selectTopTopicLabels(@Param("limit") int limit);
+
+    /** 查全部题型（供聚合变体合并预载 kp 签名）。 */
+    @Select("SELECT * FROM t_kp_question_type WHERE is_deleted = false ORDER BY id")
+    List<QuestionTypePo> selectAll();
 }

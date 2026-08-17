@@ -25,14 +25,18 @@ public class KgKnowledgeOverviewAppService {
     @Setter(AccessLevel.PACKAGE)
     private KgKnowledgePointRepository kgKnowledgePointRepository;
 
-    /** 按学段分页列教材知识点。 */
-    public PageDTO<KgKnowledgePointPageItemDTO> page(String stage, int page, int size) {
+    /** 按学段分页列教材知识点（keyword 可选，label LIKE 过滤，前端搜索兜底）。 */
+    public PageDTO<KgKnowledgePointPageItemDTO> page(String stage, int page, int size, String keyword) {
         KgStageEnum stageEnum = resolveStage(stage);
         // 库里 t_kg_textbook.stage 存中文 label，查询前 code → 中文
         String stageLabel = stageEnum.getLabel();
-        long total = kgKnowledgePointRepository.countByStage(stageLabel);
-        List<KgKnowledgePointPageItemDTO> items = kgKnowledgePointRepository
-                .findPageByStage(stageLabel, (page - 1) * size, size).stream()
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        long total = hasKeyword
+                ? kgKnowledgePointRepository.countByStageAndKeyword(stageLabel, keyword)
+                : kgKnowledgePointRepository.countByStage(stageLabel);
+        List<KgKnowledgePointPageItemDTO> items = (hasKeyword
+                ? kgKnowledgePointRepository.findPageByStageAndKeyword(stageLabel, keyword, (page - 1) * size, size)
+                : kgKnowledgePointRepository.findPageByStage(stageLabel, (page - 1) * size, size)).stream()
                 .map(p -> KgKnowledgePointPageItemDTO.builder()
                         .kpUri(p.getKpUri())
                         .kpLabel(p.getKpLabel())

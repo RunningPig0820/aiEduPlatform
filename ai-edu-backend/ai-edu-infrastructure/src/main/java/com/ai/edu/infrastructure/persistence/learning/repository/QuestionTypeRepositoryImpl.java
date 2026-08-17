@@ -36,6 +36,12 @@ public class QuestionTypeRepositoryImpl implements QuestionTypeRepository {
     }
 
     @Override
+    public Optional<QuestionType> findByTopicLabelOrAlias(String topicLabel) {
+        QuestionTypePo po = questionTypeMapper.selectByTopicLabelOrAlias(topicLabel);
+        return po != null ? Optional.of(po.toEntity()) : Optional.empty();
+    }
+
+    @Override
     public Optional<QuestionType> findById(Long id) {
         QuestionTypePo po = questionTypeMapper.selectActiveById(id);
         return po != null ? Optional.of(po.toEntity()) : Optional.empty();
@@ -49,5 +55,15 @@ public class QuestionTypeRepositoryImpl implements QuestionTypeRepository {
     @Override
     public long count() {
         return questionTypeMapper.count();
+    }
+
+    @Override
+    public List<String> findTopTopicLabels(int limit) {
+        return questionTypeMapper.selectTopTopicLabels(limit);
+    }
+
+    @Override
+    public List<QuestionType> findAll() {
+        return QuestionTypePo.toEntityList(questionTypeMapper.selectAll());
     }
 }

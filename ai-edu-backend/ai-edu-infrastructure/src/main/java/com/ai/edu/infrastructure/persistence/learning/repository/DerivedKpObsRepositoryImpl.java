@@ -59,6 +59,14 @@ public class DerivedKpObsRepositoryImpl implements DerivedKpObsRepository {
     }
 
     @Override
+    public List<DerivedKpObs> findResolvedByTopicLabels(java.util.Collection<String> topicLabels) {
+        if (topicLabels == null || topicLabels.isEmpty()) {
+            return List.of();
+        }
+        return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectResolvedByTopicLabels(topicLabels));
+    }
+
+    @Override
     public List<DerivedKpObs> findByStatus(DerivedKpStatus status) {
         return DerivedKpObsPo.toEntityList(derivedKpObsMapper.selectByStatus(status.name()));
     }
@@ -76,5 +84,20 @@ public class DerivedKpObsRepositoryImpl implements DerivedKpObsRepository {
     @Override
     public int confirm(Long id, String kpUri) {
         return derivedKpObsMapper.confirm(id, kpUri);
+    }
+
+    @Override
+    public int resolvePendingByStudentTopic(Long studentId, String topicLabel, String kpUri, int confidence) {
+        return derivedKpObsMapper.updateResolvePendingByStudentTopic(studentId, topicLabel, kpUri, confidence);
+    }
+
+    @Override
+    public int upsertPendingIfAbsent(Long studentId, String topicLabel, Integer grade) {
+        return derivedKpObsMapper.insertPendingIfAbsent(studentId, topicLabel, grade);
+    }
+
+    @Override
+    public int resolveWeakByMaintenance(Long id, String kpUri, int confidence) {
+        return derivedKpObsMapper.updateResolveWeakByMaintenance(id, kpUri, confidence);
     }
 }

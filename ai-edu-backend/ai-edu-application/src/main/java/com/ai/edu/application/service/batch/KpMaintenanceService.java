@@ -47,7 +47,26 @@ public class KpMaintenanceService {
     public void maintain() {
         promoteWeakByCooccurrence();
         rejudgeConflicted();
+        rejudgePending();
         aggregationService.aggregate();
+    }
+
+    /** 存疑 PENDING 观测 → LLM 重判 → 高置信转 WEAK（待共现转正，不直接 RESOLVED 防幻觉污染）；低置信保持 PENDING 留学生选择。 */
+    private void rejudgePending() {
+        List<DerivedKpObs> pending = derivedKpObsRepository.findByStatus(DerivedKpStatus.PENDING);
+        for (DerivedKpObs obs : pending) {
+            try {
+                KpResolution result = kpDisambiguationPort.disambiguate(obs.getTopicLabel(), obs.getStudentGrade());
+                if (result != null && result.isResolved() && result.getConfidence() >= confidenceThreshold) {
+                    derivedKpObsRepository.resolveWeakByMaintenance(obs.getId(), result.getUri(), result.getConfidence());
+                    log.info("存疑 PENDING 重判转 WEAK（待共现转正）: topic={}, kp={}",
+                            obs.getTopicLabel(), result.getUri());
+                }
+                // 低置信/仍歧义 → 保持 PENDING（留待学生选择 vote）
+            } catch (Exception e) {
+                log.warn("存疑重判失败: obsId={}", obs.getId(), e);
+            }
+        }
     }
 
     /** 第二信号共现转正：冷启动 WEAK 观测，同题型同知识点已有 ≥2 名不同学生 → 转 RESOLVED。 */

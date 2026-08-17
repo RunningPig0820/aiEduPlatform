@@ -4,10 +4,12 @@ import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
+import com.ai.edu.domain.learning.model.entity.QuestionTypeAlias;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
 import com.ai.edu.domain.learning.model.valueobject.TopicKpHint;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
+import com.ai.edu.domain.learning.repository.QuestionTypeAliasRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.KpTopicAggregationPort;
@@ -17,16 +19,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * 【离线处理 · 大数据归宿】知识点题型库聚合服务——从个体派生观测（obs）共现沉淀"知识点的题型"。
  *
  * <p>聚合：扫描已解析观测 → 按 topic_label 分组 → 达阈值建 CANDIDATE + 按 kp 拆分年级分布桶。
- * 业务隔离：只写 MySQL 派生层（题型库），权威图谱零写入。
+ * 变体别名合并：建新 CANDIDATE 前比对现有题型 kp_uri 分布重叠（≥ alias-overlap 阈值）→
+ * 相似题型名（「鸡兔同笼」vs「鸡兔同笼问题」）收敛到 canonical + 别名表，聚合阈值不被变体拆分稀释；
+ * canonical 分布按「主名 + 全部别名」union 观测重建（幂等）。
+ * 业务隔离：只写 MySQL 派生层（题型库 + 别名），权威图谱零写入。
  *
  * <p><b>逻辑归宿：大数据平台（离线批处理）。</b>
  * 本逻辑本质是离线批处理（不要求实时、obs 无限长尾），正确归宿是大数据平台
@@ -46,6 +57,8 @@ public class KpQuestionTypeAggregationService {
     @Resource
     private QuestionTypeKpRepository questionTypeKpRepository;
     @Resource
+    private QuestionTypeAliasRepository questionTypeAliasRepository;
+    @Resource
     private KgKnowledgePointRepository kgKnowledgePointRepository;
     @Resource
     private KpTopicAggregationPort topicAggregationPort;
@@ -56,9 +69,11 @@ public class KpQuestionTypeAggregationService {
     private int candidateHits;
     @Value("${ai-edu.kp.aggregation.stable-students:10}")
     private int stableStudents;
+    @Value("${ai-edu.kp.aggregation.alias-overlap:0.7}")
+    private double aliasOverlap;
 
     /**
-     * 聚合：扫描已解析观测 → 达阈值建 CANDIDATE + 分布桶。
+     * 聚合：扫描已解析观测 → 按 canonical 分组（命中/相似变体/新建）→ union 重建分布。
      * 由 {@code KpBatchScheduler} 周期触发（凌晨 3:17），也可手动/大数据作业调用。
      */
     public void aggregate() {
@@ -66,40 +81,127 @@ public class KpQuestionTypeAggregationService {
         if (obs.isEmpty()) {
             return;
         }
+        // 预载现有题型与 kp 签名（变体合并比对）；可变副本，本运行新建的 canonical 需追加
+        List<QuestionType> existing = new ArrayList<>(questionTypeRepository.findAll());
+        Map<Long, Set<String>> kpSignatures = new HashMap<>();
+        for (QuestionTypeKp kp : questionTypeKpRepository.findAll()) {
+            kpSignatures.computeIfAbsent(kp.getQuestionTypeId(), k -> new HashSet<>()).add(kp.getKpUri());
+        }
+
         Map<String, List<DerivedKpObs>> byTopic = obs.stream()
                 .collect(Collectors.groupingBy(DerivedKpObs::getTopicLabel));
+        Map<Long, QuestionType> canonicalById = new LinkedHashMap<>();
+        Map<Long, List<String>> labelsByCanonical = new LinkedHashMap<>();
+
         for (Map.Entry<String, List<DerivedKpObs>> entry : byTopic.entrySet()) {
             try {
-                aggregateTopic(entry.getKey(), entry.getValue());
+                resolveCanonical(entry.getKey(), entry.getValue(), existing, kpSignatures,
+                        canonicalById, labelsByCanonical);
             } catch (Exception e) {
                 log.warn("聚合题型失败: topic={}", entry.getKey(), e);
             }
         }
-        log.info("题型库聚合完成，扫描 {} 条观测，{} 个题型", obs.size(), byTopic.size());
+
+        for (Map.Entry<Long, QuestionType> e : canonicalById.entrySet()) {
+            try {
+                rebuildCanonical(e.getValue(), labelsByCanonical.getOrDefault(e.getKey(), List.of()));
+            } catch (Exception ex) {
+                log.warn("重建题型分布失败: canonical={}", e.getKey(), ex);
+            }
+        }
+        log.info("题型库聚合完成，扫描 {} 条观测，{} 个题型", obs.size(), canonicalById.size());
     }
 
-    /** 单个题型聚合：达阈值建 CANDIDATE + 按 kp 拆分分布桶（多桶时 LLM 归纳 ratio）。 */
-    private void aggregateTopic(String topicLabel, List<DerivedKpObs> obs) {
+    /** 单个题型 canonical 解析：① canonical/别名命中 → 现有；② 未命中 → kp 重叠相似变体；③ 无相似 → 新建。 */
+    private void resolveCanonical(String topicLabel, List<DerivedKpObs> obs, List<QuestionType> existing,
+                                  Map<Long, Set<String>> kpSignatures, Map<Long, QuestionType> canonicalById,
+                                  Map<Long, List<String>> labelsByCanonical) {
         int distinctStudents = (int) obs.stream().map(DerivedKpObs::getStudentId).distinct().count();
         int totalHits = obs.stream().mapToInt(this::hitCount).sum();
         if (distinctStudents < candidateStudents || totalHits < candidateHits) {
             return;
         }
         Long promotedBy = obs.get(0).getStudentId();
-        QuestionType qt = questionTypeRepository.findByTopicLabel(topicLabel)
-                .orElseGet(() -> QuestionType.create(topicLabel, QuestionTypeStatus.CANDIDATE, promotedBy));
-        qt.updateStats(distinctStudents, totalHits);
-        qt = questionTypeRepository.upsert(qt);
 
-        Map<String, List<DerivedKpObs>> byKp = obs.stream()
+        QuestionType canonical = questionTypeRepository.findByTopicLabelOrAlias(topicLabel).orElse(null);
+        boolean isVariant = false;
+        if (canonical == null) {
+            canonical = findSimilarByKpOverlap(obs, existing, kpSignatures).orElse(null);
+            isVariant = canonical != null;
+        }
+        if (canonical == null) {
+            canonical = QuestionType.create(topicLabel, QuestionTypeStatus.CANDIDATE, promotedBy);
+            canonical = questionTypeRepository.upsert(canonical);
+            existing.add(canonical);
+            kpSignatures.put(canonical.getId(), kpUris(obs));
+        }
+        if (isVariant) {
+            questionTypeAliasRepository.upsert(QuestionTypeAlias.create(topicLabel, canonical.getId()));
+            log.info("变体题型并入 canonical: {} → {} (id={})", topicLabel, canonical.getTopicLabel(), canonical.getId());
+        }
+        canonicalById.putIfAbsent(canonical.getId(), canonical);
+        labelsByCanonical.computeIfAbsent(canonical.getId(), k -> new ArrayList<>()).add(topicLabel);
+    }
+
+    /** 变体合并：新桶 kp_uri 集合与现有题型 kp 签名重叠 ≥ 阈值（默认 0.7）→ 视同变体。 */
+    private Optional<QuestionType> findSimilarByKpOverlap(List<DerivedKpObs> obs, List<QuestionType> existing,
+                                                          Map<Long, Set<String>> kpSignatures) {
+        Set<String> bucketKps = kpUris(obs);
+        if (bucketKps.isEmpty()) {
+            return Optional.empty();
+        }
+        QuestionType best = null;
+        double bestOverlap = 0.0;
+        for (QuestionType qt : existing) {
+            Set<String> existingKps = kpSignatures.getOrDefault(qt.getId(), Set.of());
+            if (existingKps.isEmpty()) {
+                continue;
+            }
+            double overlap = intersectionSize(bucketKps, existingKps) / (double) bucketKps.size();
+            if (overlap >= aliasOverlap && overlap > bestOverlap) {
+                best = qt;
+                bestOverlap = overlap;
+            }
+        }
+        return Optional.ofNullable(best);
+    }
+
+    private int intersectionSize(Set<String> a, Set<String> b) {
+        int n = 0;
+        for (String s : a) {
+            if (b.contains(s)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private Set<String> kpUris(List<DerivedKpObs> obs) {
+        return obs.stream().map(DerivedKpObs::getKpUri).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    /** 按 canonical 重建分布：union 主名 + 全部别名的 obs（幂等，重复聚合不放大统计）。 */
+    private void rebuildCanonical(QuestionType canonical, List<String> thisRunLabels) {
+        Set<String> allLabels = new LinkedHashSet<>(thisRunLabels);
+        allLabels.add(canonical.getTopicLabel());
+        for (QuestionTypeAlias alias : questionTypeAliasRepository.findByQuestionTypeId(canonical.getId())) {
+            allLabels.add(alias.getAliasLabel());
+        }
+        List<DerivedKpObs> unionObs = derivedKpObsRepository.findResolvedByTopicLabels(allLabels);
+        int distinctStudents = (int) unionObs.stream().map(DerivedKpObs::getStudentId).distinct().count();
+        int totalHits = unionObs.stream().mapToInt(this::hitCount).sum();
+        canonical.updateStats(distinctStudents, totalHits);
+        canonical = questionTypeRepository.upsert(canonical);
+
+        Map<String, List<DerivedKpObs>> byKp = unionObs.stream()
                 .collect(Collectors.groupingBy(DerivedKpObs::getKpUri));
         // 多桶时 LLM 自动关联归纳 ratio（单桶/LLM 不可用降级纯计数）
-        Map<String, Double> refined = refineDistribution(topicLabel, byKp);
+        Map<String, Double> refined = refineDistribution(canonical.getTopicLabel(), byKp);
         for (Map.Entry<String, List<DerivedKpObs>> kpEntry : byKp.entrySet()) {
             double ratio = (refined != null && refined.containsKey(kpEntry.getKey()))
                     ? refined.get(kpEntry.getKey())
                     : countRatio(kpEntry.getValue(), totalHits);
-            upsertBucket(qt.getId(), kpEntry.getKey(), kpEntry.getValue(), ratio);
+            upsertBucket(canonical.getId(), kpEntry.getKey(), kpEntry.getValue(), ratio);
         }
     }
 

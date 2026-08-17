@@ -66,26 +66,40 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
         }
         // 解析失败不报错（api 契约）：任何意外异常降级挂起，避免污染答疑主流程
         try {
-            return doResolve(label, studentId);
+            return doResolve(label, studentId, true);
         } catch (Exception e) {
             log.error("知识点解析异常（降级挂起）: label={}", label, e);
             return KpResolution.pending(label);
         }
     }
 
-    private KpResolution doResolve(String label, Long studentId) {
-        Integer grade = resolveGrade(studentId);
+    @Override
+    public KpResolution resolveReadOnly(String label, Long studentId) {
+        if (label == null || label.isBlank()) {
+            return KpResolution.pending(label);
+        }
+        // 纯分析（analyze-question）：不写个体派生观测，解析行为与 resolve 一致
+        try {
+            return doResolve(label, studentId, false);
+        } catch (Exception e) {
+            log.error("知识点只读解析异常（降级挂起）: label={}", label, e);
+            return KpResolution.pending(label);
+        }
+    }
+
+    private KpResolution doResolve(String label, Long studentId, boolean persistObs) {
+        Integer grade = resolveStudentGrade(studentId);
 
         // ① 镜像精确 / LIKE（确定性规则，0 依赖 LLM）
         Optional<KgKnowledgePoint> exact = kgKnowledgePointRepository.findByLabel(label);
         if (exact.isPresent() && exact.get().getUri() != null) {
-            writeObs(studentId, label, exact.get().getUri(), grade, 100, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED);
+            writeObs(studentId, label, exact.get().getUri(), grade, 100, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED, persistObs);
             return KpResolution.resolved(label, exact.get().getUri(), exact.get().getLabel(), 100);
         }
         Optional<KgKnowledgePoint> like = kgKnowledgePointRepository.findByLabelLike(label);
         if (like.isPresent() && like.get().getUri() != null) {
             log.debug("知识点 label 模糊命中: {} -> {}", label, like.get().getUri());
-            writeObs(studentId, label, like.get().getUri(), grade, 80, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED);
+            writeObs(studentId, label, like.get().getUri(), grade, 80, DerivedKpSource.MIRROR, DerivedKpStatus.RESOLVED, persistObs);
             return KpResolution.resolved(label, like.get().getUri(), like.get().getLabel(), 80);
         }
 
@@ -93,21 +107,22 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
         KpResolution catalog = resolveByCatalog(label, grade);
         if (catalog != null) {
             writeObs(studentId, label, catalog.getUri(), grade, catalog.getConfidence(),
-                    DerivedKpSource.CATALOG, DerivedKpStatus.RESOLVED);
+                    DerivedKpSource.CATALOG, DerivedKpStatus.RESOLVED, persistObs);
             return catalog;
         }
 
         // ③ LLM 消歧（两段式：生成候选名 + 镜像校验）
         KpResolution llm = kpDisambiguationPort.disambiguate(label, grade);
         if (llm != null && llm.isResolved()) {
-            // 冷启动弱化：题型库无先验 → 标 WEAK，不直接点亮，待第二独立信号转 RESOLVED
+            // 冷启动弱化：题型库无先验 → 标 WEAK，不直接点亮，待第二独立信号转 RESOLVED；
+            // 返回 resolvedWeak，调用方（analyze-question）降级展示为待确认而非权威
             writeObs(studentId, label, llm.getUri(), grade, llm.getConfidence(),
-                    DerivedKpSource.LLM, DerivedKpStatus.WEAK);
-            return llm;
+                    DerivedKpSource.LLM, DerivedKpStatus.WEAK, persistObs);
+            return KpResolution.resolvedWeak(label, llm.getUri(), llm.getLabel(), llm.getConfidence());
         }
 
         // ④ 低置信/歧义 → PENDING（候选优先 disambiguate 的多候选，否则 name-LIKE + 题型库召回）
-        writeObs(studentId, label, null, grade, 0, DerivedKpSource.LLM, DerivedKpStatus.PENDING);
+        writeObs(studentId, label, null, grade, 0, DerivedKpSource.LLM, DerivedKpStatus.PENDING, persistObs);
         List<String> candidateLabels = (llm != null && llm.isPending() && !llm.getCandidates().isEmpty())
                 ? llm.getCandidates()
                 : buildCandidates(label);
@@ -126,7 +141,7 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
                 byLabel.putIfAbsent(kp.getLabel(), kp.getLabel());
             }
         }
-        questionTypeRepository.findByTopicLabel(label).ifPresent(qt -> {
+        questionTypeRepository.findByTopicLabelOrAlias(label).ifPresent(qt -> {
             for (QuestionTypeKp kp : questionTypeKpRepository.findByQuestionTypeId(qt.getId())) {
                 if (kp.getKpUri() == null) {
                     continue;
@@ -154,26 +169,33 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
             log.warn("学生澄清候选不在镜像，忽略: {}", selectedLabel);
             return false;
         }
-        Integer grade = resolveGrade(studentId);
-        DerivedKpObs obs = DerivedKpObs.create(studentId, topicLabel, kp.get().getUri(), grade,
-                STUDENT_VOTE_CONFIDENCE, DerivedKpSource.STUDENT_VOTE, DerivedKpStatus.RESOLVED);
-        derivedKpObsRepository.upsert(obs);
-        log.info("学生澄清投票落观测: studentId={}, topic={}, kp={}", studentId, topicLabel, kp.get().getUri());
+        Integer grade = resolveStudentGrade(studentId);
+        // 优先转正该生该题型的 PENDING 观测（待确认清单即时消失）；无 PENDING 则新建 RESOLVED 观测
+        int resolved = derivedKpObsRepository.resolvePendingByStudentTopic(
+                studentId, topicLabel, kp.get().getUri(), STUDENT_VOTE_CONFIDENCE);
+        if (resolved == 0) {
+            DerivedKpObs obs = DerivedKpObs.create(studentId, topicLabel, kp.get().getUri(), grade,
+                    STUDENT_VOTE_CONFIDENCE, DerivedKpSource.STUDENT_VOTE, DerivedKpStatus.RESOLVED);
+            derivedKpObsRepository.upsert(obs);
+        }
+        log.info("学生澄清投票落观测: studentId={}, topic={}, kp={}, resolvedPending={}",
+                studentId, topicLabel, kp.get().getUri(), resolved);
         return true;
     }
 
-    /** 写个体派生观测；studentId 为空（纯解析，resolveLabelToUri 兼容）时不写。 */
+    /** 写个体派生观测；studentId 为空（纯解析）或只读（persistObs=false，analyze-question 纯分析）时不写。 */
     private void writeObs(Long studentId, String label, String uri, Integer grade, int confidence,
-                          DerivedKpSource source, DerivedKpStatus status) {
-        if (studentId == null) {
+                          DerivedKpSource source, DerivedKpStatus status, boolean persistObs) {
+        if (studentId == null || !persistObs) {
             return;
         }
         DerivedKpObs obs = DerivedKpObs.create(studentId, label, uri, grade, confidence, source, status);
         derivedKpObsRepository.upsert(obs);
     }
 
-    /** 学生 → 班级 → 年级（组织系统）；不可得返回 null，降级纯 LLM 消歧。 */
-    private Integer resolveGrade(Long studentId) {
+    /** 学生 → 班级 → 年级（组织系统）；不可得返回 null，降级纯 LLM 消歧/题目理解。 */
+    @Override
+    public Integer resolveStudentGrade(Long studentId) {
         if (studentId == null) {
             return null;
         }
@@ -189,9 +211,9 @@ public class TutoringKpResolverImpl implements TutoringKpResolver {
         }
     }
 
-    /** ② 题型库年级匹配：同题型按学生年级取占比最高 kp。 */
+    /** ② 题型库年级匹配：同题型按学生年级取占比最高 kp（canonical/别名命中同一先验）。 */
     private KpResolution resolveByCatalog(String label, Integer grade) {
-        Optional<QuestionType> qt = questionTypeRepository.findByTopicLabel(label);
+        Optional<QuestionType> qt = questionTypeRepository.findByTopicLabelOrAlias(label);
         if (qt.isEmpty()) {
             return null;
         }

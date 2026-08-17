@@ -33,4 +33,8 @@ public interface QuestionTypeKpMapper extends BaseMapper<QuestionTypeKpPo> {
     /** 按题型主表 ID 查全部分布桶（供解析先验）。 */
     @Select("SELECT * FROM t_kp_question_type_kp WHERE question_type_id = #{questionTypeId} AND is_deleted = false ORDER BY hit_count DESC")
     List<QuestionTypeKpPo> selectByQuestionTypeId(@Param("questionTypeId") Long questionTypeId);
+
+    /** 查全部分布桶（供聚合变体合并预载题型 kp 签名）。 */
+    @Select("SELECT * FROM t_kp_question_type_kp WHERE is_deleted = false")
+    List<QuestionTypeKpPo> selectAll();
 }

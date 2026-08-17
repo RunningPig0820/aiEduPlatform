@@ -74,7 +74,7 @@ public class KpLlmDisambiguator implements KpDisambiguationPort {
         if (response == null || response.getResponse() == null || response.getResponse().isBlank()) {
             return List.of();
         }
-        return parseNames(response.getResponse());
+        return KpLlmDisambiguator.parseNames(response.getResponse());
     }
 
     private String buildPrompt(String label, Integer grade) {
@@ -83,19 +83,22 @@ public class KpLlmDisambiguator implements KpDisambiguationPort {
         if (grade != null) {
             sb.append("（学生年级：").append(grade).append("年级）");
         }
-        sb.append("，请列出它最可能对应的 1~5 个教材知识点名，每行一个，只输出知识点名，不要编号、不要解释。");
+        sb.append("，请列出它最可能对应的教材知识点名，按把握从高到低，每行一个，只输出知识点名，不要编号、不要解释；")
+                .append("只列你最有把握的（宁缺毋滥，避免编造）；若无法对应任何教材知识点，输出：无法确定");
         return sb.toString();
     }
 
-    /** 解析 LLM 文本为候选名列表（去编号/bullet/空行，去重，限 5 个）。 */
-    private List<String> parseNames(String text) {
+    /** 解析 LLM 文本为候选名列表（去编号/bullet/空行，去重，限 5 个）。题目理解（KpQuestionAnalyzer）复用，故 static。 */
+    public static List<String> parseNames(String text) {
         return Arrays.stream(text.split("\\R"))
                 .map(String::trim)
                 .map(s -> s.replaceFirst("^\\s*[0-9]+[.、)）:：]?\\s*", ""))
                 .map(s -> s.replaceFirst("^[-*•·]\\s*", ""))
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
-                .filter(s -> !s.equalsIgnoreCase("无") && !s.equalsIgnoreCase("没有"))
+                .filter(s -> !s.equalsIgnoreCase("无") && !s.equalsIgnoreCase("没有")
+                        && !s.equalsIgnoreCase("无法识别") && !s.equalsIgnoreCase("无法确定")
+                        && !s.equalsIgnoreCase("无法判断"))
                 .distinct()
                 .limit(5)
                 .toList();

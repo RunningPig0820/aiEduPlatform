@@ -16,4 +16,7 @@ public class KgKnowledgePointPageRequest {
 
     /** 每页条数 */
     private Integer size;
+
+    /** 搜索关键词（kp.label LIKE %keyword%，可选；空则返回该学段全量） */
+    private String keyword;
 }

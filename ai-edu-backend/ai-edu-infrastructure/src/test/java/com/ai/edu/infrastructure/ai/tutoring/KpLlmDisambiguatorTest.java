@@ -97,6 +97,14 @@ class KpLlmDisambiguatorTest {
         assertNull(disambiguator.disambiguate("鸡兔同笼", null));
     }
 
+    @Test
+    @DisplayName("LLM 返回无法确定 → 兜底过滤 → null（不硬猜）")
+    void uncertainResponse_filteredToNull() {
+        when(llmGateway.chat(any())).thenReturn(Mono.just(AiEduChatResponse.builder().response("无法确定").build()));
+
+        assertNull(disambiguator.disambiguate("鸡兔同笼", null));
+    }
+
     private KgKnowledgePoint kp(String uri, String label) {
         return KgKnowledgePoint.create(uri, label);
     }

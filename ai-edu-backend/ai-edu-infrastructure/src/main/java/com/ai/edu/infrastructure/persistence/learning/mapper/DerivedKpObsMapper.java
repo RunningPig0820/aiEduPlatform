@@ -48,8 +48,14 @@ public interface DerivedKpObsMapper extends BaseMapper<DerivedKpObsPo> {
     List<DerivedKpObsPo> selectByTopicLabel(@Param("topicLabel") String topicLabel);
 
     /** 查全部已解析观测（kp_uri 非空，供聚合任务扫描）。 */
-    @Select("SELECT * FROM t_kp_derived_obs WHERE kp_uri IS NOT NULL AND is_deleted = false ORDER BY id")
+    /** 查 RESOLVED 观测（kp_uri 非空 + status=RESOLVED；排除冷启动 WEAK，防 LLM 幻觉污染题型库，WEAK 需第二信号转正才入聚合）。 */
+    @Select("SELECT * FROM t_kp_derived_obs WHERE kp_uri IS NOT NULL AND status = 'RESOLVED' AND is_deleted = false ORDER BY id")
     List<DerivedKpObsPo> selectResolved();
+
+    /** 按多题型 label 查 RESOLVED 观测（聚合变体合并 union 重建；同样排除 WEAK）。 */
+    @Select("<script>SELECT * FROM t_kp_derived_obs WHERE kp_uri IS NOT NULL AND status = 'RESOLVED' AND is_deleted = false AND topic_label IN " +
+            "<foreach collection='topicLabels' item='label' open='(' separator=',' close=')'>#{label}</foreach> ORDER BY id</script>")
+    List<DerivedKpObsPo> selectResolvedByTopicLabels(@Param("topicLabels") java.util.Collection<String> topicLabels);
 
     /** 按状态查观测（供维护任务扫描）。 */
     @Select("SELECT * FROM t_kp_derived_obs WHERE status = #{status} AND is_deleted = false ORDER BY id")
@@ -66,4 +72,27 @@ public interface DerivedKpObsMapper extends BaseMapper<DerivedKpObsPo> {
     /** 人工确认挂起观测归属：更新 kp_uri + source=curated + status=RESOLVED。 */
     @Update("UPDATE t_kp_derived_obs SET kp_uri = #{kpUri}, source = 'curated', status = 'RESOLVED', updated_at = NOW() WHERE id = #{id}")
     int confirm(@Param("id") Long id, @Param("kpUri") String kpUri);
+
+    /** 学生澄清投票转正：该生该题型的 PENDING 观测 → RESOLVED（source=student_vote）。 */
+    @Update("UPDATE t_kp_derived_obs SET kp_uri = #{kpUri}, source = 'student_vote', status = 'RESOLVED', " +
+            "confidence = #{confidence}, updated_at = NOW() WHERE student_id = #{studentId} " +
+            "AND topic_label = #{topicLabel} AND status = 'PENDING' AND is_deleted = false")
+    int updateResolvePendingByStudentTopic(@Param("studentId") Long studentId,
+                                           @Param("topicLabel") String topicLabel,
+                                           @Param("kpUri") String kpUri,
+                                           @Param("confidence") int confidence);
+
+    /** 存疑挂起：该生该题型无 PENDING 观测时插入一条（NOT EXISTS 去重，kp_uri 为空）。 */
+    @Insert("INSERT INTO t_kp_derived_obs (student_id, topic_label, kp_uri, student_grade, confidence, source, status, occurrence_count, first_seen_at, created_by, modified_by, is_deleted) " +
+            "SELECT #{studentId}, #{topicLabel}, NULL, #{grade}, 0, 'llm', 'PENDING', 1, NOW(), 0, 0, 0 " +
+            "WHERE NOT EXISTS (SELECT 1 FROM t_kp_derived_obs WHERE student_id = #{studentId} " +
+            "AND topic_label = #{topicLabel} AND status = 'PENDING' AND is_deleted = false)")
+    int insertPendingIfAbsent(@Param("studentId") Long studentId, @Param("topicLabel") String topicLabel,
+                              @Param("grade") Integer grade);
+
+    /** 存疑重判转 WEAK：更新 kp_uri + source=llm + status=WEAK（待共现转正，不直接 RESOLVED）。 */
+    @Update("UPDATE t_kp_derived_obs SET kp_uri = #{kpUri}, source = 'llm', status = 'WEAK', " +
+            "confidence = #{confidence}, updated_at = NOW() WHERE id = #{id}")
+    int updateResolveWeakByMaintenance(@Param("id") Long id, @Param("kpUri") String kpUri,
+                                       @Param("confidence") int confidence);
 }

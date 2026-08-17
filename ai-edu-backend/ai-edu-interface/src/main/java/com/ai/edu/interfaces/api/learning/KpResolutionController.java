@@ -3,7 +3,10 @@ package com.ai.edu.interfaces.api.learning;
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.KpResolveDTO;
 import com.ai.edu.application.dto.learning.KpResolveRequest;
+import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
+import com.ai.edu.application.service.batch.KpQuestionTypeAggregationService;
 import com.ai.edu.application.service.learning.KpAppService;
+import com.ai.edu.application.service.learning.KpQuestionAnalysisAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.Data;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +30,10 @@ public class KpResolutionController {
 
     @Resource
     private KpAppService kpAppService;
+    @Resource
+    private KpQuestionAnalysisAppService kpQuestionAnalysisAppService;
+    @Resource
+    private KpQuestionTypeAggregationService kpQuestionTypeAggregationService;
 
     /** POST /api/kp/resolve — 复用答疑内嵌解析管线（镜像 → 题型库年级匹配 → LLM 消歧 → 挂起）。 */
     @Operation(summary = "题型解析", description = "低置信返回 status=PENDING（不报错），携带候选供学生澄清")
@@ -36,6 +44,26 @@ public class KpResolutionController {
         }
         Long studentId = TutoringAuth.currentStudentId(session);
         return ApiResponse.success(kpAppService.resolve(request.getLabel(), studentId));
+    }
+
+    /** POST /api/kp/aggregation/run — 手动触发题型库聚合（ADMIN）：联调即时验证沉淀，不等凌晨 3:17 定时。 */
+    @Operation(summary = "手动触发题型库聚合", description = "扫 RESOLVED obs 沉淀题型库（ADMIN），联调/运维用")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/aggregation/run")
+    public ApiResponse<Void> runAggregation() {
+        kpQuestionTypeAggregationService.aggregate();
+        return ApiResponse.success();
+    }
+
+    /** POST /api/kp/analyze-question — 单题分析：题目文本 → 题型名 → 关联知识点清单（纯分析不写观测）。 */
+    @Operation(summary = "单题分析", description = "贴题/拍题（OCR 后）→ 识别题型 → 关联知识点清单；PENDING 不报错携带澄清候选")
+    @PostMapping("/analyze-question")
+    public ApiResponse<QuestionAnalysisDTO> analyzeQuestion(@RequestBody AnalyzeQuestionRequest request, HttpSession session) {
+        if (request == null || request.getText() == null || request.getText().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "text 不能为空");
+        }
+        Long studentId = TutoringAuth.requireStudent(session);
+        return ApiResponse.success(kpQuestionAnalysisAppService.analyze(request.getText(), studentId));
     }
 
     /** POST /api/kp/vote — 学生澄清投票（选"你想学哪个"），落 source=student_vote 观测。 */
@@ -56,5 +84,11 @@ public class KpResolutionController {
     public static class VoteRequest {
         private String topicLabel;
         private String selectedLabel;
+    }
+
+    /** 单题分析请求体。 */
+    @Data
+    public static class AnalyzeQuestionRequest {
+        private String text;
     }
 }

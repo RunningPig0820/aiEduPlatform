@@ -81,6 +81,22 @@ class KpMaintenanceServiceTest {
         verify(obsRepository).updateStatus(anyLong(), eq(DerivedKpStatus.HUMAN_REVIEW));
     }
 
+    @Test
+    @DisplayName("存疑 PENDING 高置信重判 → 转 WEAK（待共现转正，不直接 RESOLVED 防幻觉污染）")
+    void pendingRejudgedToWeak() {
+        when(obsRepository.findByStatus(DerivedKpStatus.WEAK)).thenReturn(List.of());
+        when(obsRepository.findByStatus(DerivedKpStatus.CONFLICTED)).thenReturn(List.of());
+        when(obsRepository.findByStatus(DerivedKpStatus.PENDING))
+                .thenReturn(List.of(obs(5L, DerivedKpStatus.PENDING)));
+        when(disambiguationPort.disambiguate("鸡兔同笼", 4))
+                .thenReturn(KpResolution.resolved("鸡兔同笼", KP_URI, "二元一次方程组", 80));
+
+        service.maintain();
+
+        verify(obsRepository).resolveWeakByMaintenance(5L, KP_URI, 80);
+        verify(obsRepository, never()).updateStatus(anyLong(), eq(DerivedKpStatus.RESOLVED));
+    }
+
     private DerivedKpObs obs(Long studentId, DerivedKpStatus status) {
         DerivedKpObs o = DerivedKpObs.create(studentId, "鸡兔同笼", KP_URI, 4, 80,
                 DerivedKpSource.LLM, status);

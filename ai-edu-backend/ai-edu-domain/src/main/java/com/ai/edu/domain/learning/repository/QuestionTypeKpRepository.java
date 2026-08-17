@@ -21,4 +21,9 @@ public interface QuestionTypeKpRepository {
      * 按题型主表 ID 查全部分布桶（供解析先验）。
      */
     List<QuestionTypeKp> findByQuestionTypeId(Long questionTypeId);
+
+    /**
+     * 查全部分布桶（供聚合变体合并预载题型 kp 签名）。
+     */
+    List<QuestionTypeKp> findAll();
 }

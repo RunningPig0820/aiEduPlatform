@@ -69,4 +69,19 @@ public interface KgKnowledgePointRepository {
      * 某学段教材知识点总数（分页 total）。
      */
     long countByStage(String stage);
+
+    /**
+     * 按学段取全部知识点 label（去重，封闭域约束选择的候选池，供 analyze 池选择）。
+     */
+    List<String> findLabelsByStage(String stage);
+
+    /**
+     * 按学段 + 关键词分页列知识点（label LIKE，前端 KpSearchSelector 空候选搜索兜底）。
+     */
+    List<KgKpPlacement> findPageByStageAndKeyword(String stage, String keyword, int offset, int limit);
+
+    /**
+     * 某学段 + 关键词知识点总数（分页 total）。
+     */
+    long countByStageAndKeyword(String stage, String keyword);
 }

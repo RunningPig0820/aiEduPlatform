@@ -32,4 +32,9 @@ public class QuestionTypeKpRepositoryImpl implements QuestionTypeKpRepository {
     public List<QuestionTypeKp> findByQuestionTypeId(Long questionTypeId) {
         return QuestionTypeKpPo.toEntityList(questionTypeKpMapper.selectByQuestionTypeId(questionTypeId));
     }
+
+    @Override
+    public List<QuestionTypeKp> findAll() {
+        return QuestionTypeKpPo.toEntityList(questionTypeKpMapper.selectAll());
+    }
 }

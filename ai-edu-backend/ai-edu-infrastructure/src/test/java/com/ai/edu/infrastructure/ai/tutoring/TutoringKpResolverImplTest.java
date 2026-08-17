@@ -10,6 +10,10 @@ import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.KpDisambiguationPort;
+import com.ai.edu.domain.organization.model.entity.Class;
+import com.ai.edu.domain.organization.model.entity.StudentClass;
+import com.ai.edu.domain.organization.model.valueobject.GradeLevel;
+import com.ai.edu.domain.shared.valueobject.ClassId;
 import com.ai.edu.domain.organization.repository.ClassRepository;
 import com.ai.edu.domain.organization.repository.StudentClassRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -137,7 +141,7 @@ class TutoringKpResolverImplTest {
 
         QuestionType qt = QuestionType.create("鸡兔同笼", QuestionTypeStatus.CANDIDATE, null);
         qt.setId(10L);
-        when(questionTypeRepository.findByTopicLabel("鸡兔同笼")).thenReturn(Optional.of(qt));
+        when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.of(qt));
         // 两个分布桶 → 无年级锚歧义，② 返回 null，④ 从题型→知识点映射召回候选
         QuestionTypeKp kp1 = QuestionTypeKp.create(10L, KP_URI, "7-8");
         QuestionTypeKp kp2 = QuestionTypeKp.create(10L, "http://other", "4-6");
@@ -167,6 +171,33 @@ class TutoringKpResolverImplTest {
     }
 
     @Test
+    @DisplayName("vote：该生该题型有 PENDING 观测 → 转正（update），不新建重复行")
+    void vote_resolvesPending() {
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
+        when(obsRepository.resolvePendingByStudentTopic(STUDENT_ID, "鸡兔同笼", KP_URI, 60)).thenReturn(1);
+
+        boolean recorded = resolver.recordStudentVote("鸡兔同笼", STUDENT_ID, "二元一次方程组");
+
+        assertTrue(recorded);
+        verify(obsRepository).resolvePendingByStudentTopic(STUDENT_ID, "鸡兔同笼", KP_URI, 60);
+        verify(obsRepository, never()).upsert(any());
+    }
+
+    @Test
+    @DisplayName("vote：无 PENDING 观测 → 新建 RESOLVED 观测")
+    void vote_noPending_inserts() {
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
+        when(obsRepository.resolvePendingByStudentTopic(any(), any(), any(), anyInt())).thenReturn(0);
+
+        boolean recorded = resolver.recordStudentVote("鸡兔同笼", STUDENT_ID, "二元一次方程组");
+
+        assertTrue(recorded);
+        verify(obsRepository).resolvePendingByStudentTopic(any(), any(), any(), anyInt());
+        verify(obsRepository).upsert(argThat(o ->
+                KP_URI.equals(o.getKpUri()) && "STUDENT_VOTE".equals(o.getSource().name())));
+    }
+
+    @Test
     @DisplayName("vote：精确/LIKE 均未命中 → 返回 false 不落观测")
     void voteNotFound() {
         when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
@@ -186,6 +217,47 @@ class TutoringKpResolverImplTest {
         KpResolution r = resolver.resolve("二元一次方程", STUDENT_ID);
 
         assertEquals(KpResolution.STATUS_PENDING, r.getStatus());
+    }
+
+    @Test
+    @DisplayName("LLM 消歧冷启动命中 → resolvedWeak（不权威点亮），且只读不写 obs")
+    void llmColdStart_returnsWeak() {
+        when(kgRepository.findByLabel(anyString())).thenReturn(Optional.empty());
+        when(kgRepository.findByLabelLike(anyString())).thenReturn(Optional.empty());
+        when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
+        when(disambiguationPort.disambiguate("鸡兔同笼", null))
+                .thenReturn(KpResolution.resolved("鸡兔同笼", KP_URI, "二元一次方程组", 70));
+
+        KpResolution r = resolver.resolveReadOnly("鸡兔同笼", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_RESOLVED, r.getStatus());
+        assertTrue(r.isWeak(), "冷启动 LLM 消歧应标 WEAK，调用方据此降级展示");
+        verify(obsRepository, never()).upsert(any());
+    }
+
+    @Test
+    @DisplayName("resolveReadOnly：镜像命中但只读，不写观测（纯分析）")
+    void resolveReadOnly_doesNotWriteObs() {
+        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp(KP_URI, "二元一次方程组")));
+
+        KpResolution r = resolver.resolveReadOnly("二元一次方程组", STUDENT_ID);
+
+        assertEquals(KpResolution.STATUS_RESOLVED, r.getStatus());
+        assertEquals(KP_URI, r.getUri());
+        verify(obsRepository, never()).upsert(any());
+    }
+
+    @Test
+    @DisplayName("resolveStudentGrade：学生→班级→年级")
+    void resolveStudentGrade_resolvesGrade() {
+        StudentClass sc = mock(StudentClass.class);
+        when(sc.getClassId()).thenReturn(ClassId.of(9L));
+        when(studentClassRepository.findActiveByStudentId(any())).thenReturn(Optional.of(sc));
+        Class cls = mock(Class.class);
+        when(cls.getGrade()).thenReturn(GradeLevel.of(7));
+        when(classRepository.findById(any())).thenReturn(Optional.of(cls));
+
+        assertEquals(7, resolver.resolveStudentGrade(STUDENT_ID));
     }
 
     private KgKnowledgePoint kp(String uri, String label) {

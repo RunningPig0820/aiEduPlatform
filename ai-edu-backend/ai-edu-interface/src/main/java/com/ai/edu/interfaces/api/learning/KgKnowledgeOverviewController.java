@@ -39,6 +39,7 @@ public class KgKnowledgeOverviewController {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
         }
         String stage = request == null ? null : request.getStage();
+        String keyword = request == null ? null : request.getKeyword();
         int page = request == null || request.getPage() == null ? 1 : request.getPage();
         int size = request == null || request.getSize() == null ? 20 : request.getSize();
         if (page < 1) {
@@ -50,6 +51,6 @@ public class KgKnowledgeOverviewController {
         if (size > MAX_SIZE) {
             size = MAX_SIZE;
         }
-        return ApiResponse.success(appService.page(stage, page, size));
+        return ApiResponse.success(appService.page(stage, page, size, keyword));
     }
 }

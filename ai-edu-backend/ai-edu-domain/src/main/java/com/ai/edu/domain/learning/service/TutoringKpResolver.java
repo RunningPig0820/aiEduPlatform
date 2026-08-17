@@ -33,6 +33,26 @@ public interface TutoringKpResolver {
     boolean recordStudentVote(String topicLabel, Long studentId, String selectedLabel);
 
     /**
+     * 只读解析（analyze-question 纯分析用）：同 {@link #resolve} 管线但不写个体派生观测。
+     *
+     * <p>浏览行为不产生学习信号（不写 {@code t_kp_derived_obs}）；
+     * 学生确认才经 {@link #recordStudentVote} 写观测。
+     *
+     * @param label     知识点/题型原文
+     * @param studentId 学生ID（查年级做年级锚；null 则无年级锚，降级纯 LLM 消歧）
+     * @return 解析结果；低置信/歧义返回 {@code status=PENDING}
+     */
+    KpResolution resolveReadOnly(String label, Long studentId);
+
+    /**
+     * 学生 → 年级（组织系统：学生→班级→年级）；不可得返回 null（降级纯 LLM 题目理解/消歧）。
+     *
+     * @param studentId 学生ID
+     * @return 年级（1-12）；不可得返回 null
+     */
+    Integer resolveStudentGrade(Long studentId);
+
+    /**
      * 兼容旧调用：label → TextbookKP URI（无年级锚，镜像命中行为不变）。
      *
      * @param label 知识点名
