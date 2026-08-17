@@ -69,7 +69,7 @@
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 |------|------|------|----------|------|
 | label | String | 是 | 非空 | AI 识别的题型原文 |
-| student_grade | Integer | 否 | 1-12 | 学生年级，用于年级锚（缺省走纯 LLM 消歧） |
+| student_grade | Integer | 否 | 1-12 | **预留字段，后端当前不读**：年级锚由后端从会话 studentId → 组织系统（学生→班级→年级）查得，前端无需传。查不到年级（如 demo 账号未挂班级）时退纯 LLM 消歧 |
 
 ### 响应参数
 
@@ -261,8 +261,8 @@ const result = await response.json();
 | items | Array | 知识点覆盖度列表 |
 | items[].kpUri | String | 知识点 URI（图谱节点匹配键） |
 | items[].kpLabel | String | 知识点名（kg 镜像反查） |
-| items[].coverage | Integer | 派生覆盖度 0-75（连续值，详情用） |
-| items[].masteryLevel | Integer | 离散四档 0/25/50/75（列表/图谱着色用） |
+| items[].coverage | Integer | 派生覆盖度 0-75（连续值，详情用；**非 0-100**，与题型掌握度四档同量纲，若要百分比显示由前端 `/75*100` 换算） |
+| items[].masteryLevel | Integer | 离散四档 0/25/50/75（列表/图谱着色用，**着色只看这个字段**，不看 coverage 量纲） |
 | items[].status | String | `RESOLVED` / `PENDING`（疑似待确认） |
 | items[].confidence | Integer | 覆盖该 kp 的题型中最高置信度 |
 | items[].stage | String/null | 学段 primary/middle/high（无归属为 null） |
