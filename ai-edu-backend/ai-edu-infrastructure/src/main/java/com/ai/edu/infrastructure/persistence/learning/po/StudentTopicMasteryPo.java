@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
  *
  * <p>以归一化题型名（topic_key）为 key（student_id + topic_key 唯一），UPSERT 幂等。
  * mastery_level 为连续百分比（累计平均正确率）；train_count 训练数；source 来源（ai/bank）。
- * evidence 为 JSON 字符串列（命中步骤、错误事件 id 列表）。
  */
 @TableName("t_student_topic_mastery")
 @Getter
@@ -41,12 +40,6 @@ public class StudentTopicMasteryPo {
 
     @TableField("mastery_level")
     private Integer masteryLevel;
-
-    @TableField("evidence")
-    private String evidence;
-
-    @TableField("last_session_id")
-    private Long lastSessionId;
 
     @TableField("source")
     private String source;
@@ -79,8 +72,6 @@ public class StudentTopicMasteryPo {
         po.topicKey = entity.getTopicKey() == null ? null : entity.getTopicKey().getValue();
         po.topicLabel = entity.getTopicLabel();
         po.masteryLevel = entity.getMasteryLevel() == null ? 0 : entity.getMasteryLevel().getValue();
-        po.evidence = entity.getEvidence();
-        po.lastSessionId = entity.getLastSessionId();
         po.source = entity.getSource();
         po.trainCount = entity.getTrainCount();
         po.updatedAt = entity.getUpdatedAt();
@@ -91,8 +82,7 @@ public class StudentTopicMasteryPo {
         TopicKey key = this.topicKey == null || this.topicKey.isBlank() ? null : TopicKey.of(this.topicKey);
         MasteryLevel level = this.masteryLevel == null ? MasteryLevel.notStarted() : MasteryLevel.of(this.masteryLevel);
         return StudentTopicMastery.restore(
-                this.id, this.studentId, key, this.topicLabel, level,
-                this.evidence, this.lastSessionId, this.source,
+                this.id, this.studentId, key, this.topicLabel, level, this.source,
                 this.trainCount == null ? 0L : this.trainCount, this.updatedAt);
     }
 

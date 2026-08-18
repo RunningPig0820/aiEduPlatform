@@ -2,12 +2,10 @@ package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
-import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
 import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.valueobject.MasteryLevel;
 import com.ai.edu.domain.learning.model.valueobject.TopicKey;
-import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,10 +23,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 掌握度查询测试（tasks 4.1/4.2，test.md MST-001~003 / QST-001~002）。
+ * 掌握度查询测试（tasks 4.1/4.2，test.md MST-001~002 / QST-001~002）。
  *
- * <p>MST：masteryLevel 连续百分比 + source + trainCount；未开始不出现；PENDING = 题目记录有但 canonical
- * 未归属（域 B 独立化 Decision 10，不再来自 obs）。QST：按题型查题目（含 score/session_id），空态返回空数组。
+ * <p>MST：masteryLevel 连续百分比 + source + trainCount；未开始不出现——掌握表无行即无 items，
+ * 题目记录 canonical 未归属的不进掌握表（applyScore 只在 canonical 非空时聚），也不在 items 展示，
+ * 掌握度列表只含已归属题型。QST：按题型查题目（含 score/session_id），空态返回空数组。
  */
 class MasteryQueryTest {
 
@@ -37,26 +36,21 @@ class MasteryQueryTest {
 
     private TutoringAppService service;
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
-    private DerivedKpObsRepository derivedKpObsRepository;
     private StudentQuestionRecordRepository questionRecordRepository;
 
     @BeforeEach
     void setUp() {
         studentTopicMasteryRepository = mock(StudentTopicMasteryRepository.class);
-        derivedKpObsRepository = mock(DerivedKpObsRepository.class);
         questionRecordRepository = mock(StudentQuestionRecordRepository.class);
         service = new TutoringAppService();
         service.setStudentTopicMasteryRepository(studentTopicMasteryRepository);
-        service.setDerivedKpObsRepository(derivedKpObsRepository);
         service.setQuestionRecordRepository(questionRecordRepository);
         when(studentTopicMasteryRepository.findByStudentId(STUDENT_ID)).thenReturn(List.of());
-        when(derivedKpObsRepository.findByStudentId(STUDENT_ID)).thenReturn(List.of());
-        when(questionRecordRepository.findPendingTopicLabelsByStudent(STUDENT_ID)).thenReturn(List.of());
     }
 
     private StudentTopicMastery mastery(long trainCount, int level, String source) {
         return StudentTopicMastery.restore(1L, STUDENT_ID, TopicKey.of("一元二次方程"), "一元二次方程",
-                MasteryLevel.of(level), null, 888L, source, trainCount, NOW);
+                MasteryLevel.of(level), source, trainCount, NOW);
     }
 
     // ---------- MST ----------
@@ -78,24 +72,10 @@ class MasteryQueryTest {
     }
 
     @Test
-    @DisplayName("MST-002: 未开始题型不出现（无掌握记录 + 无 PENDING 题目 → items 空）")
+    @DisplayName("MST-002: 未开始题型不出现（无掌握记录 → items 空）")
     void mastery_notStarted_absent() {
         StudentMasteryDTO dto = service.getStudentMastery(STUDENT_ID);
         assertTrue(dto.getItems().isEmpty(), "未开始题型不在 items[]");
-    }
-
-    @Test
-    @DisplayName("MST-003: PENDING 项 = 题目记录有但 canonical 未归属（masteryLevel=0）")
-    void mastery_pendingFromQuestionRecords() {
-        when(questionRecordRepository.findPendingTopicLabelsByStudent(STUDENT_ID))
-                .thenReturn(List.of("鸡兔同笼问题"));
-
-        StudentMasteryDTO dto = service.getStudentMastery(STUDENT_ID);
-
-        assertEquals(1, dto.getItems().size());
-        assertEquals("PENDING", dto.getItems().get(0).getStatus());
-        assertEquals(0, dto.getItems().get(0).getMasteryLevel());
-        assertEquals("鸡兔同笼问题", dto.getItems().get(0).getTopicLabel());
     }
 
     // ---------- QST ----------

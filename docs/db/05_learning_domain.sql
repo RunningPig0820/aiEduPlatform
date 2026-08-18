@@ -285,10 +285,12 @@ CREATE TABLE IF NOT EXISTS `t_kp_question_type_kp` (
 -- =====================================================
 -- 11. 学生题型掌握度表（掌握度主体翻转：题型直接观测，知识点派生）
 -- 来源：Flyway V15__create_t_student_topic_mastery.sql + V18__alter_t_student_topic_mastery_add_source_train_count.sql
+--       + V21__alter_t_student_topic_mastery_drop_evidence_last_session.sql
 -- 注意：spring.flyway.enabled=false，需手动在 ai_edu_learning 库执行
 -- 旧 t_student_kp_mastery 保留并行（无题型映射的知识点覆盖度回退旧表，过渡期）
 -- V18 改造：mastery_level 语义 四档 0/25/50/75 → 连续百分比（累计平均正确率）；加 source/train_count
 -- 历史行 train_count=1 平滑过渡（旧 mastery_level 作初始正确率，首次 applyScore 起累计）
+-- V21 清理：删除 evidence/last_session_id（「记录最后会话」冗余——事实源题目表已含 session_id/content/score）
 -- =====================================================
 CREATE TABLE IF NOT EXISTS `t_student_topic_mastery` (
     `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -296,8 +298,6 @@ CREATE TABLE IF NOT EXISTS `t_student_topic_mastery` (
     `topic_key`       VARCHAR(255) NOT NULL COMMENT '归一化题型标识（鸡兔同笼）',
     `topic_label`     VARCHAR(255) NOT NULL COMMENT '题型展示名',
     `mastery_level`   INT          NOT NULL DEFAULT 0 COMMENT '掌握度 0-100（连续百分比=累计平均正确率；旧四档值作初始正确率）',
-    `evidence`        JSON         NULL COMMENT '证据（命中步骤、错误事件 id 列表）',
-    `last_session_id` BIGINT       NULL COMMENT '最近一次答疑会话ID',
     `source`          VARCHAR(10)  NOT NULL DEFAULT 'ai' COMMENT '来源：ai（AI 答疑）/ bank（题库，预留）',
     `train_count`     INT          NOT NULL DEFAULT 1 COMMENT '训练数（累计作答次数；历史行=1，旧 mastery_level 作初始正确率平滑过渡）',
     `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

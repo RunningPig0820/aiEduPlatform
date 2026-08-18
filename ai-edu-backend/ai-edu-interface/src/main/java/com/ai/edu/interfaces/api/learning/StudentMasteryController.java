@@ -44,7 +44,7 @@ public class StudentMasteryController {
     private KpCoverageAppService kpCoverageAppService;
 
     /** GET /api/students/{studentId}/mastery — 题型掌握度（掌握度主体翻转：题型粒度）。 */
-    @Operation(summary = "查询学生题型掌握度", description = "返回该学生全部题型掌握度（topicKey/topicLabel/masteryLevel/status/confidence）")
+    @Operation(summary = "查询学生题型掌握度", description = "返回该学生全部题型掌握度（topicKey/topicLabel/masteryLevel/source/trainCount/status）")
     @GetMapping("/{studentId}/mastery")
     public ApiResponse<StudentMasteryDTO> getMastery(@PathVariable Long studentId, HttpSession session) {
         Long sessionUserId = TutoringAuth.requireStudent(session);

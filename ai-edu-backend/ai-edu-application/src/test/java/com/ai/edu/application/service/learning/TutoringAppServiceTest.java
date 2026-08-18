@@ -24,7 +24,6 @@ import com.ai.edu.domain.learning.model.valueobject.KpResolution;
 import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
 import com.ai.edu.domain.learning.model.valueobject.TopicKey;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
-import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
 import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
@@ -72,7 +71,6 @@ class TutoringAppServiceTest {
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
     private StudentQuestionRecordRepository questionRecordRepository;
     private TopicLabelAggregationService topicLabelAggregationService;
-    private DerivedKpObsRepository derivedKpObsRepository;
     private ErrorEventRepository errorEventRepository;
     private TutoringSessionCache sessionCache;
     private TutoringLlmPort llmPort;
@@ -87,7 +85,6 @@ class TutoringAppServiceTest {
         sessionRepository = mock(TutoringSessionRepository.class);
         masteryRepository = mock(StudentKpMasteryRepository.class);
         studentTopicMasteryRepository = mock(StudentTopicMasteryRepository.class);
-        derivedKpObsRepository = mock(DerivedKpObsRepository.class);
         errorEventRepository = mock(ErrorEventRepository.class);
         sessionCache = mock(TutoringSessionCache.class);
         llmPort = mock(TutoringLlmPort.class);
@@ -99,7 +96,6 @@ class TutoringAppServiceTest {
         service.setTutoringSessionRepository(sessionRepository);
         service.setMasteryRepository(masteryRepository);
         service.setStudentTopicMasteryRepository(studentTopicMasteryRepository);
-        service.setDerivedKpObsRepository(derivedKpObsRepository);
         service.setErrorEventRepository(errorEventRepository);
         service.setSessionCache(sessionCache);
         service.setLlmPort(llmPort);
@@ -128,7 +124,6 @@ class TutoringAppServiceTest {
         when(fileStorageService.generatePresignedUrl(anyString(), anyInt()))
                 .thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         when(kpResolver.resolveReadOnly(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
-        when(derivedKpObsRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(studentTopicMasteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(studentTopicMasteryRepository.findByStudentAndTopic(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
         when(studentTopicMasteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));

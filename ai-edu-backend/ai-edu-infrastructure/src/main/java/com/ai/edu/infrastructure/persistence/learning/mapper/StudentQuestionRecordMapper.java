@@ -42,10 +42,6 @@ public interface StudentQuestionRecordMapper extends BaseMapper<StudentQuestionR
     @Select("SELECT DISTINCT topic_label FROM t_student_question_record WHERE canonical_label IS NULL AND is_deleted = false AND topic_label IS NOT NULL AND topic_label <> ''")
     List<String> selectPendingTopicLabels();
 
-    /** 按学生查未归并题型名（getMastery PENDING 项来源，distinct 去空）。 */
-    @Select("SELECT DISTINCT topic_label FROM t_student_question_record WHERE student_id = #{studentId} AND canonical_label IS NULL AND is_deleted = false AND topic_label IS NOT NULL AND topic_label <> ''")
-    List<String> selectPendingTopicLabelsByStudent(@Param("studentId") Long studentId);
-
     /** 批量归并：某题型名下未归并记录 canonical_label 更新为目标值（幂等，仅更新 NULL）。 */
     @Update("UPDATE t_student_question_record SET canonical_label = #{canonicalLabel}, updated_at = NOW() WHERE topic_label = #{topicLabel} AND canonical_label IS NULL AND is_deleted = false")
     int updateCanonicalByTopic(@Param("topicLabel") String topicLabel, @Param("canonicalLabel") String canonicalLabel);

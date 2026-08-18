@@ -45,11 +45,6 @@ public class StudentQuestionRecordRepositoryImpl implements StudentQuestionRecor
     }
 
     @Override
-    public List<String> findPendingTopicLabelsByStudent(Long studentId) {
-        return studentQuestionRecordMapper.selectPendingTopicLabelsByStudent(studentId);
-    }
-
-    @Override
     public int updateCanonicalByTopic(String topicLabel, String canonicalLabel) {
         return studentQuestionRecordMapper.updateCanonicalByTopic(topicLabel, canonicalLabel);
     }

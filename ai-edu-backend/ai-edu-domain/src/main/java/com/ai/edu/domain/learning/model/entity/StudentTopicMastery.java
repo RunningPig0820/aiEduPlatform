@@ -26,8 +26,6 @@ public class StudentTopicMastery {
     private TopicKey topicKey;
     private String topicLabel;
     private MasteryLevel masteryLevel;
-    private String evidence;
-    private Long lastSessionId;
     private String source;
     private long trainCount;
     private LocalDateTime updatedAt;
@@ -37,16 +35,14 @@ public class StudentTopicMastery {
 
     /** 从持久化状态恢复（重新水合），供仓储实现经 PO.toEntity 调用。 */
     public static StudentTopicMastery restore(Long id, Long studentId, TopicKey topicKey, String topicLabel,
-                                              MasteryLevel masteryLevel, String evidence, Long lastSessionId,
-                                              String source, long trainCount, LocalDateTime updatedAt) {
+                                              MasteryLevel masteryLevel, String source,
+                                              long trainCount, LocalDateTime updatedAt) {
         StudentTopicMastery mastery = new StudentTopicMastery();
         mastery.id = id;
         mastery.studentId = studentId;
         mastery.topicKey = topicKey;
         mastery.topicLabel = topicLabel;
         mastery.masteryLevel = masteryLevel;
-        mastery.evidence = evidence;
-        mastery.lastSessionId = lastSessionId;
         mastery.source = source == null ? "ai" : source;
         mastery.trainCount = trainCount;
         mastery.updatedAt = updatedAt;
@@ -55,7 +51,7 @@ public class StudentTopicMastery {
 
     /** 新建题型掌握度记录（初始 notStarted=0，source=ai，trainCount=0）。 */
     public static StudentTopicMastery create(Long studentId, TopicKey topicKey, String topicLabel) {
-        return restore(null, studentId, topicKey, topicLabel, MasteryLevel.notStarted(), null, null,
+        return restore(null, studentId, topicKey, topicLabel, MasteryLevel.notStarted(),
                 "ai", 0, LocalDateTime.now());
     }
 
@@ -98,13 +94,6 @@ public class StudentTopicMastery {
             this.masteryLevel = MasteryLevel.advanced();
             touch();
         }
-    }
-
-    /** 记录最近会话与证据（每次信号落库时更新）。 */
-    public void recordSession(Long sessionId, String evidence) {
-        this.lastSessionId = sessionId;
-        this.evidence = evidence;
-        touch();
     }
 
     private void touch() {

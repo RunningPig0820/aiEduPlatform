@@ -10,7 +10,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * StudentTopicMastery 题型掌握度规则领域单测（test.md TPM-001/002）。
@@ -57,16 +56,6 @@ class StudentTopicMasteryTest {
         assertEquals(MasteryLevel.advanced(), mastery.getMasteryLevel()); // 0 → 75
     }
 
-    @Test
-    @DisplayName("recordSession 记录最近会话与证据")
-    void recordSession_shouldSetSessionAndEvidence() {
-        StudentTopicMastery mastery = StudentTopicMastery.create(1001L, TopicKey.of("鸡兔同笼"), "鸡兔同笼");
-        mastery.recordSession(500L, "{\"steps\":[\"round=3\"]}");
-        assertEquals(500L, mastery.getLastSessionId());
-        assertEquals("{\"steps\":[\"round=3\"]}", mastery.getEvidence());
-        assertNotNull(mastery.getUpdatedAt());
-    }
-
     // ===== 累计平均正确率（test.md AGG-001~002，替代 max 单调不减） =====
 
     @Test
@@ -82,7 +71,7 @@ class StudentTopicMasteryTest {
     void applyScore_shouldCumulativeAverage() {
         // 旧值 60 + trainCount=9（历史迁移：旧 mastery_level 作初始正确率、train_count=1 平滑）
         StudentTopicMastery mastery = StudentTopicMastery.restore(1L, 1001L, TopicKey.of("鸡兔同笼"), "鸡兔同笼",
-                MasteryLevel.of(60), null, null, "ai", 9, LocalDateTime.now());
+                MasteryLevel.of(60), "ai", 9, LocalDateTime.now());
 
         mastery.applyScore(BigDecimal.valueOf(1.00)); // 直接答对
 
@@ -105,7 +94,7 @@ class StudentTopicMasteryTest {
     @DisplayName("applyScore 答错拉低：64% 练 10 道答错 0.0 → 58%（累计平均 vs max 单调不减的核心差异）")
     void applyScore_shouldDropOnWrong() {
         StudentTopicMastery mastery = StudentTopicMastery.restore(1L, 1001L, TopicKey.of("鸡兔同笼"), "鸡兔同笼",
-                MasteryLevel.of(64), null, null, "ai", 10, LocalDateTime.now());
+                MasteryLevel.of(64), "ai", 10, LocalDateTime.now());
 
         mastery.applyScore(BigDecimal.valueOf(0.00)); // 答错
 

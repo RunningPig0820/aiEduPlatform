@@ -147,7 +147,7 @@
 
 - [x] 4.3.1 api.md 更新：getMastery 新契约 + 按题型查题目（session_id 原题链接）+ 前端联调契约（analyze topicLabel=canonical / PENDING 三态语义 / score 同源）
 - [ ] 4.3.2 前端掌握度页列式化联调（题型 | 来源 | 掌握% | 训练数 | [查看题目]）（**待前端就绪**：后端接口/契约已定稿，前端按 api.md 第 8 节联调）
-- [ ] 4.3.3 联调契约核对：analyze 返回 canonical（查得到掌握度）、PENDING 项=题目未归属、未开始=不在 items、score 与掌握表聚合同源（**待前端就绪**）
+- [ ] 4.3.3 联调契约核对：analyze 返回 canonical（查得到掌握度）、未开始/未归属=不在 items（掌握度列表只含已归属题型）、score 与掌握表聚合同源（**待前端就绪**）
 
 ### 4.4 测试
 

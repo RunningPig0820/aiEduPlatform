@@ -44,9 +44,6 @@ public class MasteryItemDTO implements Serializable {
     /** 解析状态：RESOLVED（已锚定）/ PENDING（题目有但 canonical 未归属） */
     private String status;
 
-    /** 解析置信度 0-100（从派生观测关联） */
-    private Integer confidence;
-
     /** 更新时间 */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;

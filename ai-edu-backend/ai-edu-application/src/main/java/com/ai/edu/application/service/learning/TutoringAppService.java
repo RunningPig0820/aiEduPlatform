@@ -25,7 +25,6 @@ import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
-import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
 import com.ai.edu.domain.learning.model.entity.QuestionAttempt;
@@ -42,7 +41,6 @@ import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
 import com.ai.edu.domain.learning.model.valueobject.TutoringConstants;
 import com.ai.edu.domain.learning.model.valueobject.TutoringEmotion;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
-import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
 import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
@@ -50,7 +48,6 @@ import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
 import com.ai.edu.domain.learning.service.ScoreMapper;
-import com.ai.edu.domain.learning.service.TopicKeyNormalizer;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
@@ -80,9 +77,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -141,9 +135,6 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
-    @Resource
-    @Setter(AccessLevel.PACKAGE)
-    private DerivedKpObsRepository derivedKpObsRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private ErrorEventRepository errorEventRepository;
@@ -334,22 +325,10 @@ public class TutoringAppService {
         });
     }
 
-    /** 查询学生题型掌握度（掌握度主体翻转：题型粒度）。status/confidence 从派生观测关联（掌握度表只存确定的）。 */
+    /** 查询学生题型掌握度（掌握度主体翻转：题型粒度）。只返回已归属（掌握表有行）的题型；
+     * 题目记录 canonical 未归属的不进掌握表（applyScore 只在 canonical 非空时聚），也不在 items 展示。 */
     public StudentMasteryDTO getStudentMastery(Long studentId) {
         List<StudentTopicMastery> topics = studentTopicMasteryRepository.findByStudentId(studentId);
-        List<DerivedKpObs> obsList = derivedKpObsRepository.findByStudentId(studentId);
-        // confidence：归一化 topic_key → 该生派生观测最高置信度
-        Map<String, Integer> confidenceByTopic = obsList.stream()
-                .filter(o -> o.getTopicLabel() != null && o.getConfidence() != null)
-                .collect(Collectors.toMap(
-                        o -> TopicKeyNormalizer.normalize(o.getTopicLabel()),
-                        DerivedKpObs::getConfidence,
-                        Math::max));
-        Set<String> confirmedKeys = topics.stream()
-                .map(t -> t.getTopicKey() == null ? null : t.getTopicKey().getValue())
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
         List<MasteryItemDTO> items = new ArrayList<>();
         for (StudentTopicMastery t : topics) {
             if (t.getTopicKey() == null) {
@@ -362,24 +341,8 @@ public class TutoringAppService {
                     .source(t.getSource())
                     .trainCount((int) t.getTrainCount())
                     .status("RESOLVED")
-                    .confidence(confidenceByTopic.get(t.getTopicKey().getValue()))
                     .updatedAt(t.getUpdatedAt())
                     .build());
-        }
-        // PENDING 题型（题目记录有但 canonical 未归属，域 B 独立化 Decision 10——不再来自 obs）作为"待确认"项
-        for (String pendingTopic : questionRecordRepository.findPendingTopicLabelsByStudent(studentId)) {
-            String key = TopicKey.of(pendingTopic).getValue();
-            if (!confirmedKeys.contains(key)) {
-                items.add(MasteryItemDTO.builder()
-                        .topicKey(key)
-                        .topicLabel(pendingTopic)
-                        .masteryLevel(0)
-                        .source("ai")
-                        .trainCount(0)
-                        .status("PENDING")
-                        .updatedAt(null)
-                        .build());
-            }
         }
         return StudentMasteryDTO.builder().studentId(studentId).items(items).build();
     }
@@ -744,7 +707,6 @@ public class TutoringAppService {
                     .findByStudentAndTopic(session.getStudentId(), TopicKey.of(canonical))
                     .orElseGet(() -> StudentTopicMastery.create(session.getStudentId(), TopicKey.of(canonical), canonical));
             mastery.applyScore(score);
-            mastery.recordSession(session.getId(), "{\"session_id\":" + session.getId() + "}");
             studentTopicMasteryRepository.upsert(mastery);
         }
         log.info("[tutoring] 题目落库: student={}, topic={}, canonical={}, score={}",

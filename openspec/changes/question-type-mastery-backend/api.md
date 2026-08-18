@@ -71,7 +71,6 @@
       "source": "ai",
       "trainCount": 10,
       "status": "RESOLVED",
-      "confidence": 85,
       "updatedAt": "2026-08-17T21:00:00"
     }
   ]
@@ -81,14 +80,13 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | studentId | Long | 学生 ID |
-| items | Array | 题型掌握度列表（仅已练过的题型；未开始题型不出现在列表中） |
+| items | Array | 题型掌握度列表（仅已练**且已归属**的题型；未开始/未归属不出现在列表中） |
 | items[].topicKey | String | 归一化题型 key（canonical，掌握表主键） |
 | items[].topicLabel | String | 题型展示名（canonical） |
-| items[].masteryLevel | Integer | **0-100 连续百分比（累计平均正确率）**；PENDING 为 0 |
+| items[].masteryLevel | Integer | **0-100 连续百分比（累计平均正确率）** |
 | items[].source | String | 来源：`ai`（AI 答疑）/ `bank`（题库，预留） |
 | items[].trainCount | Integer | 训练数（该题型累计作答次数） |
-| items[].status | String | `RESOLVED`（已锚定）/ `PENDING`（题目记录有但 canonical 未归属，待聚集/待归属） |
-| items[].confidence | Integer | 置信度 0-100，可 null |
+| items[].status | String | `RESOLVED`（已锚定，掌握表有行） |
 | items[].updatedAt | DateTime | 最近更新时间 |
 
 ### 请求示例
@@ -276,7 +274,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 - `masteryLevel` **语义从离散四档（0/25/50/75）改为连续百分比 0-100**——前端分桶展示保留四档视觉：`<25 待巩固 / 25-50 练习中 / 50-75 偏稳 / ≥75 已掌握`。
 - 新增 `source`（ai/bank）与 `trainCount`（训练数）——掌握度页加「来源」「训练数」列。
-- 未开始题型不出现在 `items[]`（引导去 AI 答疑做题）；`status=PENDING` 项 `masteryLevel=0`。
+- 未开始题型不出现在 `items[]`（引导去 AI 答疑做题）。`items[]` 只含**已归属**（掌握表有行）题型——题目记录 canonical 未归属的不进掌握表，也不在 items 展示。
 - **知识点总览页不再消费本接口做覆盖度**（本期题型↔知识点断联）。
 
 ### 3. 掌握度 = 累计平均正确率（可追溯）
@@ -304,10 +302,10 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 - **analyze 返回 canonical**：`analyze-question` 返回的 `topicLabel` 是**动态聚集后的 canonical**（「解一元二次方程」→「一元二次方程」）——前端用它直接查 `getMastery`，能对上，不会误判「未开始」。
 - **域 B 独立化（analyze 只到题型）**：`analyze-question` 识别题型后**不再自动关联知识点**——`knowledgePoints` 来自题型库权威分布（有则返回 / 无则空），不会因「无知识点」挂起 PENDING。题型↔知识点关联由 ADMIN 维护接口手动配（见 9）。
-- **PENDING 三态语义**（不能混）：
-  - `status=PENDING`（masteryLevel=0）= **待归属**（题目记录有但 canonical 未聚集/未确认——题目表 `canonical_label` 为空）→ 展示「待确认」；域 B 独立化后不再来自 obs 挂起
-  - 不在 `items[]` = **未开始** → 引导去 AI 答疑做题
-  - `masteryLevel` 连续% 分桶 = 已掌握/练习中/待巩固（掌握表累计平均）
+- **两态语义**（不能混）：
+  - `items[]` 只有 `status=RESOLVED`（已归属，掌握表有行）→ `masteryLevel` = 累计平均正确率
+  - 不在 `items[]` = **未开始或未归属** → 引导去 AI 答疑做题。题型识别失败（canonical 未归属）的题目记录**仍在题目表**（事实源完整、可追溯），只是不进掌握表、不在掌握度列表展示；后续批量聚集（`POST /api/kp/aggregation/topic-cluster`）扫描 `canonical_label` 为空 → 重新聚集回填 → 重算掌握表补上
+- **masteryLevel 连续% 分桶** = 已掌握/练习中/待巩固（掌握表累计平均）
 - **score 同源可追溯**：「查看题目」列表返回的 `score`（0.0/0.5/1.0，含打折）= 掌握表聚合用的同一个信号——「为什么 64%」点开题目列表能对上。
 
 ### 9. 题型↔知识点维护接口（ADMIN，域 B 独立逻辑）

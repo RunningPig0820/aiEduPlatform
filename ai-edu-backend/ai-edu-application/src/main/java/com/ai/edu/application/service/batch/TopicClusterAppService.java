@@ -82,7 +82,7 @@ public class TopicClusterAppService {
             StudentTopic st = e.getKey();
             StudentTopicMastery mastery = StudentTopicMastery.restore(null, st.studentId(),
                     TopicKey.of(st.canonical()), st.canonical(),
-                    MasteryLevel.notStarted(), null, null,
+                    MasteryLevel.notStarted(),
                     sources.getOrDefault(st, "ai"), 0, LocalDateTime.now());
             for (BigDecimal score : e.getValue()) {
                 mastery.applyScore(score);

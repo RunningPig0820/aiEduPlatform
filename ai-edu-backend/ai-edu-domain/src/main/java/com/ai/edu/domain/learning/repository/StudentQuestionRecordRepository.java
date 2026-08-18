@@ -24,9 +24,6 @@ public interface StudentQuestionRecordRepository {
     /** 批量聚集扫描：全部未归并（canonical_label IS NULL，PENDING）题型名（distinct，去空）。 */
     List<String> findPendingTopicLabels();
 
-    /** 按学生查未归并题型名（getMastery PENDING 项来源，域 B 独立化 Decision 10，distinct 去空）。 */
-    List<String> findPendingTopicLabelsByStudent(Long studentId);
-
     /** 批量归并：某题型名下未归并记录 canonical_label 更新为目标值（幂等，仅更新 NULL）。返回更新行数。 */
     int updateCanonicalByTopic(String topicLabel, String canonicalLabel);
 
