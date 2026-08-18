@@ -803,7 +803,8 @@ class TutoringAppServiceTest {
         service.sendMessage(STUDENT_ID, SESSION_ID, "谢谢老师").blockLast();
 
         verify(questionRecordRepository).save(argThat(r -> r instanceof StudentQuestionRecord rec
-                && rec.getCanonicalLabel() == null));  // PENDING 不锚定，题目照常落（信号不丢）
+                && rec.getCanonicalLabel() == null
+                && rec.getTopicLabel() == null));  // PENDING 不锚定，题目照常落（信号不丢，V20 topic_label 可空）
         verify(studentTopicMasteryRepository, never()).upsert(any());  // 等归属后 2.6 批量聚集聚合
     }
 

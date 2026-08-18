@@ -335,6 +335,7 @@ CREATE TABLE IF NOT EXISTS `t_kp_question_type_alias` (
 -- 来源：Flyway V17__create_t_student_question_record.sql
 -- 注意：spring.flyway.enabled=false，需手动在 ai_edu_learning 库执行
 -- 题目采集全量落库（AI 答疑 source=ai / 题库 source=bank 预留）
+-- topic_label 可空（V20 改：答疑 PENDING 题型未识别时 topic_label 与 canonical_label 同为 NULL，信号照常采集）
 -- canonical_label 可空（题型未识别 PENDING 时为空，信号照常采集，归属后回填聚合）
 -- score = 生效分值（0.0/0.5/1.0，含 per-题型打折后），与掌握表累计平均聚合同源
 -- session_id = 原题链接（AI 答疑会话 ID，可跳回看原题；无会话记录为 NULL 显示题目原文）
@@ -369,3 +370,13 @@ CREATE TABLE IF NOT EXISTS `t_student_question_record` (
 ALTER TABLE `t_student_question_record`
     MODIFY COLUMN `score` DECIMAL(3,2) NULL
     COMMENT '生效分值 0.00/0.50/1.00（含 per-题型打折后）；NULL=无信号（analyze 贴题，不参与掌握表聚合）';
+
+-- =====================================================
+-- V20：题目记录表 topic_label 改可空——答疑 PENDING（题型未识别）题目照常落库，信号不丢（SIG-006）
+-- PENDING 语义与 canonical_label 一致（无题型名 → topic_label=NULL）
+-- 来源：Flyway V20__alter_t_student_question_record_topic_label_nullable.sql
+-- 注意：spring.flyway.enabled=false，需手动在 ai_edu_learning 库执行
+-- =====================================================
+ALTER TABLE `t_student_question_record`
+    MODIFY COLUMN `topic_label` VARCHAR(255) NULL
+    COMMENT 'LLM 原始题型名（弱标注，可能飘）；PENDING 题型未识别可为 NULL（与 canonical_label 同语义）';

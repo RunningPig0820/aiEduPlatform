@@ -5,6 +5,8 @@ import com.ai.edu.application.dto.learning.ChatMessageDTO;
 import com.ai.edu.application.dto.learning.GuardResult;
 import com.ai.edu.application.dto.learning.MasteryItemDTO;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
+import com.ai.edu.application.dto.learning.StudentQuestionItemDTO;
+import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
 import com.ai.edu.application.dto.learning.SummaryDTO;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
@@ -357,34 +359,48 @@ public class TutoringAppService {
                     .topicKey(t.getTopicKey().getValue())
                     .topicLabel(t.getTopicLabel())
                     .masteryLevel(t.getMasteryLevel() == null ? 0 : t.getMasteryLevel().getValue())
+                    .source(t.getSource())
+                    .trainCount((int) t.getTrainCount())
                     .status("RESOLVED")
                     .confidence(confidenceByTopic.get(t.getTopicKey().getValue()))
                     .updatedAt(t.getUpdatedAt())
                     .build());
         }
-        // PENDING 题型（obs kp_uri=null，且未在 confirmed 中）作为"待确认"项并入
-        Map<String, DerivedKpObs> pendingByTopic = new LinkedHashMap<>();
-        for (DerivedKpObs o : obsList) {
-            if (o.getKpUri() != null || o.getTopicLabel() == null) {
-                continue;
-            }
-            String key = TopicKeyNormalizer.normalize(o.getTopicLabel());
+        // PENDING 题型（题目记录有但 canonical 未归属，域 B 独立化 Decision 10——不再来自 obs）作为"待确认"项
+        for (String pendingTopic : questionRecordRepository.findPendingTopicLabelsByStudent(studentId)) {
+            String key = TopicKey.of(pendingTopic).getValue();
             if (!confirmedKeys.contains(key)) {
-                pendingByTopic.putIfAbsent(key, o);
+                items.add(MasteryItemDTO.builder()
+                        .topicKey(key)
+                        .topicLabel(pendingTopic)
+                        .masteryLevel(0)
+                        .source("ai")
+                        .trainCount(0)
+                        .status("PENDING")
+                        .updatedAt(null)
+                        .build());
             }
-        }
-        for (Map.Entry<String, DerivedKpObs> e : pendingByTopic.entrySet()) {
-            DerivedKpObs o = e.getValue();
-            items.add(MasteryItemDTO.builder()
-                    .topicKey(e.getKey())
-                    .topicLabel(o.getTopicLabel())
-                    .masteryLevel(0)
-                    .status("PENDING")
-                    .confidence(o.getConfidence())
-                    .updatedAt(o.getUpdatedAt())
-                    .build());
         }
         return StudentMasteryDTO.builder().studentId(studentId).items(items).build();
+    }
+
+    /** 4.2 按题型查题目列表（掌握度页「查看题目」：session_id 原题链接；空列表不报错）。 */
+    public StudentTopicQuestionsDTO getStudentTopicQuestions(Long studentId, String topicLabel) {
+        List<StudentQuestionItemDTO> questions = questionRecordRepository
+                .findByStudentAndCanonical(studentId, topicLabel).stream()
+                .map(r -> StudentQuestionItemDTO.builder()
+                        .id(r.getId())
+                        .content(r.getContent())
+                        .source(r.getSource())
+                        .score(r.getScore())
+                        .hintCount(r.getHintCount())
+                        .answerRequestCount(r.getAnswerRequestCount())
+                        .sessionId(r.getSessionId())
+                        .createdAt(r.getCreatedAt())
+                        .build())
+                .toList();
+        return StudentTopicQuestionsDTO.builder().studentId(studentId).topicLabel(topicLabel)
+                .questions(questions).build();
     }
 
     // ==================== OCR 前置 ====================

@@ -11,10 +11,11 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 学生题型掌握度单项（掌握度主体翻转：题型粒度）。
+ * 学生题型掌握度单项（掌握度主体翻转：题型粒度，tasks 4.1）。
  *
- * <p>题型直接观测：topic_key（归一化题型标识）为主键，masteryLevel 四档 0/25/50/75，
- * status=RESOLVED（确定）/ PENDING（疑似待确认）。知识点视图见 {@code KpCoverageItemDTO}。
+ * <p>masteryLevel = 0-100 连续百分比（累计平均正确率），source = ai/bank，trainCount = 训练数。
+ * status=RESOLVED（掌握表已锚定）/ PENDING（题目记录有但 canonical 未归属，域 B 独立化 Decision 10）。
+ * 前端掌握度页列式展示：题型 | 来源 | 掌握% | 训练数 | [查看题目]。
  */
 @Data
 @Builder
@@ -31,10 +32,16 @@ public class MasteryItemDTO implements Serializable {
     /** 题型展示名 */
     private String topicLabel;
 
-    /** 掌握度四档 0/25/50/75 */
+    /** 掌握度 0-100 连续百分比（累计平均正确率，BREAKING：原四档 0/25/50/75） */
     private Integer masteryLevel;
 
-    /** 解析状态：RESOLVED（确定）/ PENDING（疑似待确认） */
+    /** 来源：ai（AI 答疑）/ bank（题库） */
+    private String source;
+
+    /** 训练数（该题型已练题目数，累计平均分母） */
+    private Integer trainCount;
+
+    /** 解析状态：RESOLVED（已锚定）/ PENDING（题目有但 canonical 未归属） */
     private String status;
 
     /** 解析置信度 0-100（从派生观测关联） */

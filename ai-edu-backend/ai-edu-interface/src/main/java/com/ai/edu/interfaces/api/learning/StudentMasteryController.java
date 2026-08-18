@@ -4,6 +4,7 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.KpCoverageDTO;
 import com.ai.edu.application.dto.learning.PendingKpAliasDTO;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
+import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
 import com.ai.edu.application.service.learning.KpAppService;
 import com.ai.edu.application.service.learning.KpCoverageAppService;
 import com.ai.edu.application.service.learning.TutoringAppService;
@@ -51,6 +52,19 @@ public class StudentMasteryController {
             throw new BusinessException(ErrorCode.PERMISSION_DENIED, "无权访问他人掌握度");
         }
         return ApiResponse.success(tutoringAppService.getStudentMastery(sessionUserId));
+    }
+
+    /** GET /api/students/{studentId}/topics/{topicLabel}/questions — 按题型查题目（掌握度页「查看题目」，tasks 4.2）。 */
+    @Operation(summary = "按题型查题目", description = "该题型全部证据题（content/score/session_id 原题链接），空列表不报错")
+    @GetMapping("/{studentId}/topics/{topicLabel}/questions")
+    public ApiResponse<StudentTopicQuestionsDTO> getTopicQuestions(@PathVariable Long studentId,
+                                                                   @PathVariable String topicLabel,
+                                                                   HttpSession session) {
+        Long sessionUserId = TutoringAuth.requireStudent(session);
+        if (!sessionUserId.equals(studentId)) {
+            throw new BusinessException(ErrorCode.PERMISSION_DENIED, "无权访问他人数据");
+        }
+        return ApiResponse.success(tutoringAppService.getStudentTopicQuestions(sessionUserId, topicLabel));
     }
 
     /** GET /api/students/{studentId}/kp-coverage — 知识点派生覆盖度（知识点总览知识地图着色）。 */

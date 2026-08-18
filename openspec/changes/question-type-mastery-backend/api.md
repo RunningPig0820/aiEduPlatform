@@ -87,7 +87,7 @@
 | items[].masteryLevel | Integer | **0-100 连续百分比（累计平均正确率）**；PENDING 为 0 |
 | items[].source | String | 来源：`ai`（AI 答疑）/ `bank`（题库，预留） |
 | items[].trainCount | Integer | 训练数（该题型累计作答次数） |
-| items[].status | String | `RESOLVED`（已练/已确认）/ `PENDING`（obs 有但未确认） |
+| items[].status | String | `RESOLVED`（已锚定）/ `PENDING`（题目记录有但 canonical 未归属，待聚集/待归属） |
 | items[].confidence | Integer | 置信度 0-100，可 null |
 | items[].updatedAt | DateTime | 最近更新时间 |
 

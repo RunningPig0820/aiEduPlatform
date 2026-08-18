@@ -80,4 +80,16 @@ class StudentQuestionRecordTest {
         assertNull(record.getScore(), "analyze 贴题无对错信号，score 为 null（区别于答错 0.00）");
         assertEquals("ai", record.getSource());
     }
+
+    @Test
+    @DisplayName("PENDING：topicLabel 可为 null（题型未识别，V20 后表可空，与 canonical 同语义 SIG-006）")
+    void nullTopicLabel_pendingAllowed() {
+        StudentQuestionRecord record = StudentQuestionRecord.create(
+                "ai", 1001L, "笼子里有鸡和兔", null, null,
+                new BigDecimal("0.5"), 1, 0, 888L, NOW);
+
+        assertNull(record.getTopicLabel(), "答疑 PENDING 题型未识别 topicLabel 为 null（V20 后可落库）");
+        assertNull(record.getCanonicalLabel());
+        assertEquals(0, new BigDecimal("0.5").compareTo(record.getScore()), "信号照常采集，PENDING 不丢信号");
+    }
 }
