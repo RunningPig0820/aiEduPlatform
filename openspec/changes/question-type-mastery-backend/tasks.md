@@ -15,29 +15,29 @@
 
 ### 1.1 Python 向量链路接入验证（CosVectorsClient，Python 侧）
 
-- [ ] 1.1.1 确认开通桶/索引配置（region、bucket、index name），Python 侧装 `cos-python-sdk-v5`
-- [ ] 1.1.2 Python 建索引（768 维 cosine，控制台或 SDK `create_index`）+ `put_vectors` 入库（含 metadata）
-- [ ] 1.1.3 `query_vectors(top-k)` 查询返回相似度 + upsert（key 相同覆盖）验证
-- [ ] 1.1.4 近邻验证：造 10 条近义/变体题型名（鸡兔同笼/鸡兔同笼问题/假设法）入库后查 top-1，验证命中
+- [x] 1.1.1 确认开通桶/索引配置（region、bucket、index name），Python 侧装 `cos-python-sdk-v5`（已交付：topic-index 已建）
+- [x] 1.1.2 Python 建索引（768 维 cosine，控制台或 SDK `create_index`）+ `put_vectors` 入库（含 metadata）（已交付）
+- [x] 1.1.3 `query_vectors(top-k)` 查询返回相似度 + upsert（key 相同覆盖）验证（已交付：签名实测 `ReturnMetaData` 大写 M，返回 `(resp,data)`，命中在 `data["vectors"]`）
+- [x] 1.1.4 近邻验证：造 10 条近义/变体题型名（鸡兔同笼/鸡兔同笼问题/假设法）入库后查 top-1，验证命中（已交付：同型 ~0.077，见 python-integration 第六节）
 
 ### 1.2 embedding 近邻验证（dashscope，Python 侧）
 
-- [ ] 1.2.1 收集 50~100 真实题型名样本（含近义对「一元二次方程/解一元二次方程」、语义对「相遇/行程」）
-- [ ] 1.2.2 Python gateway 复用 dashscope text-embedding-v3 对样本 embedding + 相似度矩阵
-- [ ] 1.2.3 统计题型名向量 top-1 命中率 + 误合并率（近义对/语义对对比表）
+- [ ] 1.2.1 收集 50~100 真实题型名样本（含近义对「一元二次方程/解一元二次方程」、语义对「相遇/行程」）（**延后**：当前无真实学生题型名数据，收口延至有数据后重跑；Python 已给关键近义/语义对实测数据点）
+- [x] 1.2.2 Python gateway 复用 dashscope text-embedding-v3 对样本 embedding + 相似度矩阵（已交付：同型 ~0.077 / 异型 ≥0.33，见 python-integration 第六节）
+- [ ] 1.2.3 统计题型名向量 top-1 命中率 + 误合并率（近义对/语义对对比表）（**延后**：阈值是配置项（默认 0.2 保守），有真实数据后重跑矩阵调优，只改配置不改代码）
 
 ### 1.3 阈值标定
 
-- [ ] 1.3.1 阈值扫描：0.85~0.98 步进，确定「相遇/行程」合并边界 + 默认阈值（偏保守）
+- [x] 1.3.1 阈值标定（Python 已实测，见 python-integration 第六节）：cosine **distance** 同型 ~0.077 / 异型 ≥0.33 → 默认归并阈值 **0.2（distance ≤0.2 归并，保守宁可拆不误并）**；「相遇(0.332)/行程」默认拆分；后端入 `application.yml` 收口
 - [ ] 1.3.2 确认判定规则：题型名向量命中 ≥高阈值 → 归并；中阈值区间 → 进候选 LLM 仲裁；未命中 → 建新
 
 ### 1.4 结论收口
 
-- [ ] 1.4.1 定义 Java↔Python 向量契约（put/query 请求响应 snake_case，`vector_type` 必填路由键，复用 tutoring 域约定）
-- [ ] 1.4.2 预演结论写回 design.md Open Questions（Python 向量链路 / 模型 / 阈值）
-- [ ] 1.4.3 产出预演报告（CosVectorsClient 跑通 + dashscope 近邻对比数据）
+- [x] 1.4.1 定义 Java↔Python 向量契约（put/query 请求响应 snake_case，`vector_type` 必填路由键，复用 tutoring 域约定）（已定稿：python-integration.md）
+- [x] 1.4.2 预演结论写回 design.md Open Questions（Python 向量链路 / 模型 / 阈值）（已收口，见 Decision 6 + Open Questions ✅）
+- [x] 1.4.3 产出预演报告（CosVectorsClient 跑通 + dashscope 近邻对比数据）（python-integration 第六节）
 
-- [ ] **✅ 完成标准**：Python 向量链路可行（CosVectorsClient 入库/查询 OK）+ dashscope 近邻命中率与阈值定稿，Java↔Python 契约定义，design Open Questions 收口
+- [x] **✅ 完成标准**：Python 向量链路可行（CosVectorsClient 入库/查询 OK）+ dashscope 近邻命中率与阈值定稿，Java↔Python 契约定义，design Open Questions 收口（1.2 完整样本矩阵可补，不影响标准）
 
 ## 2. 题型动态聚集改造（独立打通，不依赖 AI 答疑）
 
@@ -70,7 +70,7 @@
 
 - [ ] 2.3.1 domain 端口 `TopicVectorStore`（putVector、queryNearestTop1）
 - [ ] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case；**`vector_type` 必填路由键，本期唯一 `"topic"`**——契约已定稿）
-- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；**只存题型名向量，`vector_type` 恒为 `"topic"`**，metadata：student_id/topic_label/canonical_label/timestamp；**query 响应字段是 `vectors` 不是 `hits`**——Python 已交付对齐（ai-edu-ai-service b7159c5），解析用 `{"vectors":[{key,metadata,distance}]}`）
+- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；**只存题型名向量，`vector_type` 恒为 `"topic"`**，metadata：student_id/topic_label/canonical_label/timestamp；**query 响应字段是 `vectors` 不是 `hits`**——Python 已交付对齐（ai-edu-ai-service b7159c5），解析用 `{"vectors":[{key,metadata,distance}]}`；**put 后 ~10s 异步生效，立即 query 会 miss——首题建锚无需立查，「put 后查」容忍延迟/重试**）
 - [ ] 2.3.4 配置：Python 向量端点 URL/超时（复用 TutoringProperties 家族）
 
 ### 2.4 字符级规则

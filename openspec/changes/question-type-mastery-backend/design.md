@@ -106,14 +106,15 @@ train_count += 1
 - **为什么 Python 桥而非自研**：① 用上已开通的 Vector Bucket（数据量上来能力强）② embedding 复用 Python 现有 dashscope 配置（密钥不散到 Java）③ **后续 RAG 复用同一套向量基础设施**（用户拍板：业务后续要做 RAG，需打通）
 - **备选**：MySQL 自研（全 Java 零依赖，但不用 Vector Bucket、后续 RAG 要另起）；Java 直调 REST（自实现 COS 签名，成本高）
 - **注意**：COS 是对象存储，**Vector Bucket 是独立的向量存储桶类型**，不是「对象存储 + 向量插件」。
-- **Python 侧改动范围**：仅**新增**向量服务端点（`vector_type` 路由 + embedding + put/query；decide/信号链路仍零改动）。
+- **写入异步生效（spike 实测，Java 桥必须知道）**：`put_vectors` 后索引 **~10s 异步**构建，**立即 `query` 会 miss**（空 `vectors`）——首题建锚后**无需立查**（本来无近邻）；聚集编排「put 后查」路径要容忍延迟/留重试；联调预期：建锚 put 后 ≥10s，后续题目 query 才可见近邻。
+- **Python 侧改动范围**：仅**新增**向量服务端点（`vector_type` 路由 + embedding + put/query；decide/信号链路仍零改动）。**已交付**（ai-edu-ai-service b7159c5，241 测试绿）。
 
-### 6. embedding 模型 + 阈值：dashscope 优先，spike 后定（本期必做前置）
+### 6. embedding 模型 + 阈值：dashscope 优先，spike 已实测（distance 契约，后端收口）
 
-- **模型**：dashscope text-embedding-v3（768 维，中文 50+ 语种，OpenAI 兼容）——Python gateway 已接 dashscope，**成本已确认**（免费 50 万 token + 0.5 元/百万 token，10 块钱够用很久）。
+- **模型**：dashscope text-embedding-v3（768 维，中文 50+ 语种，OpenAI 兼容）——Python gateway 已接 dashscope，**成本已确认**（免费 50 万 token + 0.5 元/百万 token，10 块钱够用很久）。**已交付**：独立封装在 `vector_store.py`（未动 gateway factory），复用 `DASHSCOPE_API_KEY`。
 - **备选**：ark doubao-embedding（火山，Python gateway 也接）；本地开源模型（text2vec/m3e，需 Python 部署）。
-- **spike 任务**：取 50~100 道真实题目题型名 → dashscope embedding → 看 top-1 命中率 + 误合并率 → 定阈值。
-- **阈值 = 归一并粒度旋钮**：`≥0.95` 只合并近字变体（保守）；`≥0.8` 合并语义同型（激进）。「相遇问题 vs 行程问题」是否合并由阈值定——**spike 前不拍粒度**。
+- **spike 实测（Python 端交付，2026-08-18）**：cosine **distance（越小越相似，非相似度）**——self ≈ 0、同型 ~0.077（鸡兔同笼→鸡兔同笼问题）、异型 ≥0.33（相遇→行程 0.332、鸡兔同笼 vs 异型 0.481）。同型/异型在 **~0.08~0.33 有清晰间距**。
+- **阈值 = 归并旋钮（distance ≤ X 归并，代码按 distance 判定）**：保守默认 **0.2**（只并同型，不并异型；宁可拆不误并）、激进 **0.25**（逼近 0.33 异型下限）。「相遇 vs 行程」（0.332）不被 0.2 归并——**默认拆分**。后端收口后入 `application.yml`。
 
 ### 7. `getMastery` 契约变更（BREAKING，前端联调）
 
@@ -188,9 +189,9 @@ GET /students/{id}/mastery
 
 ## Open Questions
 
-- **Python 向量链路（spike）**：CosVectorsClient 建索引（768 维 cosine）/ put_vectors / query_vectors 跑通 + 近邻命中率（V1/V2/V3 验证后收口）。
-- **embedding 模型 + 阈值**：dashscope text-embedding-v3 优先（成本已确认），spike 验证数学术语区分度后定阈值。
-- **聚集粒度**：「相遇问题 vs 行程问题」是否合并——由阈值旋钮定，spike 前不拍（默认偏保守：宁可拆不误并）。
+- ✅ **Python 向量链路（spike）**：已交付（ai-edu-ai-service b7159c5）——CosVectorsClient 建索引（768 维 cosine）/ put/query 跑通、权限已授权、近邻实测数据见 python-integration 第六节。
+- ✅ **embedding 模型 + 阈值**：已定——text-embedding-v3（768），distance 归并阈值默认 **0.2（保守）**，见 Decision 6。
+- ✅ **聚集粒度**：已定——「相遇(0.332)/行程」默认拆分（0.2 阈值不归并），宁可拆不误并。
 - **canonical 命名**：本期采用「首见名/最高频名兜底 + 定时 LLM 归纳规范名」（Decision 4）；命名策略可调。
 - **原题链接**：题目表 `session_id` 跳回答疑会话（已有字段），掌握度页「查看题目」展示会话链接；无会话链接显示题目原文。
 - **掌握表改造 vs 新表**：本期倾向改造现有表 + 平滑迁移；若历史数据迁移有风险可退化为新表并行。
