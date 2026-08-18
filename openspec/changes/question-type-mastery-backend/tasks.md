@@ -75,8 +75,8 @@
 
 ### 2.4 字符级规则
 
-- [ ] 2.4.1 `TopicLabelRuleNormalizer` 实现：前缀/后缀剥离（「解X→X」「求X→X」）、编辑距离 ≤1、复用 `TopicKeyNormalizer`
-- [ ] 2.4.2 规则单测：前缀变体 / 近字变体 / 后缀保留（「问题」不剥离）
+- [x] 2.4.1 `TopicLabelRuleNormalizer` 实现：前缀/后缀剥离（「解X→X」「求X→X」）、编辑距离 ≤1、复用 `TopicKeyNormalizer`
+- [x] 2.4.2 规则单测：前缀变体 / 近字变体 / 后缀保留（「问题」不剥离）
 
 ### 2.5 聚集编排
 
