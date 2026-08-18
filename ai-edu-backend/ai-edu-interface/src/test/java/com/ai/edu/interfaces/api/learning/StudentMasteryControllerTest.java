@@ -1,9 +1,8 @@
 package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
-import com.ai.edu.application.dto.learning.KpCoverageDTO;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
-import com.ai.edu.application.service.learning.KpCoverageAppService;
+import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
 import com.ai.edu.application.service.learning.TutoringAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -16,52 +15,46 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
- * StudentMasteryController 单元测试（mock AppService + MockHttpSession）。
+ * 掌握度/按题型查题目 controller 测试（tasks 4.4，test.md MST-004/005 + QST-003）。
+ *
+ * <p>身份以会话为准：未登录 → 10004；路径 studentId ≠ 会话 userId → 10005（服务端不信任客户端身份）。
  */
 class StudentMasteryControllerTest {
 
-    private static final Long STUDENT_ID = 501L;
+    private static final Long STUDENT_ID = 1001L;
 
     private StudentMasteryController controller;
-    private TutoringAppService appService;
-    private KpCoverageAppService kpCoverageAppService;
+    private TutoringAppService tutoringAppService;
 
     @BeforeEach
     void setUp() {
-        appService = mock(TutoringAppService.class);
-        kpCoverageAppService = mock(KpCoverageAppService.class);
+        tutoringAppService = mock(TutoringAppService.class);
         controller = new StudentMasteryController();
-        setField(controller, "tutoringAppService", appService);
-        setField(controller, "kpCoverageAppService", kpCoverageAppService);
+        setField(controller, "tutoringAppService", tutoringAppService);
     }
 
+    // ---------- getMastery ----------
+
     @Test
-    @DisplayName("getMastery：路径 studentId 与会话一致 → 返回掌握度")
+    @DisplayName("MST-001 正常：登录学生查自己掌握度 → 返回 items")
     void getMastery_success() {
-        when(appService.getStudentMastery(STUDENT_ID))
-                .thenReturn(StudentMasteryDTO.builder().studentId(STUDENT_ID).items(List.of()).build());
+        StudentMasteryDTO dto = StudentMasteryDTO.builder().studentId(STUDENT_ID).items(List.of()).build();
+        when(tutoringAppService.getStudentMastery(STUDENT_ID)).thenReturn(dto);
 
         ApiResponse<StudentMasteryDTO> response = controller.getMastery(STUDENT_ID, loginSession());
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
         assertEquals(STUDENT_ID, response.getData().getStudentId());
-        verify(appService).getStudentMastery(STUDENT_ID);
+        verify(tutoringAppService).getStudentMastery(STUDENT_ID);
     }
 
     @Test
-    @DisplayName("getMastery：路径与他人 → 抛 20004 越权")
-    void getMastery_crossStudentDenied() {
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> controller.getMastery(999L, loginSession()));
-        assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
-        verify(appService, never()).getStudentMastery(anyLong());
-    }
-
-    @Test
-    @DisplayName("getMastery：未登录 → 抛 10004")
+    @DisplayName("MST-005 未登录：无会话 → 10004")
     void getMastery_notLoggedIn() {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> controller.getMastery(STUDENT_ID, new MockHttpSession()));
@@ -69,32 +62,48 @@ class StudentMasteryControllerTest {
     }
 
     @Test
-    @DisplayName("getKpCoverage：路径 studentId 与会话一致 → 返回覆盖度")
-    void getKpCoverage_success() {
-        when(kpCoverageAppService.getKpCoverage(STUDENT_ID))
-                .thenReturn(KpCoverageDTO.builder().studentId(STUDENT_ID).items(List.of()).build());
+    @DisplayName("MST-004 越权：会话 userId ≠ 路径 studentId → 10005")
+    void getMastery_forbidden() {
+        MockHttpSession other = loginSession();
+        other.setAttribute("userId", 2002L); // 另一个学生
 
-        ApiResponse<KpCoverageDTO> response = controller.getKpCoverage(STUDENT_ID, loginSession());
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> controller.getMastery(STUDENT_ID, other));
+        assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
+    }
+
+    // ---------- getTopicQuestions ----------
+
+    @Test
+    @DisplayName("QST-001 正常：登录学生查自己题型题目 → 返回 questions")
+    void getTopicQuestions_success() {
+        StudentTopicQuestionsDTO dto = StudentTopicQuestionsDTO.builder()
+                .studentId(STUDENT_ID).topicLabel("鸡兔同笼").questions(List.of()).build();
+        when(tutoringAppService.getStudentTopicQuestions(STUDENT_ID, "鸡兔同笼")).thenReturn(dto);
+
+        ApiResponse<StudentTopicQuestionsDTO> response = controller.getTopicQuestions(STUDENT_ID, "鸡兔同笼", loginSession());
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
-        assertEquals(STUDENT_ID, response.getData().getStudentId());
-        verify(kpCoverageAppService).getKpCoverage(STUDENT_ID);
+        assertEquals("鸡兔同笼", response.getData().getTopicLabel());
+        verify(tutoringAppService).getStudentTopicQuestions(STUDENT_ID, "鸡兔同笼");
     }
 
     @Test
-    @DisplayName("getKpCoverage：路径与他人 → 抛 20004 越权")
-    void getKpCoverage_crossStudentDenied() {
+    @DisplayName("QST-003 越权：会话 userId ≠ 路径 studentId → 10005")
+    void getTopicQuestions_forbidden() {
+        MockHttpSession other = loginSession();
+        other.setAttribute("userId", 2002L);
+
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> controller.getKpCoverage(999L, loginSession()));
+                () -> controller.getTopicQuestions(STUDENT_ID, "鸡兔同笼", other));
         assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
-        verify(kpCoverageAppService, never()).getKpCoverage(anyLong());
     }
 
     @Test
-    @DisplayName("getKpCoverage：未登录 → 抛 10004")
-    void getKpCoverage_notLoggedIn() {
+    @DisplayName("QST-004 未登录：无会话 → 10004")
+    void getTopicQuestions_notLoggedIn() {
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> controller.getKpCoverage(STUDENT_ID, new MockHttpSession()));
+                () -> controller.getTopicQuestions(STUDENT_ID, "鸡兔同笼", new MockHttpSession()));
         assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
     }
 
@@ -107,7 +116,7 @@ class StudentMasteryControllerTest {
 
     private void setField(Object target, String fieldName, Object value) {
         try {
-            var field = StudentMasteryController.class.getDeclaredField(fieldName);
+            var field = target.getClass().getDeclaredField(fieldName);
             field.setAccessible(true);
             field.set(target, value);
         } catch (Exception e) {
