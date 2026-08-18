@@ -53,7 +53,6 @@ class TopicLabelAggregationServiceTest {
         inject(service, "questionTypeRepository", qtRepo);
         inject(service, "questionTypeAliasRepository", aliasRepo);
 
-        when(qtRepo.findAll()).thenReturn(List.of());
         when(qtRepo.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(aliasRepo.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(qtRepo.findByTopicLabel(anyString())).thenReturn(Optional.empty());
@@ -91,33 +90,8 @@ class TopicLabelAggregationServiceTest {
         verify(vectorStore, never()).putVector(any());
     }
 
-    // ---------- 字符规则池归并（NOR-007） ----------
-
-    @Test
-    @DisplayName("NOR-007: 字符规则池命中（解一元二次方程 → 池中一元二次方程）→ 免向量调用，落库前不裂行")
-    void charRulePoolHit_mergesWithoutVector() {
-        when(qtRepo.findAll()).thenReturn(List.of(type(1L, "一元二次方程")));
-
-        String canonical = service.aggregate("解一元二次方程", STUDENT_ID);
-
-        assertEquals("一元二次方程", canonical);
-        verify(vectorStore, never()).queryNearestTop1(anyString());
-        verify(vectorStore, never()).putVector(any());
-    }
-
-    @Test
-    @DisplayName("近字变体: 池中编辑距离≤1（一元二次方成 → 一元二次方程）→ 归并写别名")
-    void nearCharVariant_mergedFromPool() {
-        when(qtRepo.findAll()).thenReturn(List.of(type(1L, "一元二次方程")));
-        when(qtRepo.findByTopicLabel("一元二次方程")).thenReturn(Optional.of(type(1L, "一元二次方程")));
-
-        String canonical = service.aggregate("一元二次方成", STUDENT_ID);
-
-        assertEquals("一元二次方程", canonical);
-        verify(aliasRepo).upsert(org.mockito.ArgumentMatchers.argThat(
-                a -> a instanceof QuestionTypeAlias alias && "一元二次方成".equals(alias.getAliasLabel())));
-        verify(vectorStore, never()).queryNearestTop1(anyString());
-    }
+    // 字符规则池归并（编辑距离 ≤1）已移除（拍板）：近字/错别字归并全交给向量层，
+    // 见 TopicLabelRuleNormalizer 类注释。NOR-007「不裂行」由「解/求前缀剥离」+ 向量归并保证。
 
     // ---------- 阈值边界（NOR-004 / 中阈值） ----------
 

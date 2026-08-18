@@ -70,19 +70,14 @@ public class TopicLabelAggregationService {
             return rawLabel;
         }
         // ① 字符规则归一（复用 Normalizer：全半角/空白/去标点 + 「解/求」前缀剥离）
+        // 注：编辑距离 ≤1 近字归并已移除（拍板）——「一元一次方程/一元二次方程」一字之差会误并（distance 1
+        // 与错别字「方成/方程」同），近字/错别字归并全交给题型名向量层（语义最近邻能正确区分/归并）
         String normalized = TopicLabelRuleNormalizer.normalize(rawLabel);
         if (normalized == null || normalized.isBlank()) {
             return rawLabel;
         }
 
-        // ② 字符规则近字归并（池 = 题型库全部 canonical，编辑距离 ≤1）——命中免 embedding 调用
-        String poolHit = TopicLabelRuleNormalizer.nearestByEditDistance(normalized, canonicalPool());
-        if (poolHit != null) {
-            aliasToCanonical(normalized, poolHit);
-            return poolHit;
-        }
-
-        // ③ 题型名向量最近邻（单信号）
+        // ② 题型名向量最近邻（单信号）
         try {
             Optional<TopicVectorNeighbor> neighbor = topicVectorStore.queryNearestTop1(normalized);
             if (neighbor.isEmpty()) {
@@ -108,14 +103,6 @@ public class TopicLabelAggregationService {
             log.warn("[topic-aggregate] 向量不可用，回退字符规则: {}", normalized, e);
             return normalized;
         }
-    }
-
-    /** 题型库 canonical 池（供近字变体编辑距离比对）。 */
-    private List<String> canonicalPool() {
-        return questionTypeRepository.findAll().stream()
-                .map(QuestionType::getTopicLabel)
-                .filter(t -> t != null && !t.isBlank())
-                .toList();
     }
 
     /** 归并：写别名表（variant → canonical 题型，alias_label 唯一幂等）；variant 即 canonical 时跳过。 */

@@ -294,7 +294,7 @@ class TutoringAppServiceTest {
         assertEquals(1, attempt.getRoundCount());
         assertEquals(1, attempt.getRounds().size());
         assertFalse(attempt.getRounds().get(0).isCorrect(), "meta 无 eval → correct 默认 false");
-        assertTrue(attempt.getRounds().get(0).isHinted(), "hint 轮 hinted=true");
+        assertFalse(attempt.getRounds().get(0).isHinted(), "hint 轮但学生未求助（answerRequestCount=0）→ hinted=false（拍板：只看 answerRequestCount）");
     }
 
     @Test
@@ -756,7 +756,7 @@ class TutoringAppServiceTest {
     @DisplayName("3.4 掌握信号：作答轮累计 → END 结算 → 题目落库 + 掌握表 applyScore 累计平均")
     void sendMessage_persistsQuestionAttemptOnEnd() {
         TutoringSession session = activeSessionInCache();
-        // 作答轮：hint + eval.correct=true（引导后答对）→ onRoundSignal(true, hinted=true)
+        // 作答轮：hint + eval.correct=true，学生未求助（answerRequestCount=0）→ 直接答对 hinted=false
         ActionMeta hint = meta("hint");
         hint.setMasterySignals(List.of(
                 MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
@@ -766,7 +766,7 @@ class TutoringAppServiceTest {
         service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").blockLast();
         assertEquals(1, session.getCurrentAttempt().getRounds().size(), "作答轮累计信号");
 
-        // 收尾轮 END：结算 → 题目落库 + 掌握表累计平均（首题 0.5 引导后答对 × 0.7 = 0.35 → 35%）
+        // 收尾轮 END：结算 → 题目落库 + 掌握表累计平均（首题直接答对 1.0×0.7 = 0.70 → 70%）
         ActionMeta end = meta("end");
         end.setEndReason("COMPLETED");
         when(llmPort.decideStream(any())).thenReturn(decideStreamOf(end));
@@ -778,12 +778,12 @@ class TutoringAppServiceTest {
         assertEquals("ai", rec.getSource());
         assertEquals("二元一次方程组", rec.getTopicLabel());
         assertEquals("二元一次方程组", rec.getCanonicalLabel());
-        assertEquals(0, new BigDecimal("0.35").compareTo(rec.getScore()));
-        assertEquals(1, rec.getHintCount());
+        assertEquals(0, new BigDecimal("0.70").compareTo(rec.getScore()));
+        assertEquals(0, rec.getHintCount());
         verify(studentTopicMasteryRepository).upsert(argThat(m ->
                 m.getTopicKey().getValue().equals("二元一次方程组")
                         && m.getTrainCount() == 1
-                        && m.getMasteryLevel().getValue() == 35));
+                        && m.getMasteryLevel().getValue() == 70));
     }
 
     @Test
@@ -806,6 +806,29 @@ class TutoringAppServiceTest {
                 && rec.getCanonicalLabel() == null
                 && rec.getTopicLabel() == null));  // PENDING 不锚定，题目照常落（信号不丢，V20 topic_label 可空）
         verify(studentTopicMasteryRepository, never()).upsert(any());  // 等归属后 2.6 批量聚集聚合
+    }
+
+    @Test
+    @DisplayName("修复: END 轮有真实 eval（学生答对 exerciseComplete 收尾）→ 累计信号，结算 score 正确（非 0）")
+    void sendMessage_endWithCorrectEval_persistsScore() {
+        TutoringSession session = activeSessionInCache();
+        // 直接答对收尾：END 轮 eval.correct=true 是真实作答（回归：曾被 settlingRound 跳过 → score=0 bug）
+        ActionMeta end = meta("end");
+        end.setEndReason("COMPLETED");
+        end.setEval(EvalInfo.builder().correct(true).build());
+        end.setMasterySignals(List.of(
+                MasterySignalItem.builder().kpLabel("二元一次方程组").signal("mastered").build()));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(end));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"完成\"}")));
+
+        service.sendMessage(STUDENT_ID, SESSION_ID, "答案等于 2").blockLast();
+
+        verify(questionRecordRepository).save(argThat(r -> r instanceof StudentQuestionRecord rec
+                && rec.getScore() != null
+                && new BigDecimal("0.70").compareTo(rec.getScore()) == 0));  // 首题直接答对 1.0×0.7
+        verify(studentTopicMasteryRepository).upsert(argThat(m ->
+                m.getTrainCount() == 1
+                        && m.getMasteryLevel().getValue() == 70));
     }
 
     // ==================== requestAnswer() ====================

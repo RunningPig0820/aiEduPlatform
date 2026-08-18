@@ -660,13 +660,14 @@ public class TutoringAppService {
     private void applyMasteryAndErrors(TutoringSession session, ActionMeta action,
                                        ActionType allowedType, String lastUserContent, boolean isNewQuestion) {
         // ===== 3.1 题聚合：每轮作答信号累计到当前题（3.3 信号映射 + 3.4 落题目表用）=====
-        // 结算轮（SWITCH/END/REVEAL）是换题/收尾动作，eval 是模型默认值非真实作答，不累计——
-        // 题聚合 rounds 只含真实作答轮，结算取最后作答轮信号
-        boolean settlingRound = allowedType == ActionType.SWITCH || allowedType == ActionType.END
-                || allowedType == ActionType.REVEAL;
-        if (!settlingRound) {
-            boolean hinted = allowedType == ActionType.HINT || allowedType == ActionType.APPROACH
-                    || session.getAnswerRequestCount() > 0;
+        // 信号累计：SWITCH 永远无作答跳过；END/REVEAL 若无 eval（无真实作答评估）跳过，有 eval（学生答对
+        // 收尾 exerciseComplete）是真实作答应累计——回归：曾整轮跳过 END → 答对 score=0 / 直接答对不落库 bug。
+        // hinted（拍板）：只看 answerRequestCount>0（学生主动要思路/答案）——AI 主动 hint 不降级，
+        // 否则答疑引导式教学 roundCount 恒>0 → 所有作答基础 0.5 → 掌握度上限 50%
+        boolean noRealAnswer = allowedType == ActionType.SWITCH
+                || ((allowedType == ActionType.END || allowedType == ActionType.REVEAL) && action.getEval() == null);
+        if (!noRealAnswer) {
+            boolean hinted = session.getAnswerRequestCount() > 0;
             boolean correct = action.getEval() != null && Boolean.TRUE.equals(action.getEval().getCorrect());
             session.onRoundSignal(correct, hinted);
         }

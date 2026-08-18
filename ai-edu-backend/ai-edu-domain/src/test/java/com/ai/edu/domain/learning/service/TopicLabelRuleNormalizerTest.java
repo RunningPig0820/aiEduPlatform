@@ -3,10 +3,7 @@ package com.ai.edu.domain.learning.service;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * 字符级规则 {@link TopicLabelRuleNormalizer} 测试（tasks 2.4.2，test.md NOR-001）。
@@ -53,26 +50,6 @@ class TopicLabelRuleNormalizerTest {
         assertEquals("鸡兔同笼问题", TopicLabelRuleNormalizer.normalize("鸡兔同笼问题"));
     }
 
-    // ---------- 近字变体（编辑距离 ≤1，带池） ----------
-
-    @Test
-    @DisplayName("近字变体：编辑距离 ≤1 归并（一元二次方成 → 一元二次方程）")
-    void nearCharVariant_merged() {
-        List<String> pool = List.of("鸡兔同笼", "一元二次方程", "相遇问题");
-        assertEquals("一元二次方程", TopicLabelRuleNormalizer.nearestByEditDistance("一元二次方成", pool));
-    }
-
-    @Test
-    @DisplayName("近字变体：编辑距离 >1 不归并（鸡兔同笼问题 vs 鸡兔同笼 距离2，留给向量层 → null）")
-    void farVariant_notMerged() {
-        List<String> pool = List.of("鸡兔同笼", "一元二次方程");
-        assertNull(TopicLabelRuleNormalizer.nearestByEditDistance("鸡兔同笼问题", pool));
-    }
-
-    @Test
-    @DisplayName("近字变体：空池 / 空输入 → null")
-    void emptyPool_null() {
-        assertNull(TopicLabelRuleNormalizer.nearestByEditDistance("一元二次方程", List.of()));
-        assertNull(TopicLabelRuleNormalizer.nearestByEditDistance(null, List.of("鸡兔同笼")));
-    }
+    // 近字变体归并（编辑距离 ≤1）已移除（拍板：无法区分「一元一次/一元二次」一字之差与错别字，
+    // 近字/错别字归并全交给向量层）——见 TopicLabelRuleNormalizer 类注释与 TopicLabelAggregationService
 }

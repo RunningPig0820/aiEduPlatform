@@ -281,7 +281,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 ### 3. 掌握度 = 累计平均正确率（可追溯）
 
-每一行的 `masteryLevel` 背后是该题型 `trainCount` 道题的题目记录——「查看题目」命中接口 2，空态不报错。题目的 `score` 语义：直接答对 1.0 / 引导后答对 0.5 / 答错 0.0（含 per-题型前几题打折）。
+每一行的 `masteryLevel` 背后是该题型 `trainCount` 道题的题目记录——「查看题目」命中接口 2，空态不报错。题目的 `score` 语义：直接答对 1.0 / **求助后答对 0.5（学生主动要过思路/答案，answerRequestCount≥1）** / 答错 0.0（含 per-题型前几题打折）。AI 主动给 hint 不降级（学生未求助直接答对 → 1.0）。
 
 ### 4. 空态
 
