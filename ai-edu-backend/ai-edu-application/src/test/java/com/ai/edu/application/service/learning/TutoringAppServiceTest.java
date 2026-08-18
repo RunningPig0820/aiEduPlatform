@@ -16,6 +16,8 @@ import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
+import com.ai.edu.domain.learning.model.entity.QuestionAttempt;
+import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.EndReason;
 import com.ai.edu.domain.learning.model.valueobject.KpResolution;
@@ -25,6 +27,7 @@ import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
+import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
@@ -45,6 +48,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -66,6 +70,8 @@ class TutoringAppServiceTest {
     private TutoringSessionRepository sessionRepository;
     private StudentKpMasteryRepository masteryRepository;
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
+    private StudentQuestionRecordRepository questionRecordRepository;
+    private TopicLabelAggregationService topicLabelAggregationService;
     private DerivedKpObsRepository derivedKpObsRepository;
     private ErrorEventRepository errorEventRepository;
     private TutoringSessionCache sessionCache;
@@ -105,6 +111,13 @@ class TutoringAppServiceTest {
         service.setFileStorageService(fileStorageService);
         service.setTutoringConfig(TutoringConfig.defaults());
         service.setRedisService(redisService);
+        // 3.4 题目落库 + 聚集（结算时 persistQuestionAttempt 消费）
+        questionRecordRepository = mock(StudentQuestionRecordRepository.class);
+        when(questionRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        topicLabelAggregationService = mock(TopicLabelAggregationService.class);
+        when(topicLabelAggregationService.aggregate(anyString(), any())).thenAnswer(inv -> inv.getArgument(0));
+        service.setQuestionRecordRepository(questionRecordRepository);
+        service.setTopicLabelAggregationService(topicLabelAggregationService);
         // B2 归档异步化：测试注入 immediate()，归档同步执行 → 现有 verify(transcriptArchiver.archive(...)) 不竞态
         service.setArchiveScheduler(Schedulers.immediate());
 
@@ -266,6 +279,57 @@ class TutoringAppServiceTest {
                 .verifyComplete();
         assertEquals(1, session.getRoundCount()); // round 0→1
         verify(sessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("3.1 题聚合：decide 轮累计作答信号到当前题（rounds + 题型名），hint 轮 hinted=true")
+    void sendMessage_accumulatesQuestionAttempt() {
+        TutoringSession session = activeSessionInCache();
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意等式两边\"}")));
+
+        service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94").blockLast();
+
+        QuestionAttempt attempt = session.getCurrentAttempt();
+        assertEquals(1, attempt.getRoundCount());
+        assertEquals(1, attempt.getRounds().size());
+        assertFalse(attempt.getRounds().get(0).isCorrect(), "meta 无 eval → correct 默认 false");
+        assertTrue(attempt.getRounds().get(0).isHinted(), "hint 轮 hinted=true");
+    }
+
+    @Test
+    @DisplayName("3.2 题目文本: 首条 user 消息捕获为当前题文本（换题后首条，非最后一条用户消息）")
+    void sendMessage_capturesQuestionContent() {
+        TutoringSession session = activeSessionInCache();
+        // sendMessage 追加新消息后 history 最后一条 user = 传入题目文本（mock listMessages 含新消息）
+        when(sessionCache.listMessages(SESSION_ID)).thenReturn(List.of(
+                TutoringChatMessage.user("鸡兔同笼"),
+                TutoringChatMessage.ai("先找已知条件"),
+                TutoringChatMessage.user("笼子里有鸡和兔共 35 个头 94 只脚")));
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意\"}")));
+
+        service.sendMessage(STUDENT_ID, SESSION_ID, "笼子里有鸡和兔共 35 个头 94 只脚").blockLast();
+
+        assertEquals("笼子里有鸡和兔共 35 个头 94 只脚", session.getCurrentAttempt().getContent());
+        assertFalse(session.isContentCapturePending(), "捕获后 pending 复位");
+    }
+
+    @Test
+    @DisplayName("3.1 题聚合：SWITCH 换题轮结算当前题（一道题一条聚合），新题从零累计")
+    void sendMessage_switchSettlesAttempt() {
+        TutoringSession session = activeSessionInCache();
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意\"}")));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "题目一").blockLast();
+        assertEquals(1, session.getCurrentAttempt().getRoundCount());
+
+        // 换题轮 SWITCH：结算上一题，新题从零累计
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("switch")));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "换一道题").blockLast();
+
+        assertEquals(0, session.getCurrentAttempt().getRoundCount(), "SWITCH 结算后新题从零累计");
+        assertEquals(0, session.getRoundCount(), "switchQuestion 重置轮次计数");
     }
 
     @Test
@@ -689,21 +753,58 @@ class TutoringAppServiceTest {
     }
 
     @Test
-    @DisplayName("sendMessage: 掌握度信号命中 → UPSERT（signal=practicing → 50）")
-    void sendMessage_appliesMasterySignal() {
+    @DisplayName("3.4 掌握信号：作答轮累计 → END 结算 → 题目落库 + 掌握表 applyScore 累计平均")
+    void sendMessage_persistsQuestionAttemptOnEnd() {
         TutoringSession session = activeSessionInCache();
-        ActionMeta action = meta("hint");
-        action.setMasterySignals(List.of(
+        // 作答轮：hint + eval.correct=true（引导后答对）→ onRoundSignal(true, hinted=true)
+        ActionMeta hint = meta("hint");
+        hint.setMasterySignals(List.of(
                 MasterySignalItem.builder().kpLabel("二元一次方程组").signal("practicing").build()));
-        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(action));
+        hint.setEval(EvalInfo.builder().correct(true).build());
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(hint));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"很好\"}")));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").blockLast();
+        assertEquals(1, session.getCurrentAttempt().getRounds().size(), "作答轮累计信号");
 
-        service.sendMessage(STUDENT_ID, SESSION_ID, "我解出来了").subscribe();
+        // 收尾轮 END：结算 → 题目落库 + 掌握表累计平均（首题 0.5 引导后答对 × 0.7 = 0.35 → 35%）
+        ActionMeta end = meta("end");
+        end.setEndReason("COMPLETED");
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(end));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "谢谢老师").blockLast();
 
+        ArgumentCaptor<StudentQuestionRecord> recCaptor = ArgumentCaptor.forClass(StudentQuestionRecord.class);
+        verify(questionRecordRepository).save(recCaptor.capture());
+        StudentQuestionRecord rec = recCaptor.getValue();
+        assertEquals("ai", rec.getSource());
+        assertEquals("二元一次方程组", rec.getTopicLabel());
+        assertEquals("二元一次方程组", rec.getCanonicalLabel());
+        assertEquals(0, new BigDecimal("0.35").compareTo(rec.getScore()));
+        assertEquals(1, rec.getHintCount());
         verify(studentTopicMasteryRepository).upsert(argThat(m ->
                 m.getTopicKey().getValue().equals("二元一次方程组")
-                        && m.getMasteryLevel().getValue() == 50
-                        && m.getTopicLabel().equals("二元一次方程组")));
+                        && m.getTrainCount() == 1
+                        && m.getMasteryLevel().getValue() == 35));
+    }
+
+    @Test
+    @DisplayName("3.4 SIG-006: PENDING（题型未识别）→ 题目照常落库 canonical=null，信号不丢（等归属后聚合）")
+    void sendMessage_pendingTopic_stillPersistsQuestion() {
+        TutoringSession session = activeSessionInCache();
+        // 作答轮：hint 无 masterySignals（题型未识别）→ topicLabel null → canonical null（PENDING）
+        ActionMeta hint = meta("hint");
+        hint.setEval(EvalInfo.builder().correct(true).build());
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(hint));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"很好\"}")));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "笼子里有鸡和兔").blockLast();
+
+        ActionMeta end = meta("end");
+        end.setEndReason("COMPLETED");
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(end));
+        service.sendMessage(STUDENT_ID, SESSION_ID, "谢谢老师").blockLast();
+
+        verify(questionRecordRepository).save(argThat(r -> r instanceof StudentQuestionRecord rec
+                && rec.getCanonicalLabel() == null));  // PENDING 不锚定，题目照常落（信号不丢）
+        verify(studentTopicMasteryRepository, never()).upsert(any());  // 等归属后 2.6 批量聚集聚合
     }
 
     // ==================== requestAnswer() ====================

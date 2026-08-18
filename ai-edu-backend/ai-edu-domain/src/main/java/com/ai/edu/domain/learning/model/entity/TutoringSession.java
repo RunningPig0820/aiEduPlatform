@@ -10,6 +10,8 @@ import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 答疑会话聚合根。
@@ -39,6 +41,12 @@ public class TutoringSession {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime archivedAt;
+
+    /** 当前题聚合（tasks 3.1：一道题多轮信号跨轮累计；随会话 Jackson 存 Redis，不落 DB PO）。 */
+    private QuestionAttempt currentAttempt;
+
+    /** 待捕获新题文本（新题开始等待首条 user 消息；3.2 题目文本 = 换题后首条，非最后一条用户消息）。 */
+    private boolean capturePendingContent;
 
     private TutoringSession() {
     }
@@ -124,12 +132,74 @@ public class TutoringSession {
         return this.answerRequestCount;
     }
 
-    /** 换题：仅重置计数（换题判定在 Python decide，Java 不记录题目内容）。 */
+    /** 换题：仅重置计数（换题判定在 Python decide，Java 只认 SWITCH 事件）。 */
     public void switchQuestion() {
         ensureActive();
         this.roundCount = 0;
         this.answerRequestCount = 0;
         touch();
+    }
+
+    // ==================== 题目聚合（tasks 3.1：一道题多轮信号合并成一条） ====================
+
+    /** 新题开始：创建当前题聚合（首轮 / 换题后），等待新题首条 user 消息（3.2 文本捕获）。 */
+    public void beginQuestion() {
+        this.currentAttempt = QuestionAttempt.builder().rounds(new ArrayList<>()).build();
+        this.capturePendingContent = true;
+    }
+
+    /**
+     * 记录当前题题目文本（3.2）：换题后首条 user 消息（拍题 isNewQuestion 轮 / SWITCH 后下轮），
+     * 后续「提示一下」等回复不更新（非最后一条用户消息）。
+     */
+    public void recordQuestionContent(String content) {
+        ensureAttempt();
+        currentAttempt.setContent(content);
+        this.capturePendingContent = false;
+        touch();
+    }
+
+    /** 当前是否等待捕获新题文本（新题开始 / 换题后）。 */
+    public boolean isContentCapturePending() {
+        return capturePendingContent;
+    }
+
+    /**
+     * 累计一轮作答信号到当前题（decide 逐轮调用）。
+     *
+     * @param correct 该轮 eval.correct
+     * @param hinted  该轮是否有引导（hint/approach/要答案）——3.3 区分直接答对与引导后答对
+     */
+    public void onRoundSignal(boolean correct, boolean hinted) {
+        ensureAttempt();
+        List<RoundSignal> rounds = currentAttempt.getRounds();
+        rounds.add(RoundSignal.builder()
+                .correct(correct).hinted(hinted).roundNumber(rounds.size() + 1).build());
+        currentAttempt.setRoundCount(rounds.size());
+        touch();
+    }
+
+    /**
+     * 换题/结束结算：返回当前题聚合并重置为新题——落库触发器（3.4 接题目表：
+     * 一道题一次作答一条记录，content + topicLabel 过聚集 canonical + score 由信号映射算）。
+     */
+    public QuestionAttempt settleAttempt() {
+        QuestionAttempt settled = currentAttempt;
+        beginQuestion();
+        return settled;
+    }
+
+    /** 记录当前题题型名（首轮识别，3.4 过聚集 canonical）。 */
+    public void recordAttemptTopic(String topicLabel) {
+        ensureAttempt();
+        currentAttempt.setTopicLabel(topicLabel);
+        touch();
+    }
+
+    private void ensureAttempt() {
+        if (currentAttempt == null) {
+            beginQuestion();
+        }
     }
 
     /** 正常收尾：置 ARCHIVED + endReason + 归档时间。 */

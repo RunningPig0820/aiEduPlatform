@@ -26,6 +26,9 @@ import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.DerivedKpObs;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.QuestionAttempt;
+import com.ai.edu.domain.learning.model.entity.RoundSignal;
+import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
 import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.ActionType;
@@ -40,9 +43,11 @@ import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
 import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
+import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
+import com.ai.edu.domain.learning.service.ScoreMapper;
 import com.ai.edu.domain.learning.service.TopicKeyNormalizer;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
@@ -57,6 +62,7 @@ import jakarta.annotation.Resource;
 import lombok.AccessLevel;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -65,6 +71,7 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -138,6 +145,24 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private ErrorEventRepository errorEventRepository;
+
+    /** 3.3 per-题型打折系数（作用于 score 不作用于结果，默认 0.7/0.8/1.0；3.4 落题目表算生效分值）。 */
+    @Value("${ai-edu.tutoring.signal.discount-first:0.7}")
+    private double signalDiscountFirst = 0.7;
+    @Value("${ai-edu.tutoring.signal.discount-second:0.8}")
+    private double signalDiscountSecond = 0.8;
+    @Value("${ai-edu.tutoring.signal.discount-rest:1.0}")
+    private double signalDiscountRest = 1.0;
+
+    /** 3.4 题目落库（掌握度事实源） */
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private StudentQuestionRecordRepository questionRecordRepository;
+
+    /** 3.4 题型聚集（落库前动态锚定 canonical，掌握表不裂行） */
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private TopicLabelAggregationService topicLabelAggregationService;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private TutoringSessionCache sessionCache;
@@ -506,7 +531,7 @@ public class TutoringAppService {
         // meta 到达 → postDecide（同步护栏+副作用+guardrail+generate）→ 释放锁（generate 在锁外）
         Mono<Flux<ServerSentEvent<String>>> tail = metaSink.asMono()
                 .map(action -> {
-                    Flux<ServerSentEvent<String>> result = postDecide(session, action, history);
+                    Flux<ServerSentEvent<String>> result = postDecide(session, action, history, isNewQuestion);
                     unlock.run();   // decide+副作用临界区结束，generate 在锁外
                     return result;
                 });
@@ -518,7 +543,7 @@ public class TutoringAppService {
 
     /** meta 到达后的护栏校验 + 落库副作用 + guardrail/generate 流（原 orchestrate 同步段，D7 抽取）。 */
     private Flux<ServerSentEvent<String>> postDecide(TutoringSession session, ActionMeta action,
-                                                     List<TutoringChatMessage> history) {
+                                                     List<TutoringChatMessage> history, boolean isNewQuestion) {
         // 1. 安全终止（decide safety_flag）
         if (Boolean.TRUE.equals(action.getSafetyFlag())) {
             return terminate(session, action);
@@ -547,7 +572,7 @@ public class TutoringAppService {
 
         // 7. 落库副作用（掌握度/错误/情绪/round/换题/收尾）
         String lastUserContent = lastUserContent(history);
-        applySideEffects(session, action, allowedType, lastUserContent);
+        applySideEffects(session, action, allowedType, lastUserContent, isNewQuestion);
         tutoringSessionRepository.save(session);
         sessionCache.saveSession(session);
 
@@ -588,9 +613,9 @@ public class TutoringAppService {
 
     // ==================== 副作用 ====================
 
-    /** 落库副作用：情绪/答案计数/换题/收尾/轮次 + 掌握度信号 + 错误事件。 */
+    /** 落库副作用：情绪/答案计数/换题/收尾/轮次 + 掌握度信号 + 错误事件 + 题目文本捕获。 */
     private void applySideEffects(TutoringSession session, ActionMeta action,
-                                  ActionType allowedType, String lastUserContent) {
+                                  ActionType allowedType, String lastUserContent, boolean isNewQuestion) {
         if (action.getEval() != null) {
             session.setLastEmotion(TutoringEmotion.fromCode(action.getEval().getEmotion()));
         }
@@ -612,38 +637,36 @@ public class TutoringAppService {
         if (allowedType == ActionType.HINT || allowedType == ActionType.APPROACH) {
             session.recordRound();
         }
-        applyMasteryAndErrors(session, action, allowedType, lastUserContent);
+        applyMasteryAndErrors(session, action, allowedType, lastUserContent, isNewQuestion);
     }
 
     /** 题型掌握度 UPSERT（label 归一化为 topic_key 落题型掌握度，未命中记日志不落）+ eval.correct=false 写错误事件。 */
     private void applyMasteryAndErrors(TutoringSession session, ActionMeta action,
-                                       ActionType allowedType, String lastUserContent) {
-        boolean completed = (allowedType == ActionType.END)
-                && EndReason.COMPLETED == EndReason.fromCode(action.getEndReason());
+                                       ActionType allowedType, String lastUserContent, boolean isNewQuestion) {
+        // ===== 3.1 题聚合：每轮作答信号累计到当前题（3.3 信号映射 + 3.4 落题目表用）=====
+        // 结算轮（SWITCH/END/REVEAL）是换题/收尾动作，eval 是模型默认值非真实作答，不累计——
+        // 题聚合 rounds 只含真实作答轮，结算取最后作答轮信号
+        boolean settlingRound = allowedType == ActionType.SWITCH || allowedType == ActionType.END
+                || allowedType == ActionType.REVEAL;
+        if (!settlingRound) {
+            boolean hinted = allowedType == ActionType.HINT || allowedType == ActionType.APPROACH
+                    || session.getAnswerRequestCount() > 0;
+            boolean correct = action.getEval() != null && Boolean.TRUE.equals(action.getEval().getCorrect());
+            session.onRoundSignal(correct, hinted);
+        }
+        // 记录当前题题型名（首个识别 label，3.4 过聚集 canonical）
         if (action.getMasterySignals() != null) {
             for (MasterySignalItem item : action.getMasterySignals()) {
-                if (item.getKpLabel() == null || item.getKpLabel().isBlank()) {
-                    continue;
+                if (item.getKpLabel() != null && !item.getKpLabel().isBlank()) {
+                    session.recordAttemptTopic(item.getKpLabel());
+                    break;
                 }
-                // 掌握度主体翻转：label 是题型，归一化后作掌握度主键；resolveReadOnly 只做解析判断（不写 t_kp_derived_obs，域 B 独立化 Decision 10）
-                KpResolution resolution = kpResolver.resolveReadOnly(item.getKpLabel(), session.getStudentId());
-                if (!resolution.isResolved() || resolution.getUri() == null) {
-                    log.warn("[tutoring] 题型 label 未命中 URI，不落题型掌握度（PENDING 已在 obs）: {}", item.getKpLabel());
-                    continue;
-                }
-                TopicKey topicKey = TopicKey.of(TopicKeyNormalizer.normalize(item.getKpLabel()));
-                MasterySignal signal = MasterySignal.fromCode(item.getKpLabel(), item.getSignal());
-                StudentTopicMastery mastery = studentTopicMasteryRepository
-                        .findByStudentAndTopic(session.getStudentId(), topicKey)
-                        .orElseGet(() -> StudentTopicMastery.create(session.getStudentId(), topicKey, item.getKpLabel()));
-                mastery.applySignal(signal);
-                if (completed) {
-                    mastery.raiseByCorrection();
-                }
-                // evidence 列是 JSON 类型，写入合法 JSON（原 "session_N" 非法 JSON 导致 MySQL 拒绝）
-                mastery.recordSession(session.getId(), "{\"session_id\":" + session.getId() + "}");
-                studentTopicMasteryRepository.upsert(mastery);
             }
+        }
+        // 3.2 题目文本捕获：换题后首条 user 消息 = 新题文本（拍题 isNewQuestion 直接捕获；
+        // SWITCH 换题后下轮捕获）；SWITCH 轮自身消息（「换一道题」）非题目不捕获；后续「提示一下」不更新
+        if (allowedType != ActionType.SWITCH && (isNewQuestion || session.isContentCapturePending())) {
+            session.recordQuestionContent(lastUserContent);
         }
         // B3: 错误事件门控——仅 decide 原始 type 为 hint/approach（真实评估学生作答）且
         // 模型明确诊断出 error_type 才算学生错误。switch/end/reveal/concept 轮及首问 hint 轮
@@ -660,6 +683,55 @@ public class TutoringAppService {
                     session.getRoundCount(),
                     lastUserContent));
         }
+        // 3.4 换题/收尾/拍题结算当前题：题目落库 + 聚集 canonical + 掌握表累计平均（一道题一次作答一条记录）
+        if (allowedType == ActionType.SWITCH || isNewQuestion
+                || allowedType == ActionType.END || allowedType == ActionType.REVEAL) {
+            persistQuestionAttempt(session);
+            session.settleAttempt();
+        }
+    }
+
+    /**
+     * 3.4 结算当前题落库：一道题一次作答 → 一条题目记录（事实源）。
+     * 题聚合 → canonical（topicLabel 过聚集动态锚定，掌握表不裂行）→ ScoreMapper 算生效分值
+     * → 题目表落库（source=ai；PENDING 题型未识别 canonical=null 照常落，信号不丢）→
+     * 掌握表 applyScore 累计平均正确率（替代 applySignal max 单调不减，design Decision 2/8）。
+     */
+    private void persistQuestionAttempt(TutoringSession session) {
+        QuestionAttempt attempt = session.getCurrentAttempt();
+        if (attempt == null || attempt.getRounds().isEmpty()) {
+            return; // 无作答信号（如首轮 SWITCH）
+        }
+        String topicLabel = attempt.getTopicLabel();
+        String canonical = (topicLabel == null || topicLabel.isBlank())
+                ? null
+                : topicLabelAggregationService.aggregate(topicLabel, session.getStudentId());
+        // 该题分值：取最后一轮信号（该题最终状态），per-题型打折（trainCount=该题型已训练数，作用于 score）
+        RoundSignal last = attempt.getRounds().get(attempt.getRounds().size() - 1);
+        long trainCount = 0;
+        if (canonical != null) {
+            trainCount = studentTopicMasteryRepository
+                    .findByStudentAndTopic(session.getStudentId(), TopicKey.of(canonical))
+                    .map(StudentTopicMastery::getTrainCount)
+                    .orElse(0L);
+        }
+        BigDecimal score = ScoreMapper.effectiveScore(last.isCorrect(), last.isHinted(),
+                trainCount, signalDiscountFirst, signalDiscountSecond, signalDiscountRest);
+        // 题目落库（事实源；PENDING canonical=null 照常落，归属后 2.6 批量聚集补）
+        questionRecordRepository.save(StudentQuestionRecord.create("ai", session.getStudentId(),
+                attempt.getContent(), topicLabel, canonical, score,
+                last.isHinted() ? 1 : 0, 0, session.getId(), LocalDateTime.now()));
+        // 掌握表累计平均（canonical 已锚定才聚；PENDING 等归属后再聚合）
+        if (canonical != null) {
+            StudentTopicMastery mastery = studentTopicMasteryRepository
+                    .findByStudentAndTopic(session.getStudentId(), TopicKey.of(canonical))
+                    .orElseGet(() -> StudentTopicMastery.create(session.getStudentId(), TopicKey.of(canonical), canonical));
+            mastery.applyScore(score);
+            mastery.recordSession(session.getId(), "{\"session_id\":" + session.getId() + "}");
+            studentTopicMasteryRepository.upsert(mastery);
+        }
+        log.info("[tutoring] 题目落库: student={}, topic={}, canonical={}, score={}",
+                session.getStudentId(), topicLabel, canonical, score);
     }
 
     // ==================== 流式构建 ====================
