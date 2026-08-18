@@ -2,16 +2,16 @@
 
 > 基础路径: `/api/students`
 >
-> 更新日期: 2026-08-17
+> 更新日期: 2026-08-18
 >
-> **BREAKING**：`GET /students/{id}/mastery` 响应契约变更（`masteryLevel` 离散四档 → 连续百分比，新增 `source`/`trainCount`）。前端需联调。
+> **BREAKING（4.1 分页改造）**：`GET /students/{id}/mastery` **移除**，改为 `POST /students/{id}/mastery/query`——分页 + status 分桶筛选 + keyword 模糊 + 排序切换（默认 updatedAt 倒序）；响应新增 `total`/`pageNum`/`pageSize`。前端需联调。
 
 ---
 
 ## 目录
 
 - [通用响应结构](#通用响应结构)
-- [1. 题型掌握度 getMastery（BREAKING 契约变更）](#1-题型掌握度-getmastery)
+- [1. 题型掌握度分页查询 queryMastery（POST）](#1-题型掌握度分页查询-querymastery)
 - [2. 按题型查题目列表](#2-按题型查题目列表)
 - [错误码说明](#错误码说明)
 - [前端调用注意事项](#前端调用注意事项)
@@ -38,23 +38,34 @@
 
 ---
 
-## 1. 题型掌握度 getMastery
+## 1. 题型掌握度分页查询 queryMastery
 
 ### 基本信息
 
 | 项目 | 值 |
 |------|-----|
-| HTTP 方法 | `GET` |
-| 接口路径 | `/api/students/{studentId}/mastery` |
+| HTTP 方法 | `POST` |
+| 接口路径 | `/api/students/{studentId}/mastery/query` |
 | 需要登录 | 是（STUDENT） |
 
-**用途**：查询学生题型掌握度。**掌握度主体 = 题型**，`masteryLevel` 为 **0-100 连续百分比**（累计平均正确率，替代原离散四档 0/25/50/75），新增 `source`（来源）与 `trainCount`（训练数）供掌握度页列式展示。
+**用途**：分页查询学生题型掌握度。**掌握度主体 = 题型**，`masteryLevel` 为 **0-100 连续百分比**（累计平均正确率），`source`/`trainCount` 供列式展示。支持 status 分桶筛选、题型名模糊搜索、排序切换（**默认修改时间倒序**）。
 
 ### 路径参数
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | studentId | Long | 是 | 学生 ID（必须与会话 userId 一致，否则 10005 无权访问） |
+
+### 请求参数（body，均可省略）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| pageNum | Integer | 否 | 页码（从 1 起，默认 1） |
+| pageSize | Integer | 否 | 每页条数（默认 20，上限 100） |
+| keyword | String | 否 | 题型名模糊搜索 |
+| masteryStatus | String | 否 | 掌握度分桶：`all`（默认）/ `consolidate`(&lt;25 待巩固) / `learning`(25-50 练习中) / `steady`(50-75 偏稳) / `mastered`(≥75 已掌握) |
+| sortBy | String | 否 | 排序字段：`updatedAt`（默认，修改时间倒序）/ `masteryLevel`（掌握度） |
+| order | String | 否 | 排序方向：`desc`（默认）/ `asc` |
 
 ### 响应参数
 
@@ -73,14 +84,17 @@
       "status": "RESOLVED",
       "updatedAt": "2026-08-17T21:00:00"
     }
-  ]
+  ],
+  "total": 32,
+  "pageNum": 1,
+  "pageSize": 20
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | studentId | Long | 学生 ID |
-| items | Array | 题型掌握度列表（仅已练**且已归属**的题型；未开始/未归属不出现在列表中） |
+| items | Array | 当前页题型掌握度列表（仅已练**且已归属**的题型；未开始/未归属不出现在列表中） |
 | items[].topicKey | String | 归一化题型 key（canonical，掌握表主键） |
 | items[].topicLabel | String | 题型展示名（canonical） |
 | items[].masteryLevel | Integer | **0-100 连续百分比（累计平均正确率）** |
@@ -88,22 +102,32 @@
 | items[].trainCount | Integer | 训练数（该题型累计作答次数） |
 | items[].status | String | `RESOLVED`（已锚定，掌握表有行） |
 | items[].updatedAt | DateTime | 最近更新时间 |
+| total | Integer | 筛选后总条数 |
+| pageNum | Integer | 当前页码 |
+| pageSize | Integer | 每页条数 |
 
 ### 请求示例
 
 **cURL:**
 ```bash
-curl -X GET http://localhost:8080/api/students/1001/mastery \
-  -H "Cookie: SESSION=<your-session>"
+curl -X POST http://localhost:8080/api/students/1001/mastery/query \
+  -H "Cookie: SESSION=<your-session>" \
+  -H "Content-Type: application/json" \
+  -d '{"pageNum":1,"pageSize":20,"masteryStatus":"learning","keyword":"方程","sortBy":"updatedAt","order":"desc"}'
 ```
 
 **JavaScript (fetch):**
 ```javascript
-const response = await fetch('/api/students/1001/mastery', { credentials: 'include' });
+const response = await fetch('/api/students/1001/mastery/query', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ pageNum: 1, pageSize: 20, masteryStatus: 'learning' })
+});
 const result = await response.json();
 if (result.code === '00000') {
-  const items = result.data.items; // [{ topicLabel, masteryLevel(0-100), source, trainCount, status }]
-  // 前端分桶：<25 待巩固 / 25-50 练习中 / 50-75 偏稳 / ≥75 已掌握
+  const { items, total, pageNum, pageSize } = result.data;
+  // 前端分桶视觉：<25 待巩固 / 25-50 练习中 / 50-75 偏稳 / ≥75 已掌握（也可用 masteryStatus 让后端筛）
 }
 ```
 
@@ -270,9 +294,11 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 两个接口均需登录（STUDENT），请求必须 `credentials: 'include'`；路径 `studentId` 必须与会话一致，否则 `10005`。
 
-### 2. `getMastery` BREAKING 契约（联调重点）
+### 2. `queryMastery` BREAKING 契约（联调重点）
 
-- `masteryLevel` **语义从离散四档（0/25/50/75）改为连续百分比 0-100**——前端分桶展示保留四档视觉：`<25 待巩固 / 25-50 练习中 / 50-75 偏稳 / ≥75 已掌握`。
+- **`GET /mastery` 已移除**，改为 **`POST /mastery/query`**——请求体 `pageNum/pageSize/masteryStatus/keyword/sortBy/order`（均可省略），响应含 `total/pageNum/pageSize`。
+- `masteryLevel` **语义从离散四档（0/25/50/75）改为连续百分比 0-100**——前端分桶视觉保留：`<25 待巩固 / 25-50 练习中 / 50-75 偏稳 / ≥75 已掌握`；也可用 `masteryStatus` 让后端筛（`consolidate`/`learning`/`steady`/`mastered`）。
+- **默认排序 `updatedAt` 倒序**（最近练的在前）；`sortBy=masteryLevel` + `order=asc/desc` 可切（`asc` 看最薄弱）。
 - 新增 `source`（ai/bank）与 `trainCount`（训练数）——掌握度页加「来源」「训练数」列。
 - 未开始题型不出现在 `items[]`（引导去 AI 答疑做题）。`items[]` 只含**已归属**（掌握表有行）题型——题目记录 canonical 未归属的不进掌握表，也不在 items 展示。
 - **知识点总览页不再消费本接口做覆盖度**（本期题型↔知识点断联）。
@@ -300,7 +326,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 ### 8. 前端联调契约（题型分析页 ↔ 掌握度）
 
-- **analyze 返回 canonical**：`analyze-question` 返回的 `topicLabel` 是**动态聚集后的 canonical**（「解一元二次方程」→「一元二次方程」）——前端用它直接查 `getMastery`，能对上，不会误判「未开始」。
+- **analyze 返回 canonical**：`analyze-question` 返回的 `topicLabel` 是**动态聚集后的 canonical**（「解一元二次方程」→「一元二次方程」）——前端用它直接查 `queryMastery`（POST /mastery/query），能对上，不会误判「未开始」。
 - **域 B 独立化（analyze 只到题型）**：`analyze-question` 识别题型后**不再自动关联知识点**——`knowledgePoints` 来自题型库权威分布（有则返回 / 无则空），不会因「无知识点」挂起 PENDING。题型↔知识点关联由 ADMIN 维护接口手动配（见 9）。
 - **两态语义**（不能混）：
   - `items[]` 只有 `status=RESOLVED`（已归属，掌握表有行）→ `masteryLevel` = 累计平均正确率

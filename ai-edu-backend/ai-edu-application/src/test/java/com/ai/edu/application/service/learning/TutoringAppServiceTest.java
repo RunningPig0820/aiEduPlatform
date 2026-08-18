@@ -2,6 +2,7 @@ package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.assembler.learning.TutoringAssembler;
 import com.ai.edu.application.dto.learning.GuardResult;
+import com.ai.edu.application.dto.learning.MasteryQueryRequest;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.TutoringConfigDTO;
 import com.ai.edu.application.dto.learning.TutoringSessionDTO;
@@ -963,18 +964,19 @@ class TutoringAppServiceTest {
     }
 
     @Test
-    @DisplayName("getStudentMastery: 映射题型掌握度列表")
-    void getStudentMastery_mapsItems() {
+    @DisplayName("queryStudentMastery: 映射题型掌握度列表 + 分页元信息")
+    void queryStudentMastery_mapsItems() {
         StudentTopicMastery mastery = StudentTopicMastery.create(STUDENT_ID, TopicKey.of("鸡兔同笼"), "鸡兔同笼");
         mastery.applySignal(MasterySignal.of("鸡兔同笼", MasterySignal.Level.MASTERED));
         when(studentTopicMasteryRepository.findByStudentId(STUDENT_ID)).thenReturn(List.of(mastery));
 
-        StudentMasteryDTO dto = service.getStudentMastery(STUDENT_ID);
+        StudentMasteryDTO dto = service.queryStudentMastery(STUDENT_ID, MasteryQueryRequest.builder().build());
 
         assertEquals(STUDENT_ID, dto.getStudentId());
         assertEquals(1, dto.getItems().size());
         assertEquals("鸡兔同笼", dto.getItems().get(0).getTopicKey());
         assertEquals(75, dto.getItems().get(0).getMasteryLevel());
+        assertEquals(1, dto.getTotal());
     }
 
     // ==================== ocr() ====================

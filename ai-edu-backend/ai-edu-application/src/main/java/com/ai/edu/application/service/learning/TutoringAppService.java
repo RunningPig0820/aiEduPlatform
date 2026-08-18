@@ -4,6 +4,7 @@ import com.ai.edu.application.assembler.learning.TutoringAssembler;
 import com.ai.edu.application.dto.learning.ChatMessageDTO;
 import com.ai.edu.application.dto.learning.GuardResult;
 import com.ai.edu.application.dto.learning.MasteryItemDTO;
+import com.ai.edu.application.dto.learning.MasteryQueryRequest;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.StudentQuestionItemDTO;
 import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
@@ -74,6 +75,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -325,26 +327,86 @@ public class TutoringAppService {
         });
     }
 
-    /** 查询学生题型掌握度（掌握度主体翻转：题型粒度）。只返回已归属（掌握表有行）的题型；
-     * 题目记录 canonical 未归属的不进掌握表（applyScore 只在 canonical 非空时聚），也不在 items 展示。 */
-    public StudentMasteryDTO getStudentMastery(Long studentId) {
-        List<StudentTopicMastery> topics = studentTopicMasteryRepository.findByStudentId(studentId);
-        List<MasteryItemDTO> items = new ArrayList<>();
-        for (StudentTopicMastery t : topics) {
-            if (t.getTopicKey() == null) {
-                continue; // 防御：topic_key 不应为空，跳过脏数据
-            }
-            items.add(MasteryItemDTO.builder()
-                    .topicKey(t.getTopicKey().getValue())
-                    .topicLabel(t.getTopicLabel())
-                    .masteryLevel(t.getMasteryLevel() == null ? 0 : t.getMasteryLevel().getValue())
-                    .source(t.getSource())
-                    .trainCount((int) t.getTrainCount())
-                    .status("RESOLVED")
-                    .updatedAt(t.getUpdatedAt())
-                    .build());
+    /** 掌握度分页查询（4.1 分页改造，POST /mastery/query）。掌握表全量 → 内存筛选（status 分桶/keyword 模糊）
+     * → 排序（默认 updatedAt 倒序，可切 masteryLevel）→ 分页。只含已归属题型（掌握表有行）。 */
+    public StudentMasteryDTO queryStudentMastery(Long studentId, MasteryQueryRequest request) {
+        MasteryQueryRequest req = request == null ? MasteryQueryRequest.builder().build() : request;
+        int pageNum = req.getPageNum() == null || req.getPageNum() < 1 ? 1 : req.getPageNum();
+        int pageSize = req.getPageSize() == null ? 20 : Math.min(Math.max(req.getPageSize(), 1), 100);
+        boolean asc = "asc".equalsIgnoreCase(req.getOrder());
+
+        List<MasteryItemDTO> matched = studentTopicMasteryRepository.findByStudentId(studentId).stream()
+                .filter(t -> t.getTopicKey() != null)
+                .map(this::toMasteryItem)
+                .filter(item -> matchesMasteryStatus(item.getMasteryLevel(), req.getMasteryStatus()))
+                .filter(item -> matchesKeyword(item.getTopicLabel(), req.getKeyword()))
+                .sorted(masteryComparator("masteryLevel".equals(req.getSortBy()), asc))
+                .toList();
+
+        int total = matched.size();
+        int from = (pageNum - 1) * pageSize;
+        List<MasteryItemDTO> items = total <= from ? List.of()
+                : matched.subList(from, Math.min(total, from + pageSize));
+        return StudentMasteryDTO.builder().studentId(studentId).items(items)
+                .total(total).pageNum(pageNum).pageSize(pageSize).build();
+    }
+
+    private MasteryItemDTO toMasteryItem(StudentTopicMastery t) {
+        return MasteryItemDTO.builder()
+                .topicKey(t.getTopicKey().getValue())
+                .topicLabel(t.getTopicLabel())
+                .masteryLevel(t.getMasteryLevel() == null ? 0 : t.getMasteryLevel().getValue())
+                .source(t.getSource())
+                .trainCount((int) t.getTrainCount())
+                .status("RESOLVED")
+                .updatedAt(t.getUpdatedAt())
+                .build();
+    }
+
+    /** masteryStatus 分桶：all | consolidate(<25 待巩固) | learning(25-50 练习中) | steady(50-75 偏稳) | mastered(≥75 已掌握)。 */
+    private boolean matchesMasteryStatus(int level, String status) {
+        if (status == null || status.isBlank() || "all".equalsIgnoreCase(status)) {
+            return true;
         }
-        return StudentMasteryDTO.builder().studentId(studentId).items(items).build();
+        return switch (status.toLowerCase()) {
+            case "consolidate" -> level < 25;
+            case "learning" -> level >= 25 && level < 50;
+            case "steady" -> level >= 50 && level < 75;
+            case "mastered" -> level >= 75;
+            default -> true;
+        };
+    }
+
+    private boolean matchesKeyword(String label, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return true;
+        }
+        return label != null && label.contains(keyword.trim());
+    }
+
+    /** 排序：byLevel=updatedAt（默认，修改时间倒序）| masteryLevel；asc 控制方向；updatedAt null 恒排最后。 */
+    private Comparator<MasteryItemDTO> masteryComparator(boolean byLevel, boolean asc) {
+        Comparator<MasteryItemDTO> base;
+        if (byLevel) {
+            base = Comparator.comparingInt(MasteryItemDTO::getMasteryLevel);
+        } else {
+            base = (a, b) -> {
+                LocalDateTime at = a.getUpdatedAt(), bt = b.getUpdatedAt();
+                if (at == null && bt == null) {
+                    return 0;
+                }
+                if (at == null) {
+                    return 1; // null 恒最后，不受方向影响
+                }
+                if (bt == null) {
+                    return -1;
+                }
+                int c = at.compareTo(bt);
+                return asc ? c : -c;
+            };
+            return base;
+        }
+        return asc ? base : base.reversed();
     }
 
     /** 4.2 按题型查题目列表（掌握度页「查看题目」：session_id 原题链接；空列表不报错）。 */

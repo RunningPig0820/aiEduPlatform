@@ -1,6 +1,7 @@
 package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
+import com.ai.edu.application.dto.learning.MasteryQueryRequest;
 import com.ai.edu.application.dto.learning.StudentMasteryDTO;
 import com.ai.edu.application.dto.learning.StudentTopicQuestionsDTO;
 import com.ai.edu.application.service.learning.TutoringAppService;
@@ -38,37 +39,41 @@ class StudentMasteryControllerTest {
         setField(controller, "tutoringAppService", tutoringAppService);
     }
 
-    // ---------- getMastery ----------
+    // ---------- queryMastery ----------
 
     @Test
-    @DisplayName("MST-001 正常：登录学生查自己掌握度 → 返回 items")
-    void getMastery_success() {
-        StudentMasteryDTO dto = StudentMasteryDTO.builder().studentId(STUDENT_ID).items(List.of()).build();
-        when(tutoringAppService.getStudentMastery(STUDENT_ID)).thenReturn(dto);
+    @DisplayName("MST-001 正常：登录学生 POST 分页查自己掌握度 → 返回分页 items")
+    void queryMastery_success() {
+        StudentMasteryDTO dto = StudentMasteryDTO.builder().studentId(STUDENT_ID).items(List.of())
+                .total(0).pageNum(1).pageSize(20).build();
+        MasteryQueryRequest request = MasteryQueryRequest.builder().pageNum(1).pageSize(20).build();
+        when(tutoringAppService.queryStudentMastery(STUDENT_ID, request)).thenReturn(dto);
 
-        ApiResponse<StudentMasteryDTO> response = controller.getMastery(STUDENT_ID, loginSession());
+        ApiResponse<StudentMasteryDTO> response = controller.queryMastery(STUDENT_ID, request, loginSession());
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
         assertEquals(STUDENT_ID, response.getData().getStudentId());
-        verify(tutoringAppService).getStudentMastery(STUDENT_ID);
+        assertEquals(1, response.getData().getPageNum());
+        verify(tutoringAppService).queryStudentMastery(STUDENT_ID, request);
     }
 
     @Test
     @DisplayName("MST-005 未登录：无会话 → 10004")
-    void getMastery_notLoggedIn() {
+    void queryMastery_notLoggedIn() {
+        MasteryQueryRequest request = MasteryQueryRequest.builder().build();
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> controller.getMastery(STUDENT_ID, new MockHttpSession()));
+                () -> controller.queryMastery(STUDENT_ID, request, new MockHttpSession()));
         assertEquals(ErrorCode.UNAUTHORIZED, ex.getCode());
     }
 
     @Test
     @DisplayName("MST-004 越权：会话 userId ≠ 路径 studentId → 10005")
-    void getMastery_forbidden() {
+    void queryMastery_forbidden() {
         MockHttpSession other = loginSession();
         other.setAttribute("userId", 2002L); // 另一个学生
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> controller.getMastery(STUDENT_ID, other));
+                () -> controller.queryMastery(STUDENT_ID, MasteryQueryRequest.builder().build(), other));
         assertEquals(ErrorCode.PERMISSION_DENIED, ex.getCode());
     }
 

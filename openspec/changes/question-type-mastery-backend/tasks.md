@@ -136,7 +136,8 @@
 ### 4.1 getMastery 契约变更
 
 - [x] 4.1.1 `getStudentMastery` 改写：`masteryLevel` 0-100 连续百分比
-- [x] 4.1.2 `MasteryItemDTO` 加 `source`/`trainCount`（保留 status RESOLVED/PENDING）
+- [x] 4.1.2 `MasteryItemDTO` 加 `source`/`trainCount`（保留 status RESOLVED）
+- [x] 4.1.4 掌握度分页查询（POST `/mastery/query` 替代 GET）：分页（pageNum/pageSize/total）+ status 分桶筛选（all/consolidate/learning/steady/mastered）+ keyword 模糊 + 排序切换（默认 updatedAt 倒序，可切 masteryLevel）
 
 ### 4.2 按题型查题目接口
 
