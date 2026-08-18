@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -36,4 +37,16 @@ public interface StudentQuestionRecordMapper extends BaseMapper<StudentQuestionR
     /** 按学生 + canonical 题型查题目记录（掌握度页「查看题目」，展示该题型证据题）。 */
     @Select("SELECT * FROM t_student_question_record WHERE student_id = #{studentId} AND canonical_label = #{canonicalLabel} AND is_deleted = false ORDER BY id")
     List<StudentQuestionRecordPo> selectByStudentAndCanonical(@Param("studentId") Long studentId, @Param("canonicalLabel") String canonicalLabel);
+
+    /** 批量聚集扫描：未归并（canonical_label IS NULL，PENDING）题型名（distinct，去空）。 */
+    @Select("SELECT DISTINCT topic_label FROM t_student_question_record WHERE canonical_label IS NULL AND is_deleted = false AND topic_label IS NOT NULL AND topic_label <> ''")
+    List<String> selectPendingTopicLabels();
+
+    /** 批量归并：某题型名下未归并记录 canonical_label 更新为目标值（幂等，仅更新 NULL）。 */
+    @Update("UPDATE t_student_question_record SET canonical_label = #{canonicalLabel}, updated_at = NOW() WHERE topic_label = #{topicLabel} AND canonical_label IS NULL AND is_deleted = false")
+    int updateCanonicalByTopic(@Param("topicLabel") String topicLabel, @Param("canonicalLabel") String canonicalLabel);
+
+    /** 全量查题目记录（掌握表重算：内存按 student+canonical 分组累计平均）。 */
+    @Select("SELECT * FROM t_student_question_record WHERE is_deleted = false")
+    List<StudentQuestionRecordPo> selectAll();
 }

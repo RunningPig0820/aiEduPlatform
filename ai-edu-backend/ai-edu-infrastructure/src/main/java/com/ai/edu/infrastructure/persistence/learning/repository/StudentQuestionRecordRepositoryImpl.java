@@ -38,4 +38,19 @@ public class StudentQuestionRecordRepositoryImpl implements StudentQuestionRecor
         return StudentQuestionRecordPo.toEntityList(
                 studentQuestionRecordMapper.selectByStudentAndCanonical(studentId, canonicalLabel));
     }
+
+    @Override
+    public List<String> findPendingTopicLabels() {
+        return studentQuestionRecordMapper.selectPendingTopicLabels();
+    }
+
+    @Override
+    public int updateCanonicalByTopic(String topicLabel, String canonicalLabel) {
+        return studentQuestionRecordMapper.updateCanonicalByTopic(topicLabel, canonicalLabel);
+    }
+
+    @Override
+    public List<StudentQuestionRecord> findAll() {
+        return StudentQuestionRecordPo.toEntityList(studentQuestionRecordMapper.selectAll());
+    }
 }

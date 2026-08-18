@@ -4,6 +4,8 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.KpResolveDTO;
 import com.ai.edu.application.dto.learning.KpResolveRequest;
 import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
+import com.ai.edu.application.dto.learning.TopicClusterResult;
+import com.ai.edu.application.service.batch.TopicClusterAppService;
 import com.ai.edu.application.service.learning.KpAppService;
 import com.ai.edu.application.service.learning.KpQuestionAnalysisAppService;
 import com.ai.edu.common.constant.ErrorCode;
@@ -36,6 +38,8 @@ public class KpResolutionController {
     private KpAppService kpAppService;
     @Resource
     private KpQuestionAnalysisAppService kpQuestionAnalysisAppService;
+    @Resource
+    private TopicClusterAppService topicClusterAppService;
 
     /** POST /api/kp/resolve — 复用答疑内嵌解析管线（镜像 → 题型库年级匹配 → LLM 消歧 → 挂起）。 */
     @Operation(summary = "题型解析", description = "低置信返回 status=PENDING（不报错），携带候选供学生澄清")
@@ -58,6 +62,15 @@ public class KpResolutionController {
     @PostMapping("/aggregation/run")
     public ApiResponse<String> runAggregation() {
         return ApiResponse.success("已停用：域 B 独立化后 obs 共现自动关联不再使用，请用 POST /api/kp/type/upsert 维护题型↔知识点");
+    }
+
+    /** POST /api/kp/aggregation/topic-cluster — 题型批量聚集（手动，ADMIN，tasks 2.6）：
+     * 扫描题目表未归并题型名 → 全量聚集补归并 → 写别名表 → 重算掌握表（幂等可重复触发，非定时按钮）。 */
+    @Operation(summary = "题型批量聚集（手动）", description = "扫描题目表未归并题型名 → 全量聚集补归并 → 重算掌握表（幂等，可重复触发）")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/aggregation/topic-cluster")
+    public ApiResponse<TopicClusterResult> topicCluster() {
+        return ApiResponse.success(topicClusterAppService.cluster());
     }
 
     /** POST /api/kp/analyze-question/image — 图片题目分析：multipart 图片 → 视觉模型直接看图 → 题型+知识点（不经 OCR）。 */

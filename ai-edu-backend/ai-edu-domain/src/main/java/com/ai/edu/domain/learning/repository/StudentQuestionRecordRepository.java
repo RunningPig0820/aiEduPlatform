@@ -20,4 +20,13 @@ public interface StudentQuestionRecordRepository {
 
     /** 按学生 + canonical 题型查题目记录（掌握度页「查看题目」，展示该题型全部证据题）。 */
     List<StudentQuestionRecord> findByStudentAndCanonical(Long studentId, String canonicalLabel);
+
+    /** 批量聚集扫描：全部未归并（canonical_label IS NULL，PENDING）题型名（distinct，去空）。 */
+    List<String> findPendingTopicLabels();
+
+    /** 批量归并：某题型名下未归并记录 canonical_label 更新为目标值（幂等，仅更新 NULL）。返回更新行数。 */
+    int updateCanonicalByTopic(String topicLabel, String canonicalLabel);
+
+    /** 全量查题目记录（掌握表重算：内存按 student+canonical 分组累计平均）。 */
+    List<StudentQuestionRecord> findAll();
 }
