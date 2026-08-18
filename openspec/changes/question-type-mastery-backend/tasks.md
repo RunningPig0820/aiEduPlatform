@@ -9,7 +9,7 @@
 > 4. 前端对接题型部分
 > 5. AI 答疑端到端联调
 >
-> **Python 改动范围**：仅**新增**向量服务端点（`/api/tutoring/vector/put`、`/query`，dashscope embedding + CosVectorsClient）；decide/信号链路仍零改动。COS 无 Java SDK，向量走 Python 桥（后续 RAG 复用同一套基础设施）。
+> **Python 改动范围**：仅**新增**向量服务端点（`/api/tutoring/vector/put`、`/query`，dashscope embedding + CosVectorsClient，`vector_type` 必填路由键——本期只存题型名向量）；decide/信号链路仍零改动。COS 无 Java SDK，向量走 Python 桥（后续 RAG 复用同一套基础设施）。
 
 ## 1. 技术预演：COS 向量方案可行性（前置）
 
@@ -24,16 +24,16 @@
 
 - [ ] 1.2.1 收集 50~100 真实题型名样本（含近义对「一元二次方程/解一元二次方程」、语义对「相遇/行程」）
 - [ ] 1.2.2 Python gateway 复用 dashscope text-embedding-v3 对样本 embedding + 相似度矩阵
-- [ ] 1.2.3 统计双信号（题目向量/题型名向量）top-1 命中率 + 误合并率（对比表）
+- [ ] 1.2.3 统计题型名向量 top-1 命中率 + 误合并率（近义对/语义对对比表）
 
 ### 1.3 阈值标定
 
 - [ ] 1.3.1 阈值扫描：0.85~0.98 步进，确定「相遇/行程」合并边界 + 默认阈值（偏保守）
-- [ ] 1.3.2 确认双信号判定规则：题目命中 / 题型名命中 / 双命中 / 单命中进候选
+- [ ] 1.3.2 确认判定规则：题型名向量命中 ≥高阈值 → 归并；中阈值区间 → 进候选 LLM 仲裁；未命中 → 建新
 
 ### 1.4 结论收口
 
-- [ ] 1.4.1 定义 Java↔Python 向量契约（put/query 请求响应 snake_case，复用 tutoring 域约定）
+- [ ] 1.4.1 定义 Java↔Python 向量契约（put/query 请求响应 snake_case，`vector_type` 必填路由键，复用 tutoring 域约定）
 - [ ] 1.4.2 预演结论写回 design.md Open Questions（Python 向量链路 / 模型 / 阈值）
 - [ ] 1.4.3 产出预演报告（CosVectorsClient 跑通 + dashscope 近邻对比数据）
 
@@ -48,21 +48,21 @@
 
 ### 2.1 表结构
 
-- [ ] 2.1.1 编写 Flyway V17（learning 库）：`t_student_question_record`（id、student_id、content、source('ai'/'bank')、topic_label、canonical_label、score DECIMAL、hint_count、answer_request_count、session_id、created_at），含 student_id 索引
-- [ ] 2.1.2 SQL 记录到 `docs/db/05_learning_domain.sql`（标注「Flyway 关闭，需手动执行」）
+- [x] 2.1.1 编写 Flyway V17（learning 库）：`t_student_question_record`（id、student_id、content、source('ai'/'bank')、topic_label、canonical_label、score DECIMAL、hint_count、answer_request_count、session_id、created_at），含 student_id 索引
+- [x] 2.1.2 SQL 记录到 `docs/db/05_learning_domain.sql`（标注「Flyway 关闭，需手动执行」）
 
 ### 2.2 领域模型与仓储
 
-- [ ] 2.2.1 `StudentQuestionRecord` 实体（JPA 注解、Lombok @Getter、restore/create 工厂、@DS learning）
-- [ ] 2.2.2 `StudentQuestionRecordRepository` 接口（save、findByStudent、findByStudentAndCanonical） + infra PO/Mapper/RepositoryImpl
-- [ ] 2.2.3 `StudentTopicMastery` 实体改造：`applySignal` → `applyScore(score, trainCount)` 累计平均
-- [ ] 2.2.4 `StudentTopicMastery` 加 `source`/`trainCount` 字段 + 仓储 upsert 更新
+- [x] 2.2.1 `StudentQuestionRecord` 实体（JPA 注解、Lombok @Getter、restore/create 工厂、@DS learning）
+- [x] 2.2.2 `StudentQuestionRecordRepository` 接口（save、findByStudent、findByStudentAndCanonical） + infra PO/Mapper/RepositoryImpl
+- [x] 2.2.3 `StudentTopicMastery` 实体改造：`applySignal` → `applyScore(score, trainCount)` 累计平均
+- [x] 2.2.4 `StudentTopicMastery` 加 `source`/`trainCount` 字段 + 仓储 upsert 更新
 
 ### 2.3 向量服务（Python 桥）
 
 - [ ] 2.3.1 domain 端口 `TopicVectorStore`（putVector、queryNearestTop1）
-- [ ] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case）
-- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；存题目向量 + 题型名向量，metadata：student_id/topic_label/canonical_label/timestamp）
+- [ ] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case；**`vector_type` 必填路由键，本期唯一 `"topic"`**——契约已定稿）
+- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；**只存题型名向量，`vector_type` 恒为 `"topic"`**，metadata：student_id/topic_label/canonical_label/timestamp）
 - [ ] 2.3.4 配置：Python 向量端点 URL/超时（复用 TutoringProperties 家族）
 
 ### 2.4 字符级规则
@@ -72,9 +72,9 @@
 
 ### 2.5 聚集编排
 
-- [ ] 2.5.1 `TopicLabelAggregationService`：字符规则 → 双信号向量最近邻 → canonical + 写别名表 `t_kp_question_type_alias` + 向量入库
-- [ ] 2.5.2 首题建锚（零锚点）：无近邻 → 建新 canonical + 题目/题型名向量入库
-- [ ] 2.5.3 双信号判定：题目向量命中归并 / 题型名向量命中归并 / 单命中进候选 LLM 仲裁 / 都不中建新
+- [ ] 2.5.1 `TopicLabelAggregationService`：字符规则 → 题型名向量最近邻（单信号）→ canonical + 写别名表 `t_kp_question_type_alias` + 题型名向量入库
+- [ ] 2.5.2 首题建锚（零锚点）：无近邻 → 建新 canonical + 题型名向量入库
+- [ ] 2.5.3 判定（单信号）：题型名向量命中 ≥高阈值 → 归并；中阈值区间 → 进候选 LLM 仲裁；未命中 → 建新
 - [ ] 2.5.4 失败兜底：向量库不可用 → 回退字符规则 + 原样落库（不阻塞）
 
 ### 2.6 批量聚集（手动触发，非定时）
@@ -90,7 +90,7 @@
 
 ### 2.8 测试
 
-- [ ] 2.8.1 聚集单测 NOR-001~008（字符规则 / 题目向量命中 / 题型名向量命中 / 阈值 / 首题建锚 / 失败兜底 / 落库前不裂行 / 批量归并）
+- [ ] 2.8.1 聚集单测 NOR-001~008（字符规则 / 题型名向量命中归并 / 阈值边界 / LLM 仲裁 / 首题建锚 / 失败兜底 / 落库前不裂行 / 批量归并）
 - [ ] 2.8.2 累计平均单测 AGG-001~003（累计平均 / 重复作答 / 归属后聚合）
 - [ ] 2.8.3 全量测试 + 完成标准验证（造题目数据 → 动态聚集（经 Python 向量桥）→ 掌握表，不依赖答疑）
 

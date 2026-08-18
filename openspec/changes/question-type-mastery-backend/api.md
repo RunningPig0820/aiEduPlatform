@@ -294,7 +294,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 ### 6. 题型动态聚集（canonical）
 
-`topicKey`/`topicLabel` 均为**动态涌现**的 canonical——无题库预置分类，canonical 由第一条相似题创建，后续题目按「题目向量 + 题型名向量」最近邻归并。前端无需处理变体（「一元二次方程」与「解一元二次方程」共享同一行掌握度）。
+`topicKey`/`topicLabel` 均为**动态涌现**的 canonical——无题库预置分类，canonical 由第一条相似题创建，后续题目按「题型名向量」最近邻归并（题目向量本期不落库）。前端无需处理变体（「一元二次方程」与「解一元二次方程」共享同一行掌握度）。
 
 ### 7. 题型名归一（canonical）
 

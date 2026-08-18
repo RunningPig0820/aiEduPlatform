@@ -2,7 +2,7 @@
 
 > 更新：2026-08-18 | 方案：`question-type-mastery-backend`
 >
-> **一句话**：本期业务「题目 → 题型 → 掌握度」需要 Python 新增一个**向量服务**（dashscope embedding + COS 向量桶检索），用于题型聚集。**decide / generate / question-understand 全部不用动。**
+> **一句话**：本期业务「题目 → 题型 → 掌握度」需要 Python 新增一个**向量服务**（dashscope embedding + COS 向量桶检索），用于题型聚集。**本期只存题型名向量，`vector_type` 每次必传（恒为 `"topic"`）；decide / generate / question-understand 全部不用动。**
 
 ---
 
@@ -25,18 +25,18 @@
 
 ### 2.2 端点 1：`POST /api/tutoring/vector/put`（存向量）
 
-Java 发「文本 + key + metadata」→ Python 做 embedding → 存进向量桶。
+Java 发「题型名 + key + metadata + vector_type」→ Python 做 embedding → 存进向量桶。
 
 ```json
 // 请求
 {
   "key": "q_5001",
-  "text": "笼子里有鸡和兔共 35 个头，94 只脚，鸡和兔各有多少只？",
+  "text": "鸡兔同笼",               // 本期只传题型名（题目向量不落库）
+  "vector_type": "topic",          // ← 必填。本期唯一合法值 "topic"
   "metadata": {
-    "vector_type": "body",          // body=题目文本向量 / topic=题型名向量
     "student_id": "1001",
-    "topic_label": "鸡兔同笼",       // LLM 原始题型名
-    "canonical_label": "鸡兔同笼",   // 聚集后 canonical（可空）
+    "topic_label": "鸡兔同笼",      // LLM 原始题型名
+    "canonical_label": "鸡兔同笼",  // 聚集后 canonical
     "timestamp": "2026-08-18T10:00:00"
   }
 }
@@ -46,18 +46,18 @@ Java 发「文本 + key + metadata」→ Python 做 embedding → 存进向量�
 
 **Python 逻辑**：`text → dashscope embedding(768) → client.put_vectors(Bucket, Index, [{key, data:{float32}, metadata}])`。key 相同覆盖（upsert）。
 
-> 说明：一道题会存**两个向量**（`vector_type=body` 和 `vector_type=topic`），Java 分别调两次 put。
+> 说明：**本期只存题型名向量**，`vector_type` 恒为 `"topic"`（路由到题型名索引）。题目向量不落库（相似题功能预留 `question` 索引，后续启用）。
 
 ### 2.3 端点 2：`POST /api/tutoring/vector/query`（查最近邻）
 
-Java 发「文本 + top_k」→ Python embedding → 查最相似 Top-K 返回。
+Java 发「题型名 + top_k + vector_type」→ Python embedding → 查最相似 Top-K 返回。
 
 ```json
 // 请求
 {
-  "text": "笼子里有鸡和兔共 35 个头，94 只脚…",
+  "text": "鸡兔同笼问题",          // 待归并题型名
   "top_k": 3,
-  "vector_type": "body"            // 可选：只查 body 向量；缺省查全部
+  "vector_type": "topic"          // ← 必填。查哪个索引由后端显式声明，无缺省
 }
 // 响应
 {
@@ -71,12 +71,14 @@ Java 发「文本 + top_k」→ Python embedding → 查最相似 Top-K 返回�
 }
 ```
 
-**Python 逻辑**：`text → embedding(768) → client.query_vectors(Bucket, Index, QueryVector, TopK, Filter(vector_type), ReturnMetadata=True, ReturnDistance=True)`。**distance 越小越相似**（cosine）。
+**Python 逻辑**：`text → embedding(768) → client.query_vectors(Bucket, Index, QueryVector, TopK, ReturnMetadata=True, ReturnDistance=True)`。**distance 越小越相似**（cosine）。
 
 ## 三、Java↔Python 契约约定
 
 - 路径前缀：`/api/tutoring/vector/*`（与现有 `/api/tutoring/*` 一致）
 - **snake_case**（与 decide/generate/question-understand 一致）
+- **`vector_type` 必填路由键**：每次 put/query 后端显式声明写/查哪个索引——**无缺省、无跨索引查询**，Python 不做任何缺省猜测。本期唯一合法值 `"topic"`（题型名向量索引）。后端不感知 COS 索引名，路由全在 Python 内部。
+- **未知 `vector_type` → Python 返回 400**：后端传了映射表里不存在的类型 → 这是**正常失败路径**，Java 桥收到后降级（回退字符规则 + 原样落库）。
 - Java 侧经 `TopicVectorStore` 端口调这两个端点，**Java 不碰 embedding API / COS SDK**
 - **失败语义**：端点异常 Java 会降级（回退字符规则 + 原样落库），不阻塞主链路——Python 正常返回错误码即可
 

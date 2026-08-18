@@ -79,32 +79,33 @@ train_count += 1
 
 ```
 第 1 条题：向量桶无近邻 → 建 canonical（锚点诞生）
-第 N 条题：题目向量 + 题型名向量查最近邻 → 命中归并 / 未命中建新
-批量（定时）：散名全量聚类 → 补归并 + LLM 归纳规范名 → 重算聚合
+第 N 条题：题型名向量查最近邻 → 命中归并 / 未命中建新
+批量（手动）：散名全量聚类 → 补归并 + LLM 归纳规范名 → 重算聚合
 ```
 
 - **锚点是动态涌现的，不是预置的**：canonical 由「第一条相似题」创建（首见名/最高频名作 canonical 名），后续题目落进已有 canonical。池 = 向量桶里已聚集的题目，**从零长出来**。无题库也能跑通。
-- **聚集依据 = 题目向量为主 + 题型名向量为辅**：
-  - 题目文本是**事实**（稳定），题型名是 LLM **弱标注**（会飘）——题目向量相似度是同题型**强信号**（连发几条「鸡兔同笼」变体，题面相似度高）。
-  - 题型名向量补**「同题型不同题面」**（汽车轮子版鸡兔同笼，题面不似但题型名近义）。
-  - 双命中 → 高置信直接并；单命中 → 进候选 LLM 仲裁；都不中 → 建新。
-- **字符级规则前置**（零成本拦截）：「解X→X」「求X→X」「编辑距离 ≤1」等近字变体不送向量，省 embedding 调用（覆盖「解一元二次方程」类）。
+- **聚集依据 = 字符规则 + 题型名向量最近邻（单信号）**：
+  - 字符级规则先拦高频变体（「解X/求X」、编辑距离 ≤1），省 embedding 调用（覆盖「解一元二次方程」类）。
+  - 题型名向量处理**语义同型**（鸡兔同笼/鸡兔同笼问题/假设法；「相遇 vs 行程」是否合并由阈值定）。
+  - **题目向量本期不落库**（Python 契约「本期只传题型名」，对齐 Non-Goals）——聚集不依赖题面相似；题目文本仍落 MySQL 题目表作事实源，只是不参与向量聚集。相似题功能后续启用 `question` 索引。
+  - 命中 ≥ 高阈值 → 直接归并；中阈值区间 → 进候选 LLM 仲裁；未命中 → 建新。
 - **为什么向量而非纯 LLM 池约束**：池约束（`KpConstrainedAssociator`，已交付未接线）= LLM 从显式列表选最近；向量最近邻 = **同一逻辑的隐式向量空间版，且不需要预置池**（动态最近邻）。向量不依赖 LLM 调用（快/便宜/确定性强）、不受池 size 限制、天然处理语义变体。
 - **掌握表 key = canonical（落库时动态锚定）**：所有题型名入口（`decide` label、`analyze-question` 结果）落库时查最近邻归并后落表。**锚定在落库前发生**，掌握表从源头不裂行——落库后合并（聚合 merge）不回流掌握表，治标不治本。
-- **向量库存内容**：题目文本向量（key=题目 id，metadata：student_id / topic_label / canonical_label / timestamp）+ 题型名向量（参与查询）。**相似题展示不做**（用户拍板「后续存在做打算」），向量只作聚集依据。**存储实现：Python 侧 COS Vector Bucket（见 Decision 5），Java 经桥调用，不碰 SDK。**
+- **向量库存内容**：本期只存**题型名向量**（`vector_type="topic"` 路由到题型名索引；metadata：student_id / topic_label / canonical_label / timestamp）。题目向量不落库（相似题功能预留 `question` 索引，后续启用）。**相似题展示不做**（用户拍板「后续存在做打算」），向量只作聚集依据。**存储实现：Python 侧 COS Vector Bucket（见 Decision 5），Java 经桥调用，不碰 SDK。**
 
 ### 5. 向量存储 = Python 桥（COS Vector Bucket，无 Java SDK 方案）
 
 **前提**：COS 向量检索只有 Python/Go SDK（`CosVectorsClient`/`VectorService`），**无 Java SDK**——排除「Java 直调 SDK」。
 
 - **架构**：向量操作全在 Python 侧（复用已有 Java↔Python 桥模式，如 `TutoringLlmPort`）：
-  - Python 提供向量端点：`POST /api/tutoring/vector/put`（文本+metadata → dashscope embedding → `CosVectorsClient.put_vectors`）、`POST /api/tutoring/vector/query`（文本+top_k → embedding → `query_vectors` → 返回 hits）
+  - Python 提供向量端点：`POST /api/tutoring/vector/put`（题型名+metadata → dashscope embedding → `CosVectorsClient.put_vectors`）、`POST /api/tutoring/vector/query`（题型名+top_k → embedding → `query_vectors` → 返回 hits）
+  - **`vector_type` 必填路由键（Python 契约已定稿）**：每次 put/query 后端显式声明写/查哪个索引，**无缺省、无跨索引查询**；本期唯一合法值 `"topic"`（题型名向量索引）。未知 `vector_type` → Python 400 → **Java 降级**（回退字符规则 + 原样落库，正常失败路径）。后端不感知 COS 索引名——Python 内部 `COS_VECTORS_INDEXES` 路由表（本期 1 条，`question`/`rag` 为纯配置占位，后续加索引零代码改动）。
   - **embedding 在 Python 侧**（复用 gateway 的 dashscope 配置，text-embedding-v3，768 维）
   - Java 通过 `TopicVectorStore` 端口 HTTP 调 Python，**不碰 embedding API / COS SDK**
 - **为什么 Python 桥而非自研**：① 用上已开通的 Vector Bucket（数据量上来能力强）② embedding 复用 Python 现有 dashscope 配置（密钥不散到 Java）③ **后续 RAG 复用同一套向量基础设施**（用户拍板：业务后续要做 RAG，需打通）
 - **备选**：MySQL 自研（全 Java 零依赖，但不用 Vector Bucket、后续 RAG 要另起）；Java 直调 REST（自实现 COS 签名，成本高）
 - **注意**：COS 是对象存储，**Vector Bucket 是独立的向量存储桶类型**，不是「对象存储 + 向量插件」。
-- **Python 侧改动范围**：仅**新增**向量服务端点（decide/信号链路仍零改动）。
+- **Python 侧改动范围**：仅**新增**向量服务端点（`vector_type` 路由 + embedding + put/query；decide/信号链路仍零改动）。
 
 ### 6. embedding 模型 + 阈值：dashscope 优先，spike 后定（本期必做前置）
 
