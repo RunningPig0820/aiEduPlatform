@@ -4,7 +4,6 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.KpResolveDTO;
 import com.ai.edu.application.dto.learning.KpResolveRequest;
 import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
-import com.ai.edu.application.service.batch.KpQuestionTypeAggregationService;
 import com.ai.edu.application.service.learning.KpAppService;
 import com.ai.edu.application.service.learning.KpQuestionAnalysisAppService;
 import com.ai.edu.common.constant.ErrorCode;
@@ -37,8 +36,6 @@ public class KpResolutionController {
     private KpAppService kpAppService;
     @Resource
     private KpQuestionAnalysisAppService kpQuestionAnalysisAppService;
-    @Resource
-    private KpQuestionTypeAggregationService kpQuestionTypeAggregationService;
 
     /** POST /api/kp/resolve — 复用答疑内嵌解析管线（镜像 → 题型库年级匹配 → LLM 消歧 → 挂起）。 */
     @Operation(summary = "题型解析", description = "低置信返回 status=PENDING（不报错），携带候选供学生澄清")
@@ -51,13 +48,16 @@ public class KpResolutionController {
         return ApiResponse.success(kpAppService.resolve(request.getLabel(), studentId));
     }
 
-    /** POST /api/kp/aggregation/run — 手动触发题型库聚合（ADMIN）：联调即时验证沉淀，不等凌晨 3:17 定时。 */
-    @Operation(summary = "手动触发题型库聚合", description = "扫 RESOLVED obs 沉淀题型库（ADMIN），联调/运维用")
+    /**
+     * POST /api/kp/aggregation/run — 已停用（域 B 独立化 Decision 10）：
+     * obs 共现自动关联不再使用，改由 POST /api/kp/type/upsert 维护题型↔知识点（tasks 2.0.5/2.0.6）。
+     * 接口保留返回提示，避免历史调用方误以为聚合已执行。
+     */
+    @Operation(summary = "题型库聚合（已停用）", description = "域 B 独立化后 obs 共现自动关联停用，请用 POST /api/kp/type/upsert 维护")
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/aggregation/run")
-    public ApiResponse<Void> runAggregation() {
-        kpQuestionTypeAggregationService.aggregate();
-        return ApiResponse.success();
+    public ApiResponse<String> runAggregation() {
+        return ApiResponse.success("已停用：域 B 独立化后 obs 共现自动关联不再使用，请用 POST /api/kp/type/upsert 维护题型↔知识点");
     }
 
     /** POST /api/kp/analyze-question/image — 图片题目分析：multipart 图片 → 视觉模型直接看图 → 题型+知识点（不经 OCR）。 */

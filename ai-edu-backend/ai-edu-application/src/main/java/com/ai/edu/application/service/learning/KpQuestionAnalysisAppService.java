@@ -9,7 +9,6 @@ import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
-import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
@@ -27,13 +26,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 单题分析应用服务（POST /api/kp/analyze-question）——题目文本 → 题型名 → 关联知识点清单。
+ * 单题分析应用服务（POST /api/kp/analyze-question）——题目文本 → 题型名 →（查题型库）关联知识点。
  *
- * <p>本期范围（前端降级 2026-08-17）：
- * ① 题型库 canonical/别名命中 → 权威分布（数据驱动）；
- * ② 题库 miss → PENDING + 挂起 PENDING obs（空可接受，前端 keyword 搜索确认兜底）。
- * <p>「题库和知识点」池约束选择（D8）已抽到 {@link KpPoolAssociateService}，
- * 本期 analyze 未接线，待独立迭代启用（题库 miss → 学段池 → LLM 从池选 top-N → 恒非空）。
+ * <p>域 B 独立化（Decision 10，2026-08-18）：入口只到「题型」阶段——识别题型后查题型库，
+ * 命中返回权威分布 / 未命中返回「仅题型 + 空知识点」；**不再自动关联**（不顺带 Python kps、
+ * 不挂起 PENDING obs、不写 t_kp_derived_obs）。题型↔知识点关联由 ADMIN 维护接口手动配（见 tasks 2.0.5）。
+ * <p>canonical 返回（「解一元二次方程」→「一元二次方程」）由 2.7.2 聚集 post-process 接入。
  */
 @Slf4j
 @Service
@@ -49,8 +47,6 @@ public class KpQuestionAnalysisAppService {
     private QuestionTypeKpRepository questionTypeKpRepository;
     @Resource
     private KgKnowledgePointRepository kgKnowledgePointRepository;
-    @Resource
-    private DerivedKpObsRepository derivedKpObsRepository;
     @Resource
     private FileStorageService fileStorageService;
     @Resource
@@ -70,11 +66,11 @@ public class KpQuestionAnalysisAppService {
             }
         }
 
-        // ② 题库 miss → PENDING + 挂起（空可接受；池约束选择待「题库和知识点」迭代接线）
-        if (studentId != null && !topics.isEmpty()) {
-            derivedKpObsRepository.upsertPendingIfAbsent(studentId, topics.get(0), grade);
+        // ② 题库 miss → 仅题型（域 B 独立化：不挂起 PENDING、不写 obs；canonical 由 2.7.2 聚集返回）
+        if (topics.isEmpty()) {
+            return QuestionAnalysisDTO.pending(null, List.of()); // 题型识别失败 → PENDING（不报错）
         }
-        return QuestionAnalysisDTO.pending(topics.isEmpty() ? null : topics.get(0), List.of());
+        return QuestionAnalysisDTO.resolved(topics.get(0), 0, List.of());
     }
 
     /**
@@ -106,37 +102,8 @@ public class KpQuestionAnalysisAppService {
             }
         }
 
-        // ⑤ Python 顺带知识点（有则展示，镜像校验，不强求）
-        List<QuestionAnalysisKpDTO> kps = result.getQuestionKps() == null ? List.of()
-                : result.getQuestionKps().stream()
-                        .map(this::imageKpDto)
-                        .filter(Objects::nonNull)
-                        .toList();
-        if (!kps.isEmpty()) {
-            return QuestionAnalysisDTO.resolved(topicLabels.get(0), 60, kps);
-        }
-
-        // ⑥ 无关联 → PENDING + 挂起
-        if (studentId != null) {
-            derivedKpObsRepository.upsertPendingIfAbsent(studentId, topicLabels.get(0), grade);
-        }
-        return QuestionAnalysisDTO.pending(topicLabels.get(0), List.of());
-    }
-
-    /** Python 顺带知识点 label → DTO（镜像反查 URI；不在镜像丢弃）。 */
-    private QuestionAnalysisKpDTO imageKpDto(String label) {
-        if (label == null || label.isBlank()) {
-            return null;
-        }
-        String uri = kgKnowledgePointRepository.findByLabel(label)
-                .map(KgKnowledgePoint::getUri)
-                .orElse(null);
-        if (uri == null) {
-            return null;
-        }
-        return QuestionAnalysisKpDTO.builder()
-                .kpUri(uri).kpLabel(label).gradeRange(null).ratio(null)
-                .build();
+        // ⑤ 题库 miss → 仅题型（域 B 独立化：不顺带 Python kps、不挂起 PENDING；canonical 由 2.7.2 聚集返回）
+        return QuestionAnalysisDTO.resolved(topicLabels.get(0), 0, List.of());
     }
 
     /** 无会话图片上传 COS（analyze 无 tutoring 会话）。 */

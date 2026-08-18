@@ -3,7 +3,6 @@ package com.ai.edu.interfaces.api.learning;
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
 import com.ai.edu.application.dto.learning.QuestionAnalysisKpDTO;
-import com.ai.edu.application.service.batch.KpQuestionTypeAggregationService;
 import com.ai.edu.application.service.learning.KpQuestionAnalysisAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -17,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 /**
@@ -28,15 +28,12 @@ class KpQuestionAnalysisControllerTest {
 
     private KpResolutionController controller;
     private KpQuestionAnalysisAppService appService;
-    private KpQuestionTypeAggregationService aggregationService;
 
     @BeforeEach
     void setUp() {
         appService = mock(KpQuestionAnalysisAppService.class);
-        aggregationService = mock(KpQuestionTypeAggregationService.class);
         controller = new KpResolutionController();
         setField(controller, "kpQuestionAnalysisAppService", appService);
-        setField(controller, "kpQuestionTypeAggregationService", aggregationService);
     }
 
     @Test
@@ -55,12 +52,12 @@ class KpQuestionAnalysisControllerTest {
     }
 
     @Test
-    @DisplayName("aggregation/run：触发题型库聚合（ADMIN，@PreAuthorize 由 HTTP 层拦截，单测直调绕过）")
-    void aggregationRun_triggers() {
-        ApiResponse<Void> response = controller.runAggregation();
+    @DisplayName("aggregation/run：已停用（域 B 独立化）——返回提示，不再执行 obs 共现聚合")
+    void aggregationRun_stopped() {
+        ApiResponse<String> response = controller.runAggregation();
 
         assertEquals(ErrorCode.SUCCESS, response.getCode());
-        verify(aggregationService).aggregate();
+        assertTrue(response.getData().contains("已停用"));
     }
 
     @Test

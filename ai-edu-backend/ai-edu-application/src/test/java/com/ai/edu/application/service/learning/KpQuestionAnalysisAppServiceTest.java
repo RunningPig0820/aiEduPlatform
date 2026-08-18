@@ -9,7 +9,6 @@ import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
 import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
-import com.ai.edu.domain.learning.repository.DerivedKpObsRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
@@ -50,7 +49,6 @@ class KpQuestionAnalysisAppServiceTest {
     private QuestionTypeRepository questionTypeRepository;
     private QuestionTypeKpRepository questionTypeKpRepository;
     private KgKnowledgePointRepository kgRepository;
-    private DerivedKpObsRepository obsRepository;
     private FileStorageService fileStorageService;
     private TutoringLlmPort tutoringLlmPort;
 
@@ -61,7 +59,6 @@ class KpQuestionAnalysisAppServiceTest {
         questionTypeRepository = mock(QuestionTypeRepository.class);
         questionTypeKpRepository = mock(QuestionTypeKpRepository.class);
         kgRepository = mock(KgKnowledgePointRepository.class);
-        obsRepository = mock(DerivedKpObsRepository.class);
         fileStorageService = mock(FileStorageService.class);
         tutoringLlmPort = mock(TutoringLlmPort.class);
         service = new KpQuestionAnalysisAppService();
@@ -70,7 +67,6 @@ class KpQuestionAnalysisAppServiceTest {
         setField(service, "questionTypeRepository", questionTypeRepository);
         setField(service, "questionTypeKpRepository", questionTypeKpRepository);
         setField(service, "kgKnowledgePointRepository", kgRepository);
-        setField(service, "derivedKpObsRepository", obsRepository);
         setField(service, "fileStorageService", fileStorageService);
         setField(service, "tutoringLlmPort", tutoringLlmPort);
     }
@@ -94,7 +90,6 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("RESOLVED", dto.getStatus());
         assertEquals(60, dto.getConfidence());
         assertEquals(2, dto.getKnowledgePoints().size());
-        verify(obsRepository, never()).upsert(any());
     }
 
     @Test
@@ -114,18 +109,18 @@ class KpQuestionAnalysisAppServiceTest {
     }
 
     @Test
-    @DisplayName("② 题库 miss → PENDING + 挂起（空可接受，keyword 搜索确认兜底）")
-    void catalogMiss_pendingHangs() {
+    @DisplayName("② 题库 miss → 仅题型 RESOLVED + 空知识点（域 B 独立化：不挂起、不写 obs）")
+    void catalogMiss_returnsResolvedNoKp() {
         when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
         when(understandingPort.understand(TEXT, 4)).thenReturn(List.of("鸡兔同笼"));
         when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
 
         QuestionAnalysisDTO dto = service.analyze(TEXT, STUDENT_ID);
 
-        assertEquals("PENDING", dto.getStatus());
+        assertEquals("RESOLVED", dto.getStatus());
+        assertEquals("鸡兔同笼", dto.getTopicLabel());
+        assertEquals(0, dto.getConfidence());
         assertTrue(dto.getKnowledgePoints().isEmpty());
-        verify(obsRepository).upsertPendingIfAbsent(STUDENT_ID, "鸡兔同笼", 4);
-        verify(kgRepository, never()).findLabelsByStage(anyString());
     }
 
     @Test
@@ -162,8 +157,8 @@ class KpQuestionAnalysisAppServiceTest {
     }
 
     @Test
-    @DisplayName("图片：题库 miss → Python 顺带知识点展示（镜像校验，不强求）")
-    void image_questionKpsShown() {
+    @DisplayName("图片：题库 miss → 仅题型 RESOLVED + 空知识点（域 B 独立化：不顺带 kps、不挂起）")
+    void image_catalogMiss_returnsResolvedNoKp() {
         when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
         when(fileStorageService.generatePresignedUrl(anyString(), anyInt())).thenReturn("http://cos/signed");
         when(questionTypeRepository.findTopTopicLabels(20)).thenReturn(List.of("鸡兔同笼"));
@@ -171,13 +166,14 @@ class KpQuestionAnalysisAppServiceTest {
                 .thenReturn(QuestionUnderstandResult.builder()
                         .topicLabels(List.of("鸡兔同笼")).questionKps(List.of("二元一次方程组")).build());
         when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
-        when(kgRepository.findByLabel("二元一次方程组")).thenReturn(Optional.of(kp("uri-er", "二元一次方程组")));
 
         QuestionAnalysisDTO dto = service.analyzeImage(new byte[]{1}, "q.png", STUDENT_ID);
 
         assertEquals("RESOLVED", dto.getStatus());
-        assertEquals(1, dto.getKnowledgePoints().size());
-        assertEquals("二元一次方程组", dto.getKnowledgePoints().get(0).getKpLabel());
+        assertEquals("鸡兔同笼", dto.getTopicLabel());
+        assertEquals(0, dto.getConfidence());
+        assertTrue(dto.getKnowledgePoints().isEmpty(), "顺带知识点不再展示（域 B 独立化）");
+        verify(kgRepository, never()).findByLabel(anyString());
     }
 
     @Test

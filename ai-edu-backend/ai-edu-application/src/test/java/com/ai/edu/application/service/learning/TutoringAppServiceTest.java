@@ -114,7 +114,7 @@ class TutoringAppServiceTest {
         when(masteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(fileStorageService.generatePresignedUrl(anyString(), anyInt()))
                 .thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
-        when(kpResolver.resolve(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
+        when(kpResolver.resolveReadOnly(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
         when(derivedKpObsRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(studentTopicMasteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(studentTopicMasteryRepository.findByStudentAndTopic(eq(STUDENT_ID), any())).thenReturn(Optional.empty());

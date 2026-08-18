@@ -625,8 +625,8 @@ public class TutoringAppService {
                 if (item.getKpLabel() == null || item.getKpLabel().isBlank()) {
                     continue;
                 }
-                // 掌握度主体翻转：label 是题型，归一化后作掌握度主键；resolve 仍产出 kp_uri 落 obs（供覆盖度派生）
-                KpResolution resolution = kpResolver.resolve(item.getKpLabel(), session.getStudentId());
+                // 掌握度主体翻转：label 是题型，归一化后作掌握度主键；resolveReadOnly 只做解析判断（不写 t_kp_derived_obs，域 B 独立化 Decision 10）
+                KpResolution resolution = kpResolver.resolveReadOnly(item.getKpLabel(), session.getStudentId());
                 if (!resolution.isResolved() || resolution.getUri() == null) {
                     log.warn("[tutoring] 题型 label 未命中 URI，不落题型掌握度（PENDING 已在 obs）: {}", item.getKpLabel());
                     continue;

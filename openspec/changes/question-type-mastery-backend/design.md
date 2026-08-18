@@ -99,7 +99,7 @@ train_count += 1
 **前提**：COS 向量检索只有 Python/Go SDK（`CosVectorsClient`/`VectorService`），**无 Java SDK**——排除「Java 直调 SDK」。
 
 - **架构**：向量操作全在 Python 侧（复用已有 Java↔Python 桥模式，如 `TutoringLlmPort`）：
-  - Python 提供向量端点：`POST /api/tutoring/vector/put`（题型名+metadata → dashscope embedding → `CosVectorsClient.put_vectors`）、`POST /api/tutoring/vector/query`（题型名+top_k → embedding → `query_vectors` → 返回 hits）
+  - Python 提供向量端点：`POST /api/tutoring/vector/put`（题型名+metadata → dashscope embedding → `CosVectorsClient.put_vectors`）、`POST /api/tutoring/vector/query`（题型名+top_k → embedding → `query_vectors` → 返回 hits）。**query 响应字段名 `vectors`（非 `hits`）**——对齐 COS `query_vectors` 返回结构，Python 已实现（ai-edu-ai-service b7159c5）；Java 桥解析 `{"vectors":[{key,metadata,distance}]}`
   - **`vector_type` 必填路由键（Python 契约已定稿）**：每次 put/query 后端显式声明写/查哪个索引，**无缺省、无跨索引查询**；本期唯一合法值 `"topic"`（题型名向量索引）。未知 `vector_type` → Python 400 → **Java 降级**（回退字符规则 + 原样落库，正常失败路径）。后端不感知 COS 索引名——Python 内部 `COS_VECTORS_INDEXES` 路由表（本期 1 条，`question`/`rag` 为纯配置占位，后续加索引零代码改动）。
   - **embedding 在 Python 侧**（复用 gateway 的 dashscope 配置，text-embedding-v3，768 维）
   - Java 通过 `TopicVectorStore` 端口 HTTP 调 Python，**不碰 embedding API / COS SDK**
