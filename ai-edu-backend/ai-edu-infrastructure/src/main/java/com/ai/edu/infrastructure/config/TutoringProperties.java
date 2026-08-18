@@ -106,6 +106,26 @@ public class TutoringProperties implements TutoringConfig {
         return python.getQuestionUnderstandPath();
     }
 
+    @Override
+    public Duration vectorPutTimeout() {
+        return timeout.getVectorPut();
+    }
+
+    @Override
+    public String vectorPutPath() {
+        return python.getVectorPutPath();
+    }
+
+    @Override
+    public Duration vectorQueryTimeout() {
+        return timeout.getVectorQuery();
+    }
+
+    @Override
+    public String vectorQueryPath() {
+        return python.getVectorQueryPath();
+    }
+
     @Data
     public static class Guardrail {
         /** 轮次上限（≤ 领域硬上限 20） */
@@ -128,6 +148,8 @@ public class TutoringProperties implements TutoringConfig {
         private Duration generate = Duration.ofSeconds(60);
         private Duration ocr = Duration.ofSeconds(30);
         private Duration questionUnderstand = Duration.ofSeconds(30);
+        private Duration vectorPut = Duration.ofSeconds(30);
+        private Duration vectorQuery = Duration.ofSeconds(30);
     }
 
     @Data
@@ -142,5 +164,7 @@ public class TutoringProperties implements TutoringConfig {
         private String generatePath = "/api/tutoring/generate";
         private String ocrPath = "/api/ocr/recognize";
         private String questionUnderstandPath = "/api/tutoring/question-understand";
+        private String vectorPutPath = "/api/tutoring/vector/put";
+        private String vectorQueryPath = "/api/tutoring/vector/query";
     }
 }

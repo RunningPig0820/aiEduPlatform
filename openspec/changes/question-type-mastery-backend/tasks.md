@@ -68,10 +68,10 @@
 
 ### 2.3 向量服务（Python 桥）
 
-- [ ] 2.3.1 domain 端口 `TopicVectorStore`（putVector、queryNearestTop1）
-- [ ] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case；**`vector_type` 必填路由键，本期唯一 `"topic"`**——契约已定稿）
-- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；**只存题型名向量，`vector_type` 恒为 `"topic"`**，metadata：student_id/topic_label/canonical_label/timestamp；**query 响应字段是 `vectors` 不是 `hits`**——Python 已交付对齐（ai-edu-ai-service b7159c5），解析用 `{"vectors":[{key,metadata,distance}]}`；**put 后 ~10s 异步生效，立即 query 会 miss——首题建锚无需立查，「put 后查」容忍延迟/重试**）
-- [ ] 2.3.4 配置：Python 向量端点 URL/超时（复用 TutoringProperties 家族）
+- [x] 2.3.1 domain 端口 `TopicVectorStore`（putVector、queryNearestTop1）
+- [x] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case；**`vector_type` 必填路由键，本期唯一 `"topic"`**——契约已定稿）
+- [x] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；**只存题型名向量，`vector_type` 恒为 `"topic"`**，metadata：student_id/topic_label/canonical_label/timestamp；**query 响应字段是 `vectors` 不是 `hits`**——Python 已交付对齐（ai-edu-ai-service b7159c5），解析用 `{"vectors":[{key,metadata,distance}]}`；**put 后 ~10s 异步生效，立即 query 会 miss——首题建锚无需立查，「put 后查」容忍延迟/重试**）
+- [x] 2.3.4 配置：Python 向量端点 URL/超时（复用 TutoringProperties 家族）
 
 ### 2.4 字符级规则
 

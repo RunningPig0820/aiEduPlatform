@@ -36,4 +36,10 @@ public final class TutoringConstants {
 
     /** OCR 调用超时 */
     public static final Duration OCR_TIMEOUT = Duration.ofSeconds(30);
+
+    /** 题型名向量 put 调用超时（embedding + 写入向量桶） */
+    public static final Duration VECTOR_PUT_TIMEOUT = Duration.ofSeconds(30);
+
+    /** 题型名向量 query 调用超时（embedding + 检索） */
+    public static final Duration VECTOR_QUERY_TIMEOUT = Duration.ofSeconds(30);
 }

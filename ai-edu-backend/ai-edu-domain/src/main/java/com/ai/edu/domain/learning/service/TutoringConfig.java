@@ -58,6 +58,18 @@ public interface TutoringConfig {
     /** Python 图片题目理解端点路径（POST /api/tutoring/question-understand，视觉模型看图）。 */
     String questionUnderstandPath();
 
+    /** 题型名向量 put 调用超时（embedding + 写入向量桶，30s 兜底）。 */
+    Duration vectorPutTimeout();
+
+    /** Python 题型名向量 put 端点路径（POST /api/tutoring/vector/put）。 */
+    String vectorPutPath();
+
+    /** 题型名向量 query 调用超时（embedding + 检索，30s 兜底）。 */
+    Duration vectorQueryTimeout();
+
+    /** Python 题型名向量 query 端点路径（POST /api/tutoring/vector/query）。 */
+    String vectorQueryPath();
+
     /** 默认配置（回退值，与 TutoringConstants 对齐；测试/未注入时使用）。 */
     static TutoringConfig defaults() {
         return new TutoringConfig() {
@@ -129,6 +141,26 @@ public interface TutoringConfig {
             @Override
             public String questionUnderstandPath() {
                 return "/api/tutoring/question-understand";
+            }
+
+            @Override
+            public Duration vectorPutTimeout() {
+                return TutoringConstants.VECTOR_PUT_TIMEOUT;
+            }
+
+            @Override
+            public String vectorPutPath() {
+                return "/api/tutoring/vector/put";
+            }
+
+            @Override
+            public Duration vectorQueryTimeout() {
+                return TutoringConstants.VECTOR_QUERY_TIMEOUT;
+            }
+
+            @Override
+            public String vectorQueryPath() {
+                return "/api/tutoring/vector/query";
             }
         };
     }
