@@ -153,6 +153,24 @@ class TopicClusterAppServiceTest {
                         && mastery.getTrainCount() == 2));  // 只统计 0.7+1.0，null 跳过
     }
 
+    @Test
+    @DisplayName("AGG-003: PENDING 归属后聚合——题目 canonical 回填后参与掌握表重算（归属前 skipsPending 跳过）")
+    void recomputeMastery_afterPendingAssigned() {
+        when(questionRepo.findPendingTopicLabels()).thenReturn(List.of());
+        // 归属前：canonical 空（PENDING）→ skipsPending 跳过；归属后：canonical 回填 → 聚合进掌握表
+        when(questionRepo.findAll()).thenReturn(List.of(
+                record(1001L, "鸡兔同笼", "鸡兔同笼", new BigDecimal("1.0"))));
+
+        service.cluster();
+
+        verify(masteryRepo).upsert(org.mockito.ArgumentMatchers.argThat(
+                m -> m instanceof StudentTopicMastery mastery
+                        && mastery.getStudentId() == 1001L
+                        && "鸡兔同笼".equals(mastery.getTopicLabel())
+                        && mastery.getTrainCount() == 1
+                        && mastery.getMasteryLevel().getValue() == 100));
+    }
+
     private void inject(Object target, String fieldName, Object value) {
         try {
             Field f = target.getClass().getDeclaredField(fieldName);

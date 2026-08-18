@@ -9,6 +9,7 @@ import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.repository.QuestionTypeAliasRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,6 +103,15 @@ class KpQuestionTypeMaintenanceFlowTest {
                 .thenAnswer(inv -> Optional.of(KgKnowledgePoint.create(inv.getArgument(0), inv.getArgument(0))));
     }
 
+    private void injectAnalysis(KpQuestionAnalysisAppService analysis) {
+        // 2.7 改造后 analyze 走 analyzeResult：题目落库 + 命中路径用权威名（不调聚集），仍需注入新依赖
+        StudentQuestionRecordRepository recordRepo = mock(StudentQuestionRecordRepository.class);
+        when(recordRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        TopicLabelAggregationService aggregation = mock(TopicLabelAggregationService.class);
+        inject(analysis, "questionRecordRepository", recordRepo);
+        inject(analysis, "topicLabelAggregationService", aggregation);
+    }
+
     @Test
     @DisplayName("闭环：维护配题型+分布+别名 → analyze 入口命中返回权威分布（不依赖自动聚合）")
     void maintenanceWrite_thenAnalyzeHits() {
@@ -126,6 +136,7 @@ class KpQuestionTypeMaintenanceFlowTest {
         inject(analysis, "questionTypeRepository", qtRepo);
         inject(analysis, "questionTypeKpRepository", qtKpRepo);
         inject(analysis, "kgKnowledgePointRepository", kgRepo);
+        injectAnalysis(analysis); // 2.7: 题目落库 + 聚集依赖注入
 
         QuestionAnalysisDTO dto = analysis.analyze("笼子里有鸡和兔", STUDENT_ID);
 
