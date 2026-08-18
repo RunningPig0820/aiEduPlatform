@@ -125,6 +125,19 @@ class TopicLabelAggregationServiceTest {
                 q -> q instanceof QuestionType qt && "假设法".equals(qt.getTopicLabel())));
     }
 
+    @Test
+    @DisplayName("边界固化: 相遇→行程 distance 0.332 > 0.2 → 不归并建新（spike 实测，宁可拆不误并）")
+    void semanticPair_notMerged() {
+        when(vectorStore.queryNearestTop1("相遇问题")).thenReturn(Optional.of(neighbor(0.332, "行程问题")));
+
+        String canonical = service.aggregate("相遇问题", STUDENT_ID);
+
+        assertEquals("相遇问题", canonical, "0.332 超出 0.2 阈值 → 建新，不归并到行程问题");
+        verify(aliasRepo, never()).upsert(any());
+        verify(qtRepo).upsert(org.mockito.ArgumentMatchers.argThat(
+                q -> q instanceof QuestionType qt && "相遇问题".equals(qt.getTopicLabel())));
+    }
+
     // ---------- 首题建锚（NOR-005） ----------
 
     @Test
