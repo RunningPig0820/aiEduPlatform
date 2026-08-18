@@ -27,6 +27,7 @@
 - 题库建设（`t_question` 题库域已有，与「学生作答记录」是两回事）。
 - 全局题型库（跨学生沉淀 canonical）——本期归一是 per 全局的题型名，掌握度仍 per 学生。
 - **只记录「题目→题型」**：本期不新增「题型→知识点」数据写入；`t_kp_derived_obs`/`t_kp_question_type`/`t_kp_question_type_alias` 保留不动、独立演进。
+- **题型↔知识点自动关联不做**：入口不自动关联知识点——查表只读 + 独立维护（见 Decision 10）；obs 共现自动聚合/挂起/澄清批处理本期停用。
 - **不做定时任务**：聚合/维护/批量聚集全部按钮手动触发（现有 `POST /aggregation/run` + 新增手动接口），不新增 `@Scheduled`。
 
 ## Decisions
@@ -151,8 +152,18 @@ GET /students/{id}/mastery
 - **canonical 共享**：两域共享 canonical 名（都是「鸡兔同笼」），经别名表作为收敛接缝——域 A 的向量归并写别名表，域 B 的 analyze 命中自动受益，但**不互相阻塞**。
 - **analyze 返回 canonical（前端契约）**：`analyze-question` 返回的 `topicLabel` 必须过聚集 post-process（返回 canonical）——前端用它查 `getMastery`，若返回原始名（「解一元二次方程」）会 miss 掌握表（key=「一元二次方程」）→ 误判「未开始」。**前端联调契约**：
   - `analyze.topicLabel` = canonical（查得到掌握度）
-  - `getMastery` PENDING 项 = obs（域 B 待确认）；未开始 = 不在 `items[]`；masteryLevel 分桶 = 掌握表累计平均
+  - `getMastery` PENDING 项 = 题目记录有但 canonical 未归属（域 B 独立化后不再来自 obs）；未开始 = 不在 `items[]`；masteryLevel 分桶 = 掌握表累计平均
   - 题目列表 `score` 与掌握表聚合同源（落库生效分值，可追溯「为什么 64%」）
+
+### 10. 域 B 独立化：题型↔知识点 = 查表只读 + 独立维护（去自动关联）
+
+**目标**：所有入口只到「题型」阶段；题型↔知识点关联由**独立逻辑**维护，入口只读。业务不成熟期不做自动关联。
+
+- **入口流程（analyze-question / 答疑 decide）**：识别题型名 → 查题型库（`findByTopicLabelOrAlias` → `t_kp_question_type_kp` 分布桶）→ **命中返回权威分布 / 未命中返回「仅题型 + canonical + 空知识点」**——不挂起、不写 obs、不顺带 LLM kps。
+- **独立逻辑 = ADMIN 维护接口**：题型 CRUD + 题型↔知识点分布绑定（`t_kp_question_type` / `t_kp_question_type_kp` / 别名表）——演示手动配几条数据，入口查表即命中；是下期「题型库管理后台」的雏形。**替代「obs 共现 → LLM 归纳 ratio」的自动涌现**。
+- **停用自动涌现链路**：Python `understandQuestion` 顺带 kps 的消费、`upsertPendingIfAbsent` 挂起、学生 vote 澄清、聚合 `aggregate`（obs 共现自动关联）、`KpCoverageAppService` 派生（前端已不消费）。
+- **PENDING 语义更新（承接 Decision 9）**：域 B 独立化后 analyze/decide 不再产生「题型→知识点」挂起 obs → `getMastery` 的 `status=PENDING` **不再来自 obs**，改为「题目记录有但 canonical 未归属」（题目表 `canonical_label` 为空，待聚集/待归属）。
+- **为什么**：演示项目 + 题型↔知识点业务不成熟——自动关联引入 obs 状态机/聚合批处理/LLM 归纳 5 个环节，分散本期核心（题目→题型→掌握度）；手动维护一张表、入口查表，可演示、可解释、可控。
 
 ## Risks / Trade-offs
 

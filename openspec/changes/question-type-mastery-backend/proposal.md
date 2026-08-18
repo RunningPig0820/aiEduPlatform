@@ -14,6 +14,7 @@
 - **相似题检索不做**：题目向量本期不落库（后续独立功能），本期向量库只存「canonical 题型名 → 向量」。
 - **本期只记录「题目→题型」，与「题型→知识点」解耦**：掌握度链路只消费题目记录与向量聚集；`t_kp_derived_obs`/`t_kp_question_type`/`t_kp_question_type_alias`（题型→知识点域）保留不动、独立存在——一个环节故障不影响另一个。
 - **聚合改按钮手动触发，不做定时任务**：移除 `KpBatchScheduler` 定时（3:17 聚合 / 3:37 维护），保留 `POST /aggregation/run` 手动按钮；批量聚集同样手动触发（面试项目不引入 @Scheduled）。
+- **域 B 独立化（题型↔知识点 = 查表只读 + 独立维护，去自动关联）**：所有入口（analyze-question / 答疑）识别到**题型**即停，不再自动往下关联知识点——查题型库命中返回权威分布、未命中返回「仅题型+canonical」（空知识点，不挂起/不写 obs/不顺带 LLM kps）。题型↔知识点关联由**独立逻辑**（ADMIN 维护接口手动配）维护，入口只读——替代「obs 共现 → LLM 归纳 → 分布桶」的自动涌现链路（聚合/挂起/澄清批处理本期停用）。业务不成熟期不自动关联，可演示、可解释、可控。
 
 ## Capabilities
 
@@ -34,4 +35,5 @@
 - **新增端点**：按题型查题目列表 `GET /students/{id}/topics/{topicLabel}/questions`。
 - **契约**：`GET /students/{id}/mastery` 响应变更（BREAKING，前端联调）。
 - **依赖**：dashscope text-embedding-v3（Python gateway 复用，成本已确认）+ 阈值 spike。
+- **域 B 独立化**：analyze/答疑入口停写「题型→知识点」obs、停用挂起/澄清/聚合自动关联；新增 ADMIN 维护接口（题型↔知识点手动配，查表只读）；`getMastery` PENDING 语义改「题目 canonical 未归属」（不再 obs）。
 - **Python 改动范围**：仅**新增**向量服务端点（decide/信号链路仍零改动；COS 无 Java SDK，向量走 Python 桥）。

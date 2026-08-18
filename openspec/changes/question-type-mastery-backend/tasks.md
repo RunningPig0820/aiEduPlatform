@@ -41,10 +41,18 @@
 
 ## 2. 题型动态聚集改造（独立打通，不依赖 AI 答疑）
 
-### 2.0 定时停用 + 手动触发（用户拍板：面试项目不做定时）
+### 2.0 定时停用 + 手动触发 + 域 B 独立化（用户拍板：面试项目不做定时，数据更独立）
 
 - [x] 2.0.1 移除 `KpBatchScheduler.aggregate()` 的 `@Scheduled`（凌晨 3:17），题型库聚合保留 `POST /api/kp/aggregation/run` 手动按钮（ADMIN）
 - [x] 2.0.2 移除 `KpBatchScheduler.maintain()` 的 `@Scheduled`（凌晨 3:37），维护闭环（rejudgePending）改手动触发（本期可暂不跑）
+
+> **域 B 独立化（用户拍板）**：所有入口（analyze-question / 答疑 decide）识别到**题型**即停，不再自动往下关联知识点——查题型库表命中返回权威分布、未命中返回「仅题型+canonical」（空知识点）。题型↔知识点关联 = **独立逻辑**（ADMIN 维护接口手动配），不做自动关联/obs 共现聚合/定时任务。
+
+- [ ] 2.0.3 入口只到题型：`KpQuestionAnalysisAppService.analyze` 去掉 Python 顺带 kps 消费与挂起分支——查题型库命中 → `catalogResult` 返回权威分布；未命中 → 返回 canonical topicLabel + 空 knowledgePoints（**不再** `upsertPendingIfAbsent` 挂起 / PENDING）
+- [ ] 2.0.4 答疑 decide 停写「题型→知识点」obs：`TutoringAppService` 不再调 `kpResolver.resolve` 写 `t_kp_derived_obs`（掌握信号链路不变，只停域 B 观测写入；`resolve` 接口代码保留不删）
+- [ ] 2.0.5 题型↔知识点维护接口（ADMIN，独立逻辑）：`POST /api/kp/type/upsert`（建/更新题型 CANDIDATE/STABLE）+ `POST /api/kp/type/{id}/kp`（绑 kp_uri/ratio/grade_range 分布桶）+ 别名维护——替代「obs 共现自动涌现」，演示手动配数据，入口查表即命中
+- [ ] 2.0.6 停用 obs 共现自动关联：`POST /api/kp/aggregation/run` 逻辑停用（代码保留、不再依赖/不再建议用于入口关联）；`KpCoverageAppService` 派生保留但前端不消费（现状）
+- [ ] 2.0.7 域 B 独立化验证：analyze 未命中题型库返回「仅题型」不挂起 / 命中返回权威分布 / 维护接口配数据后入口命中 / 答疑不再写 obs（回归全量测试）
 
 ### 2.1 表结构
 

@@ -303,8 +303,21 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 ### 8. 前端联调契约（题型分析页 ↔ 掌握度）
 
 - **analyze 返回 canonical**：`analyze-question` 返回的 `topicLabel` 是**动态聚集后的 canonical**（「解一元二次方程」→「一元二次方程」）——前端用它直接查 `getMastery`，能对上，不会误判「未开始」。
+- **域 B 独立化（analyze 只到题型）**：`analyze-question` 识别题型后**不再自动关联知识点**——`knowledgePoints` 来自题型库权威分布（有则返回 / 无则空），不会因「无知识点」挂起 PENDING。题型↔知识点关联由 ADMIN 维护接口手动配（见 9）。
 - **PENDING 三态语义**（不能混）：
-  - `status=PENDING`（masteryLevel=0）= **待确认**（obs 挂起，域 B analyze 存疑）→ 展示「待确认」
+  - `status=PENDING`（masteryLevel=0）= **待归属**（题目记录有但 canonical 未聚集/未确认——题目表 `canonical_label` 为空）→ 展示「待确认」；域 B 独立化后不再来自 obs 挂起
   - 不在 `items[]` = **未开始** → 引导去 AI 答疑做题
   - `masteryLevel` 连续% 分桶 = 已掌握/练习中/待巩固（掌握表累计平均）
 - **score 同源可追溯**：「查看题目」列表返回的 `score`（0.0/0.5/1.0，含打折）= 掌握表聚合用的同一个信号——「为什么 64%」点开题目列表能对上。
+
+### 9. 题型↔知识点维护接口（ADMIN，域 B 独立逻辑）
+
+> 域 B 独立化：入口只读查表，关联由维护接口写入（**替代「obs 共现自动聚合」**——`POST /api/kp/aggregation/run` 逻辑停用，不再用于入口关联）。
+
+| 接口 | 说明 |
+|------|------|
+| `POST /api/kp/type/upsert` | 建/更新题型（topicLabel → CANDIDATE/STABLE） |
+| `POST /api/kp/type/{id}/kp` | 绑定知识点分布（kpUri + ratio + gradeRange）→ `t_kp_question_type_kp` |
+| 别名维护 | 变体题型名 → canonical（复用 `t_kp_question_type_alias`） |
+
+> 演示用法：管理后台手动配几条「鸡兔同笼 → 鸡兔同笼问题(ratio 0.6) / 假设法(ratio 0.4)」→ 入口 `analyze-question` 命中题型库即返回权威分布；未命中返回「仅题型+canonical」，前端展示无关联态（不报错）。
