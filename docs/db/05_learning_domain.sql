@@ -360,3 +360,12 @@ CREATE TABLE IF NOT EXISTS `t_student_question_record` (
     INDEX `idx_student` (`student_id`) COMMENT '按学生查题目记录（掌握度追溯/题目列表）',
     INDEX `idx_student_canonical` (`student_id`, `canonical_label`) COMMENT '按学生+canonical 查题目（掌握度页「查看题目」）'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生题目记录表（掌握度事实源）';
+-- =====================================================
+-- V19：题目记录表 score 改为可空——analyze 贴题（无对错信号）score=null 表达「无信号」
+-- 与「答错 score=0.00」区分：掌握表重算跳过 null（不拉低掌握度），SIG-007「不产生信号」语义落地
+-- 来源：Flyway V19__alter_t_student_question_record_score_nullable.sql
+-- 注意：spring.flyway.enabled=false，需手动在 ai_edu_learning 库执行
+-- =====================================================
+ALTER TABLE `t_student_question_record`
+    MODIFY COLUMN `score` DECIMAL(3,2) NULL
+    COMMENT '生效分值 0.00/0.50/1.00（含 per-题型打折后）；NULL=无信号（analyze 贴题，不参与掌握表聚合）';

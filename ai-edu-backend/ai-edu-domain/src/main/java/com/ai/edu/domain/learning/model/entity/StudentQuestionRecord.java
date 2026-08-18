@@ -85,6 +85,6 @@ public class StudentQuestionRecord {
     }
 
     private static BigDecimal normalizeScore(BigDecimal score) {
-        return score == null ? BigDecimal.ZERO.setScale(2) : score.setScale(2, RoundingMode.HALF_UP);
+        return score == null ? null : score.setScale(2, RoundingMode.HALF_UP);
     }
 }

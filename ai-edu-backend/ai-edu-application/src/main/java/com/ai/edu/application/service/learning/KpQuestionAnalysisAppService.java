@@ -9,8 +9,10 @@ import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
+import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
@@ -51,6 +53,10 @@ public class KpQuestionAnalysisAppService {
     private FileStorageService fileStorageService;
     @Resource
     private TutoringLlmPort tutoringLlmPort;
+    @Resource
+    private StudentQuestionRecordRepository questionRecordRepository;
+    @Resource
+    private TopicLabelAggregationService topicLabelAggregationService;
 
     public QuestionAnalysisDTO analyze(String text, Long studentId) {
         Integer grade = tutoringKpResolver.resolveStudentGrade(studentId);
@@ -61,16 +67,16 @@ public class KpQuestionAnalysisAppService {
             for (String topic : topics) {
                 Optional<QuestionType> qt = questionTypeRepository.findByTopicLabelOrAlias(topic);
                 if (qt.isPresent()) {
-                    return catalogResult(qt.get());
+                    return analyzeResult(text, topic, studentId, qt.get());
                 }
             }
         }
 
-        // ② 题库 miss → 仅题型（域 B 独立化：不挂起 PENDING、不写 obs；canonical 由 2.7.2 聚集返回）
+        // ② 题库 miss → 仅题型（域 B 独立化：不挂起 PENDING、不写 obs；canonical 由聚集 post-process 返回）
         if (topics.isEmpty()) {
             return QuestionAnalysisDTO.pending(null, List.of()); // 题型识别失败 → PENDING（不报错）
         }
-        return QuestionAnalysisDTO.resolved(topics.get(0), 0, List.of());
+        return analyzeResult(text, topics.get(0), studentId, null);
     }
 
     /**
@@ -98,12 +104,12 @@ public class KpQuestionAnalysisAppService {
         for (String topic : topicLabels) {
             Optional<QuestionType> qt = questionTypeRepository.findByTopicLabelOrAlias(topic);
             if (qt.isPresent()) {
-                return catalogResult(qt.get());
+                return analyzeResult("[图片题目]", topic, studentId, qt.get());
             }
         }
 
-        // ⑤ 题库 miss → 仅题型（域 B 独立化：不顺带 Python kps、不挂起 PENDING；canonical 由 2.7.2 聚集返回）
-        return QuestionAnalysisDTO.resolved(topicLabels.get(0), 0, List.of());
+        // ⑤ 题库 miss → 仅题型（域 B 独立化：不顺带 Python kps、不挂起 PENDING；canonical 由聚集 post-process 返回）
+        return analyzeResult("[图片题目]", topicLabels.get(0), studentId, null);
     }
 
     /** 无会话图片上传 COS（analyze 无 tutoring 会话）。 */
@@ -142,6 +148,31 @@ public class KpQuestionAnalysisAppService {
             case ".bmp" -> "image/bmp";
             default -> "image/png";
         };
+    }
+
+    /**
+     * 识别成功统一出口：题目落库（source=ai，score=null 无信号）+ 返回 DTO。
+     * 命中题库 → 权威分布（canonical=权威名）；miss → 过聚集返回 canonical（2.7.2，前端查 getMastery 对上）。
+     */
+    private QuestionAnalysisDTO analyzeResult(String content, String topicLabel, Long studentId, QuestionType hit) {
+        String canonical;
+        QuestionAnalysisDTO dto;
+        if (hit != null) {
+            canonical = hit.getTopicLabel();
+            dto = catalogResult(hit);
+        } else {
+            canonical = topicLabelAggregationService.aggregate(topicLabel, studentId);
+            dto = QuestionAnalysisDTO.resolved(canonical, 0, List.of());
+        }
+        saveAnalyzeRecord(studentId, content, topicLabel, canonical);
+        return dto;
+    }
+
+    /** analyze 题目落库（2.7.1）：source=ai，score=null（无对错信号，SIG-007，不参与掌握表聚合）。 */
+    private void saveAnalyzeRecord(Long studentId, String content, String topicLabel, String canonical) {
+        questionRecordRepository.save(StudentQuestionRecord.create("ai", studentId, content, topicLabel,
+                canonical, null, 0, 0, null, LocalDateTime.now()));
+        log.info("[analyze-question] 题目落库: student={}, topic={}, canonical={}", studentId, topicLabel, canonical);
     }
 
     /** 题型库命中：全部关联知识点分布（kpLabel 从镜像反查，gradeRange/ratio 透传），confidence=最大占比。 */

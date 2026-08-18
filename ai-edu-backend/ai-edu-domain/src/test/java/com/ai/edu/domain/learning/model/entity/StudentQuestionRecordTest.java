@@ -69,4 +69,15 @@ class StudentQuestionRecordTest {
         record.setId(5001L);
         assertEquals(5001L, record.getId());
     }
+
+    @Test
+    @DisplayName("score=null 表达无信号（analyze 贴题，SIG-007：区别于答错 0.00，不参与掌握表聚合）")
+    void nullScore_expressesNoSignal() {
+        StudentQuestionRecord record = StudentQuestionRecord.create(
+                "ai", 1001L, "笼子里有鸡和兔", "鸡兔同笼", "鸡兔同笼",
+                null, 0, 0, null, NOW);
+
+        assertNull(record.getScore(), "analyze 贴题无对错信号，score 为 null（区别于答错 0.00）");
+        assertEquals("ai", record.getSource());
+    }
 }

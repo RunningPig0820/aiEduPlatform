@@ -71,6 +71,9 @@ public class TopicClusterAppService {
             if (r.getCanonicalLabel() == null || r.getCanonicalLabel().isBlank()) {
                 continue; // PENDING 不参与聚合（Decision 8）
             }
+            if (r.getScore() == null) {
+                continue; // analyze 贴题无信号（score=null），不参与聚合（区别于答错 0.00，SIG-007）
+            }
             StudentTopic key = new StudentTopic(r.getStudentId(), r.getCanonicalLabel());
             grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(r.getScore());
             sources.putIfAbsent(key, r.getSource());

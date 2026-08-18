@@ -93,8 +93,8 @@
 
 ### 2.7 题型分析页题目落库 + canonical 返回
 
-- [ ] 2.7.1 `analyze-question` 消费的题目写题目表（source=ai，不产生掌握信号）
-- [ ] 2.7.2 **analyze 返回 topicLabel 过聚集（canonical）**：识别结果过聚集 post-process，返回 canonical 名——前端用它查 getMastery 才能对上（「解一元二次方程」→ 返回「一元二次方程」），否则误判「未开始」
+- [x] 2.7.1 `analyze-question` 消费的题目写题目表（source=ai，不产生掌握信号）
+- [x] 2.7.2 **analyze 返回 topicLabel 过聚集（canonical）**：识别结果过聚集 post-process，返回 canonical 名——前端用它查 getMastery 才能对上（「解一元二次方程」→ 返回「一元二次方程」），否则误判「未开始」
 
 ### 2.8 测试
 

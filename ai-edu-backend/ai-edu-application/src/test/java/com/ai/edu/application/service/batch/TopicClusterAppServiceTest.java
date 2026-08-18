@@ -136,6 +136,23 @@ class TopicClusterAppServiceTest {
         verify(masteryRepo, never()).upsert(any());
     }
 
+    @Test
+    @DisplayName("重算掌握表: analyze 贴题（score=null 无信号）跳过，不拉低掌握度（SIG-007）")
+    void recomputeMastery_skipsNullScore() {
+        when(questionRepo.findPendingTopicLabels()).thenReturn(List.of());
+        when(questionRepo.findAll()).thenReturn(List.of(
+                record(1001L, "鸡兔同笼", "鸡兔同笼", new BigDecimal("0.7")),
+                record(1001L, "贴题鸡兔同笼", "鸡兔同笼", null),  // analyze 无信号
+                record(1001L, "鸡兔同笼问题", "鸡兔同笼", new BigDecimal("1.0"))));
+
+        service.cluster();
+
+        verify(masteryRepo).upsert(org.mockito.ArgumentMatchers.argThat(
+                m -> m instanceof StudentTopicMastery mastery
+                        && mastery.getStudentId() == 1001L
+                        && mastery.getTrainCount() == 2));  // 只统计 0.7+1.0，null 跳过
+    }
+
     private void inject(Object target, String fieldName, Object value) {
         try {
             Field f = target.getClass().getDeclaredField(fieldName);

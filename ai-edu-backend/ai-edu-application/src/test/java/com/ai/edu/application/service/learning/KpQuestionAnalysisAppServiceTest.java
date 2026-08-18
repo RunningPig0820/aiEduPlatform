@@ -7,10 +7,12 @@ import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
 import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
+import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
 import com.ai.edu.domain.learning.model.valueobject.QuestionTypeStatus;
 import com.ai.edu.domain.learning.model.contract.QuestionUnderstandResult;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
+import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +54,8 @@ class KpQuestionAnalysisAppServiceTest {
     private KgKnowledgePointRepository kgRepository;
     private FileStorageService fileStorageService;
     private TutoringLlmPort tutoringLlmPort;
+    private StudentQuestionRecordRepository questionRecordRepository;
+    private TopicLabelAggregationService topicLabelAggregationService;
 
     @BeforeEach
     void setUp() {
@@ -61,6 +66,8 @@ class KpQuestionAnalysisAppServiceTest {
         kgRepository = mock(KgKnowledgePointRepository.class);
         fileStorageService = mock(FileStorageService.class);
         tutoringLlmPort = mock(TutoringLlmPort.class);
+        questionRecordRepository = mock(StudentQuestionRecordRepository.class);
+        topicLabelAggregationService = mock(TopicLabelAggregationService.class);
         service = new KpQuestionAnalysisAppService();
         setField(service, "questionUnderstandingPort", understandingPort);
         setField(service, "tutoringKpResolver", kpResolver);
@@ -69,6 +76,8 @@ class KpQuestionAnalysisAppServiceTest {
         setField(service, "kgKnowledgePointRepository", kgRepository);
         setField(service, "fileStorageService", fileStorageService);
         setField(service, "tutoringLlmPort", tutoringLlmPort);
+        setField(service, "questionRecordRepository", questionRecordRepository);
+        setField(service, "topicLabelAggregationService", topicLabelAggregationService);
     }
 
     @Test
@@ -90,6 +99,9 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("RESOLVED", dto.getStatus());
         assertEquals(60, dto.getConfidence());
         assertEquals(2, dto.getKnowledgePoints().size());
+        // 2.7.1: 题目落库（source=ai，score=null 无信号，canonical=权威名）
+        verify(questionRecordRepository).save(analyzeRecord(
+                "ai", TEXT, "鸡兔同笼", "鸡兔同笼问题", null));
     }
 
     @Test
@@ -114,6 +126,7 @@ class KpQuestionAnalysisAppServiceTest {
         when(kpResolver.resolveStudentGrade(STUDENT_ID)).thenReturn(4);
         when(understandingPort.understand(TEXT, 4)).thenReturn(List.of("鸡兔同笼"));
         when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
+        when(topicLabelAggregationService.aggregate("鸡兔同笼", STUDENT_ID)).thenReturn("鸡兔同笼");
 
         QuestionAnalysisDTO dto = service.analyze(TEXT, STUDENT_ID);
 
@@ -121,6 +134,8 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("鸡兔同笼", dto.getTopicLabel());
         assertEquals(0, dto.getConfidence());
         assertTrue(dto.getKnowledgePoints().isEmpty());
+        // 2.7.2: 返回 canonical 过聚集；2.7.1: 题目落库（source=ai，score=null 无信号）
+        verify(questionRecordRepository).save(analyzeRecord("ai", TEXT, "鸡兔同笼", "鸡兔同笼", null));
     }
 
     @Test
@@ -134,6 +149,7 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("PENDING", dto.getStatus());
         assertNull(dto.getTopicLabel());
         assertTrue(dto.getKnowledgePoints().isEmpty());
+        verify(questionRecordRepository, never()).save(any()); // 识别失败不落库
     }
 
     @Test
@@ -154,6 +170,8 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals("RESOLVED", dto.getStatus());
         assertEquals("鸡兔同笼", dto.getTopicLabel());
         verify(fileStorageService).uploadToObjectKey(anyString(), any(), anyString());
+        // 2.7.1: 图片题目也落库（source=ai，score=null 无信号，canonical=权威名）
+        verify(questionRecordRepository).save(analyzeRecord("ai", "[图片题目]", "鸡兔同笼", "鸡兔同笼", null));
     }
 
     @Test
@@ -166,6 +184,7 @@ class KpQuestionAnalysisAppServiceTest {
                 .thenReturn(QuestionUnderstandResult.builder()
                         .topicLabels(List.of("鸡兔同笼")).questionKps(List.of("二元一次方程组")).build());
         when(questionTypeRepository.findByTopicLabelOrAlias("鸡兔同笼")).thenReturn(Optional.empty());
+        when(topicLabelAggregationService.aggregate("鸡兔同笼", STUDENT_ID)).thenReturn("鸡兔同笼");
 
         QuestionAnalysisDTO dto = service.analyzeImage(new byte[]{1}, "q.png", STUDENT_ID);
 
@@ -174,6 +193,8 @@ class KpQuestionAnalysisAppServiceTest {
         assertEquals(0, dto.getConfidence());
         assertTrue(dto.getKnowledgePoints().isEmpty(), "顺带知识点不再展示（域 B 独立化）");
         verify(kgRepository, never()).findByLabel(anyString());
+        // 2.7.2: 图片 miss 也返回 canonical 过聚集 + 落库
+        verify(questionRecordRepository).save(analyzeRecord("ai", "[图片题目]", "鸡兔同笼", "鸡兔同笼", null));
     }
 
     @Test
@@ -189,6 +210,7 @@ class KpQuestionAnalysisAppServiceTest {
 
         assertEquals("PENDING", dto.getStatus());
         assertNull(dto.getTopicLabel());
+        verify(questionRecordRepository, never()).save(any()); // 识别失败不落库
     }
 
     @Test
@@ -197,6 +219,17 @@ class KpQuestionAnalysisAppServiceTest {
         BusinessException ex = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
                 () -> service.analyzeImage(new byte[]{1}, "q.gif", STUDENT_ID));
         assertEquals(ErrorCode.TUTORING_OCR_INVALID, ex.getCode());
+    }
+
+    /** 落库断言 helper：source/content/topicLabel/canonical/score 逐字段校验。 */
+    private StudentQuestionRecord analyzeRecord(String source, String content, String topicLabel,
+                                                String canonical, BigDecimal score) {
+        return argThat(r -> r instanceof StudentQuestionRecord rec
+                && source.equals(rec.getSource())
+                && content.equals(rec.getContent())
+                && topicLabel.equals(rec.getTopicLabel())
+                && java.util.Objects.equals(canonical, rec.getCanonicalLabel())
+                && java.util.Objects.equals(score, rec.getScore()));
     }
 
     private QuestionType qt(Long id, String label) {
