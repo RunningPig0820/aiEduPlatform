@@ -1,0 +1,164 @@
+# question-type-mastery-backend 实施任务
+
+> **范围**：掌握度数据底盘升级——题目采集（事实源）+ **题型动态聚集**（零锚点：字符规则 + 向量最近邻，canonical 由第一条相似题动态涌现）+ 累计平均正确率聚合。`getMastery` 契约变更（连续百分比 + source + trainCount）。**本期只记录「题目→题型」，与「题型→知识点」解耦**（域 B 表保留不动）；聚合/维护/批量聚集全部按钮手动触发，**不做定时任务**；相似题存储不做。
+>
+> **开发顺序（用户拍板，每步测试完再走下一步）**：
+> 1. 技术预演：COS 向量方案可行性（spike 前置）
+> 2. 题型动态聚集改造（独立打通，不依赖答疑）
+> 3. AI 答疑题目存储改造
+> 4. 前端对接题型部分
+> 5. AI 答疑端到端联调
+>
+> **Python 改动范围**：仅**新增**向量服务端点（`/api/tutoring/vector/put`、`/query`，dashscope embedding + CosVectorsClient）；decide/信号链路仍零改动。COS 无 Java SDK，向量走 Python 桥（后续 RAG 复用同一套基础设施）。
+
+## 1. 技术预演：COS 向量方案可行性（前置）
+
+### 1.1 Python 向量链路接入验证（CosVectorsClient，Python 侧）
+
+- [ ] 1.1.1 确认开通桶/索引配置（region、bucket、index name），Python 侧装 `cos-python-sdk-v5`
+- [ ] 1.1.2 Python 建索引（768 维 cosine，控制台或 SDK `create_index`）+ `put_vectors` 入库（含 metadata）
+- [ ] 1.1.3 `query_vectors(top-k)` 查询返回相似度 + upsert（key 相同覆盖）验证
+- [ ] 1.1.4 近邻验证：造 10 条近义/变体题型名（鸡兔同笼/鸡兔同笼问题/假设法）入库后查 top-1，验证命中
+
+### 1.2 embedding 近邻验证（dashscope，Python 侧）
+
+- [ ] 1.2.1 收集 50~100 真实题型名样本（含近义对「一元二次方程/解一元二次方程」、语义对「相遇/行程」）
+- [ ] 1.2.2 Python gateway 复用 dashscope text-embedding-v3 对样本 embedding + 相似度矩阵
+- [ ] 1.2.3 统计双信号（题目向量/题型名向量）top-1 命中率 + 误合并率（对比表）
+
+### 1.3 阈值标定
+
+- [ ] 1.3.1 阈值扫描：0.85~0.98 步进，确定「相遇/行程」合并边界 + 默认阈值（偏保守）
+- [ ] 1.3.2 确认双信号判定规则：题目命中 / 题型名命中 / 双命中 / 单命中进候选
+
+### 1.4 结论收口
+
+- [ ] 1.4.1 定义 Java↔Python 向量契约（put/query 请求响应 snake_case，复用 tutoring 域约定）
+- [ ] 1.4.2 预演结论写回 design.md Open Questions（Python 向量链路 / 模型 / 阈值）
+- [ ] 1.4.3 产出预演报告（CosVectorsClient 跑通 + dashscope 近邻对比数据）
+
+- [ ] **✅ 完成标准**：Python 向量链路可行（CosVectorsClient 入库/查询 OK）+ dashscope 近邻命中率与阈值定稿，Java↔Python 契约定义，design Open Questions 收口
+
+## 2. 题型动态聚集改造（独立打通，不依赖 AI 答疑）
+
+### 2.0 定时停用 + 手动触发（用户拍板：面试项目不做定时）
+
+- [ ] 2.0.1 移除 `KpBatchScheduler.aggregate()` 的 `@Scheduled`（凌晨 3:17），题型库聚合保留 `POST /api/kp/aggregation/run` 手动按钮（ADMIN）
+- [ ] 2.0.2 移除 `KpBatchScheduler.maintain()` 的 `@Scheduled`（凌晨 3:37），维护闭环（rejudgePending）改手动触发（本期可暂不跑）
+
+### 2.1 表结构
+
+- [ ] 2.1.1 编写 Flyway V17（learning 库）：`t_student_question_record`（id、student_id、content、source('ai'/'bank')、topic_label、canonical_label、score DECIMAL、hint_count、answer_request_count、session_id、created_at），含 student_id 索引
+- [ ] 2.1.2 SQL 记录到 `docs/db/05_learning_domain.sql`（标注「Flyway 关闭，需手动执行」）
+
+### 2.2 领域模型与仓储
+
+- [ ] 2.2.1 `StudentQuestionRecord` 实体（JPA 注解、Lombok @Getter、restore/create 工厂、@DS learning）
+- [ ] 2.2.2 `StudentQuestionRecordRepository` 接口（save、findByStudent、findByStudentAndCanonical） + infra PO/Mapper/RepositoryImpl
+- [ ] 2.2.3 `StudentTopicMastery` 实体改造：`applySignal` → `applyScore(score, trainCount)` 累计平均
+- [ ] 2.2.4 `StudentTopicMastery` 加 `source`/`trainCount` 字段 + 仓储 upsert 更新
+
+### 2.3 向量服务（Python 桥）
+
+- [ ] 2.3.1 domain 端口 `TopicVectorStore`（putVector、queryNearestTop1）
+- [ ] 2.3.2 Python 向量端点：`POST /api/tutoring/vector/put`、`POST /api/tutoring/vector/query`（dashscope embedding + CosVectorsClient，snake_case）
+- [ ] 2.3.3 infra 实现：Java HTTP 桥（复用 TutoringLlmClient 模式，调 Python 端点；存题目向量 + 题型名向量，metadata：student_id/topic_label/canonical_label/timestamp）
+- [ ] 2.3.4 配置：Python 向量端点 URL/超时（复用 TutoringProperties 家族）
+
+### 2.4 字符级规则
+
+- [ ] 2.4.1 `TopicLabelRuleNormalizer` 实现：前缀/后缀剥离（「解X→X」「求X→X」）、编辑距离 ≤1、复用 `TopicKeyNormalizer`
+- [ ] 2.4.2 规则单测：前缀变体 / 近字变体 / 后缀保留（「问题」不剥离）
+
+### 2.5 聚集编排
+
+- [ ] 2.5.1 `TopicLabelAggregationService`：字符规则 → 双信号向量最近邻 → canonical + 写别名表 `t_kp_question_type_alias` + 向量入库
+- [ ] 2.5.2 首题建锚（零锚点）：无近邻 → 建新 canonical + 题目/题型名向量入库
+- [ ] 2.5.3 双信号判定：题目向量命中归并 / 题型名向量命中归并 / 单命中进候选 LLM 仲裁 / 都不中建新
+- [ ] 2.5.4 失败兜底：向量库不可用 → 回退字符规则 + 原样落库（不阻塞）
+
+### 2.6 批量聚集（手动触发，非定时）
+
+- [ ] 2.6.1 手动触发接口（ADMIN）：`POST /api/kp/aggregation/topic-cluster`——扫描题目表未归并/低置信题型名 → 全量向量聚类补归并 → 写别名表 → 重算掌握表（幂等）
+- [ ] 2.6.2 canonical 命名：首见名/最高频名兜底 + 手动触发时 LLM 归纳规范名
+- [ ] 2.6.3 重算掌握表聚合（归并后幂等重算）
+
+### 2.7 题型分析页题目落库 + canonical 返回
+
+- [ ] 2.7.1 `analyze-question` 消费的题目写题目表（source=ai，不产生掌握信号）
+- [ ] 2.7.2 **analyze 返回 topicLabel 过聚集（canonical）**：识别结果过聚集 post-process，返回 canonical 名——前端用它查 getMastery 才能对上（「解一元二次方程」→ 返回「一元二次方程」），否则误判「未开始」
+
+### 2.8 测试
+
+- [ ] 2.8.1 聚集单测 NOR-001~008（字符规则 / 题目向量命中 / 题型名向量命中 / 阈值 / 首题建锚 / 失败兜底 / 落库前不裂行 / 批量归并）
+- [ ] 2.8.2 累计平均单测 AGG-001~003（累计平均 / 重复作答 / 归属后聚合）
+- [ ] 2.8.3 全量测试 + 完成标准验证（造题目数据 → 动态聚集（经 Python 向量桥）→ 掌握表，不依赖答疑）
+
+- [ ] **✅ 完成标准**：题型侧独立跑通——造题目数据 → 动态聚集 → 掌握表累计平均，不依赖 AI 答疑
+
+## 3. AI 答疑题目存储改造
+
+### 3.1 题目粒度聚合
+
+- [ ] 3.1.1 换题检测复用：`isNewQuestion` 触发新题目记录（已有检测，挂落库触发器）
+- [ ] 3.1.2 多轮信号归并：一次会话一次作答 → 一条题目记录（decide 逐轮信号合并成该题一条）
+
+### 3.2 题目文本提取
+
+- [ ] 3.2.1 从会话 history 取该轮题目文本（复用 `lastUserContent` + 换题检测），非「最后一条用户消息」
+
+### 3.3 信号映射
+
+- [ ] 3.3.1 `roundCount`/`answerRequestCount` → score（直接答对 1.0 / 引导后答对 0.5 / 答错 0.0）
+- [ ] 3.3.2 per-题型打折配置化：70/80/100 系数入 `application.yml` + `@Value`（作用于 score 不作用于结果）
+
+### 3.4 落库链路改写
+
+- [ ] 3.4.1 `applyMasteryAndErrors` 改写：题目落库 + 聚集 post-process（动态锚定 canonical）+ 掌握表累计平均（PENDING 信号照常落题目表）
+
+### 3.5 测试
+
+- [ ] 3.5.1 信号映射单测 SIG-001~007（直接答对 / 引导后答对 / 答错 / 首题打折 / 第2题打折 / PENDING 信号不丢 / 题型分析页不产生信号）
+- [ ] 3.5.2 AI 答疑主流程回归（decide 主链路不回归）
+
+- [ ] **✅ 完成标准**：AI 答疑做题 → 题目落库 → 动态聚集 → 掌握度更新，答疑主流程不回归
+
+## 4. 前端对接题型部分
+
+### 4.1 getMastery 契约变更
+
+- [ ] 4.1.1 `getStudentMastery` 改写：`masteryLevel` 0-100 连续百分比
+- [ ] 4.1.2 `MasteryItemDTO` 加 `source`/`trainCount`（保留 status RESOLVED/PENDING）
+
+### 4.2 按题型查题目接口
+
+- [ ] 4.2.1 controller + app service：`GET /students/{id}/topics/{topicLabel}/questions`
+- [ ] 4.2.2 响应含 session_id（原题链接），空列表不报错
+
+### 4.3 api.md 定稿 + 前端联调
+
+- [ ] 4.3.1 api.md 更新：getMastery 新契约 + 按题型查题目（session_id 原题链接）+ 前端联调契约（analyze topicLabel=canonical / PENDING 三态语义 / score 同源）
+- [ ] 4.3.2 前端掌握度页列式化联调（题型 | 来源 | 掌握% | 训练数 | [查看题目]）
+- [ ] 4.3.3 联调契约核对：analyze 返回 canonical（查得到掌握度）、PENDING 项=obs 待确认、未开始=不在 items、score 与掌握表聚合同源
+
+### 4.4 测试
+
+- [ ] 4.4.1 getMastery 单测 MST-001~005（连续% / 未开始不出现 / PENDING 项 / 越权 / 未登录）
+- [ ] 4.4.2 查题目单测 QST-001~003（列表 / 空态 / 越权）
+- [ ] 4.4.3 controller 集成测试 + 契约核对（用阶段 2 造的题目数据）
+
+- [ ] **✅ 完成标准**：前端掌握度页列式展示可用（阶段 2 数据即可渲染），getMastery 契约联调通过
+
+## 5. AI 答疑端到端联调
+
+### 5.1 闭环联调
+
+- [ ] 5.1.1 E2E：AI 答疑做题 → 题目落库 → 动态聚集 → 掌握度百分比 → 掌握度页 → [查看题目]
+- [ ] 5.1.2 原题链接验证：掌握度页「查看题目」→ session_id 跳回 AI 答疑会话看原题
+
+### 5.2 回归
+
+- [ ] 5.2.1 全量回归 `mvn test` BUILD SUCCESS（AI 答疑主流程 / 题型库 / analyze-question 契约不变）
+- [ ] 5.2.2 前后端契约最终核对（getMastery / 按题型查题目 / 原题链接）
+
+- [ ] **✅ 完成标准**：端到端打通——答疑数据流到掌握度页并可回查原题，全量回归绿
