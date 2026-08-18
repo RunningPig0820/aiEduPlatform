@@ -43,8 +43,8 @@
 
 ### 2.0 定时停用 + 手动触发（用户拍板：面试项目不做定时）
 
-- [ ] 2.0.1 移除 `KpBatchScheduler.aggregate()` 的 `@Scheduled`（凌晨 3:17），题型库聚合保留 `POST /api/kp/aggregation/run` 手动按钮（ADMIN）
-- [ ] 2.0.2 移除 `KpBatchScheduler.maintain()` 的 `@Scheduled`（凌晨 3:37），维护闭环（rejudgePending）改手动触发（本期可暂不跑）
+- [x] 2.0.1 移除 `KpBatchScheduler.aggregate()` 的 `@Scheduled`（凌晨 3:17），题型库聚合保留 `POST /api/kp/aggregation/run` 手动按钮（ADMIN）
+- [x] 2.0.2 移除 `KpBatchScheduler.maintain()` 的 `@Scheduled`（凌晨 3:37），维护闭环（rejudgePending）改手动触发（本期可暂不跑）
 
 ### 2.1 表结构
 

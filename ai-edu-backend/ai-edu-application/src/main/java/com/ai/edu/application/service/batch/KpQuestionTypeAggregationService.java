@@ -74,7 +74,7 @@ public class KpQuestionTypeAggregationService {
 
     /**
      * 聚合：扫描已解析观测 → 按 canonical 分组（命中/相似变体/新建）→ union 重建分布。
-     * 由 {@code KpBatchScheduler} 周期触发（凌晨 3:17），也可手动/大数据作业调用。
+     * 手动触发（POST /api/kp/aggregation/run，ADMIN 按钮；无定时任务，也可大数据作业调用）。
      */
     public void aggregate() {
         List<DerivedKpObs> obs = derivedKpObsRepository.findResolved();

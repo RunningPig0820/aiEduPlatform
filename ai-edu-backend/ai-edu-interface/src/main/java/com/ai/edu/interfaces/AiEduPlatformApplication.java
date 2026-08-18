@@ -5,7 +5,6 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.modulith.Modulith;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
 /**
@@ -14,7 +13,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 @SpringBootApplication
 @Modulith
 @EnableMethodSecurity
-@EnableScheduling
 @MapperScan({
     "com.ai.edu.infrastructure.persistence.mapper",
     "com.ai.edu.infrastructure.persistence.user.mapper",

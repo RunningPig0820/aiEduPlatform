@@ -42,7 +42,7 @@ public class KpMaintenanceService {
 
     /**
      * 维护闭环：第二信号转正 → 冲突重判 → 统计回流。
-     * 由 {@code KpBatchScheduler} 周期触发（凌晨 3:37），也可手动调用。
+     * 手动触发（无定时任务；本期可暂不跑，预留手动接口位）。
      */
     public void maintain() {
         promoteWeakByCooccurrence();
