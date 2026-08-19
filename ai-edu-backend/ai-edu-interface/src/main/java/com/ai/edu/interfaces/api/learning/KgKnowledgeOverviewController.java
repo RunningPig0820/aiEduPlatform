@@ -1,9 +1,7 @@
 package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
-import com.ai.edu.application.dto.learning.KgKnowledgePointPageItemDTO;
-import com.ai.edu.application.dto.learning.KgKnowledgePointPageRequest;
-import com.ai.edu.application.dto.learning.PageDTO;
+import com.ai.edu.application.dto.learning.KgTreeNodeDTO;
 import com.ai.edu.application.service.learning.KgKnowledgeOverviewAppService;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
@@ -11,46 +9,76 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
- * 知识点总览查询接口（学生端"知识点总览"知识地图底图）。
+ * 知识点总览接口（知识地图底图，点击式下钻：学段→年级→课本→章节→小节→知识点）。
+ *
+ * <p>每次单层查询（单表或 2 表 JOIN，索引命中），替代原 7 表 JOIN 分页端点（慢 SQL）。
+ * 登录即可（学生/教师/管理员），无 body，GET 路径参数下钻。
  */
 @RestController
 @RequestMapping("/api/kg")
-@Tag(name = "知识点总览", description = "按学段分页列全量教材知识点")
+@Tag(name = "知识点总览", description = "知识地图底图点击式下钻（学段→年级→课本→章节→小节→知识点，每次单层查询）")
 public class KgKnowledgeOverviewController {
-
-    private static final int MAX_SIZE = 100;
 
     @Resource
     private KgKnowledgeOverviewAppService appService;
 
-    /** POST /api/kg/knowledge-points — 按学段分页列知识点（登录即可，学生/教师/管理员）。 */
-    @Operation(summary = "按学段分页列知识点", description = "知识地图底图（学段→章节→知识点）")
-    @PostMapping("/knowledge-points")
-    public ApiResponse<PageDTO<KgKnowledgePointPageItemDTO>> page(
-            @RequestBody(required = false) KgKnowledgePointPageRequest request,
-            HttpSession session) {
+    /** GET /api/kg/grades?stage=primary — 学段下年级列表（知识地图第 1 层）。 */
+    @Operation(summary = "学段下年级列表", description = "第 1 层：按学段查年级（stage: primary/middle/high）")
+    @GetMapping("/grades")
+    public ApiResponse<List<KgTreeNodeDTO>> grades(@RequestParam String stage, HttpSession session) {
+        requireLogin(session);
+        return ApiResponse.success(appService.gradesByStage(stage));
+    }
+
+    /** GET /api/kg/textbooks?stage=primary&grade=一年级 — 年级下课本列表（第 2 层）。 */
+    @Operation(summary = "年级下课本列表", description = "第 2 层：按学段+年级查课本")
+    @GetMapping("/textbooks")
+    public ApiResponse<List<KgTreeNodeDTO>> textbooks(@RequestParam String stage,
+                                                      @RequestParam String grade,
+                                                      HttpSession session) {
+        requireLogin(session);
+        return ApiResponse.success(appService.textbooksByStage(stage, grade));
+    }
+
+    /** GET /api/kg/textbooks/{textbookUri}/chapters?stage=primary — 课本下章节列表（第 3 层）。
+     *  stage 为学段上下文（前端传入，当前章节查询按 textbookUri，不参与过滤）。 */
+    @Operation(summary = "课本下章节列表", description = "第 3 层：按课本查章节（stage 学段上下文，前端传入）")
+    @GetMapping("/textbooks/{textbookUri}/chapters")
+    public ApiResponse<List<KgTreeNodeDTO>> chapters(@PathVariable String textbookUri,
+                                                     @RequestParam(required = false) String stage,
+                                                     HttpSession session) {
+        requireLogin(session);
+        return ApiResponse.success(appService.chaptersByTextbook(textbookUri));
+    }
+
+    /** GET /api/kg/chapters/{chapterUri}/sections — 章节下小节列表（第 4 层）。 */
+    @Operation(summary = "章节下小节列表", description = "第 4 层：按章节查小节")
+    @GetMapping("/chapters/{chapterUri}/sections")
+    public ApiResponse<List<KgTreeNodeDTO>> sections(@PathVariable String chapterUri, HttpSession session) {
+        requireLogin(session);
+        return ApiResponse.success(appService.sectionsByChapter(chapterUri));
+    }
+
+    /** GET /api/kg/sections/{sectionUri}/knowledge-points — 小节下知识点列表（第 5 层）。 */
+    @Operation(summary = "小节下知识点列表", description = "第 5 层：按小节查知识点")
+    @GetMapping("/sections/{sectionUri}/knowledge-points")
+    public ApiResponse<List<KgTreeNodeDTO>> knowledgePoints(@PathVariable String sectionUri, HttpSession session) {
+        requireLogin(session);
+        return ApiResponse.success(appService.knowledgePointsBySection(sectionUri));
+    }
+
+    private void requireLogin(HttpSession session) {
         if (TutoringAuth.currentStudentId(session) == null) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
         }
-        String stage = request == null ? null : request.getStage();
-        String keyword = request == null ? null : request.getKeyword();
-        int page = request == null || request.getPage() == null ? 1 : request.getPage();
-        int size = request == null || request.getSize() == null ? 20 : request.getSize();
-        if (page < 1) {
-            page = 1;
-        }
-        if (size < 1) {
-            size = 20;
-        }
-        if (size > MAX_SIZE) {
-            size = MAX_SIZE;
-        }
-        return ApiResponse.success(appService.page(stage, page, size, keyword));
     }
 }

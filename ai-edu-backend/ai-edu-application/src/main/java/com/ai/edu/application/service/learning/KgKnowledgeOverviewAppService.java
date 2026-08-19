@@ -1,11 +1,11 @@
 package com.ai.edu.application.service.learning;
 
-import com.ai.edu.application.dto.learning.KgKnowledgePointPageItemDTO;
-import com.ai.edu.application.dto.learning.PageDTO;
+import com.ai.edu.application.dto.learning.KgTreeNodeDTO;
 import com.ai.edu.common.constant.ErrorCode;
 import com.ai.edu.common.exception.BusinessException;
 import com.ai.edu.domain.edukg.model.valueobject.KgStageEnum;
-import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
+import com.ai.edu.domain.edukg.model.valueobject.KgTreeNode;
+import com.ai.edu.domain.edukg.repository.KgOverviewTreeRepository;
 import jakarta.annotation.Resource;
 import lombok.AccessLevel;
 import lombok.Setter;
@@ -14,39 +14,55 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * 知识点总览查询应用服务（学生端"知识点总览"知识地图底图）。
+ * 知识点总览应用服务（知识地图底图，点击式下钻）。
  *
- * <p>按学段分页列教材知识点（带章节/小节归属），数据源 kg 镜像只读。
+ * <p>学段→课本→章节→小节→知识点逐层下钻，每次单层查询（≤2 表 JOIN，索引命中），
+ * 替代原「学段→知识点」7 表 JOIN 分页（慢 SQL：GROUP BY 先于 LIMIT + COUNT DISTINCT 全扫）。
+ * 数据源 kg 镜像只读。
  */
 @Service
 public class KgKnowledgeOverviewAppService {
 
     @Resource
     @Setter(AccessLevel.PACKAGE)
-    private KgKnowledgePointRepository kgKnowledgePointRepository;
+    private KgOverviewTreeRepository kgOverviewTreeRepository;
 
-    /** 按学段分页列教材知识点（keyword 可选，label LIKE 过滤，前端搜索兜底）。 */
-    public PageDTO<KgKnowledgePointPageItemDTO> page(String stage, int page, int size, String keyword) {
+    /** 学段 → 年级列表（stage code → 中文查库）。 */
+    public List<KgTreeNodeDTO> gradesByStage(String stage) {
         KgStageEnum stageEnum = resolveStage(stage);
-        // 库里 t_kg_textbook.stage 存中文 label，查询前 code → 中文
-        String stageLabel = stageEnum.getLabel();
-        boolean hasKeyword = keyword != null && !keyword.isBlank();
-        long total = hasKeyword
-                ? kgKnowledgePointRepository.countByStageAndKeyword(stageLabel, keyword)
-                : kgKnowledgePointRepository.countByStage(stageLabel);
-        List<KgKnowledgePointPageItemDTO> items = (hasKeyword
-                ? kgKnowledgePointRepository.findPageByStageAndKeyword(stageLabel, keyword, (page - 1) * size, size)
-                : kgKnowledgePointRepository.findPageByStage(stageLabel, (page - 1) * size, size)).stream()
-                .map(p -> KgKnowledgePointPageItemDTO.builder()
-                        .kpUri(p.getKpUri())
-                        .kpLabel(p.getKpLabel())
-                        .stage(stageEnum.getCode())
-                        .chapterLabel(p.getChapterLabel())
-                        .sectionLabel(p.getSectionLabel())
-                        .build())
-                .toList();
-        return PageDTO.<KgKnowledgePointPageItemDTO>builder()
-                .items(items).total(total).page(page).size(size).build();
+        return kgOverviewTreeRepository.findGradesByStage(stageEnum.getLabel()).stream()
+                .map(this::toDto).toList();
+    }
+
+    /** 学段 + 年级 → 课本列表（stage code → 中文查库）。 */
+    public List<KgTreeNodeDTO> textbooksByStage(String stage, String grade) {
+        KgStageEnum stageEnum = resolveStage(stage);
+        return kgOverviewTreeRepository.findTextbooksByStage(stageEnum.getLabel(), grade).stream()
+                .map(this::toDto).toList();
+    }
+
+    /** 课本 → 章节列表。 */
+    public List<KgTreeNodeDTO> chaptersByTextbook(String textbookUri) {
+        return kgOverviewTreeRepository.findChaptersByTextbookUri(textbookUri).stream()
+                .map(this::toDto).toList();
+    }
+
+    /** 章节 → 小节列表。 */
+    public List<KgTreeNodeDTO> sectionsByChapter(String chapterUri) {
+        return kgOverviewTreeRepository.findSectionsByChapterUri(chapterUri).stream()
+                .map(this::toDto).toList();
+    }
+
+    /** 小节 → 知识点列表。 */
+    public List<KgTreeNodeDTO> knowledgePointsBySection(String sectionUri) {
+        return kgOverviewTreeRepository.findKnowledgePointsBySectionUri(sectionUri).stream()
+                .map(this::toDto).toList();
+    }
+
+    private KgTreeNodeDTO toDto(KgTreeNode n) {
+        return KgTreeNodeDTO.builder()
+                .uri(n.getUri()).label(n.getLabel()).orderIndex(n.getOrderIndex())
+                .build();
     }
 
     /** 校验 stage code 并返回枚举；非法抛 INVALID_PARAMS。 */

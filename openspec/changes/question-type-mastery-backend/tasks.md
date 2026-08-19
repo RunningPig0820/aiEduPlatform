@@ -171,3 +171,12 @@
 - [ ] 5.2.2 前后端契约最终核对（getMastery / 按题型查题目 / 原题链接）
 
 - [ ] **✅ 完成标准**：端到端打通——答疑数据流到掌握度页并可回查原题，全量回归绿
+
+## 附：知识点总览慢 SQL 下钻改造（腾讯 MySQL 慢 SQL 排查）
+
+- [x] 6.1 根因：`POST /api/kg/knowledge-points` 7 表 JOIN（textbook→chapter→section→kp 反向）分页——`GROUP BY` 先于 `LIMIT` + `COUNT DISTINCT` 全扫 + `tb.stage` 无索引 + 每 JOIN 带 `is_deleted`
+- [x] 6.2 改造为点击式下钻：`KgOverviewTreeMapper/Repository`（学段→课本 单表；课本→章节 / 章节→小节 / 小节→知识点 各 2 表 JOIN，均命中索引），每次单层查询、点击才查、数据量小无需分页
+- [x] 6.3 移除 `selectPageByStage/countByStage/selectPageByStageAndKeyword/countByStageAndKeyword`（7 JOIN）；`selectLabelsByStage` + `KpPoolAssociateService`/`KpConstrainedAssociator`（未接线的封闭域池约束组件群）一并删除（analyze 本期不接线，消除隐患）
+- [x] 6.4 api.md 第 10 节下钻契约 + 前端树形下钻改造说明
+- [x] 6.5 层级修正：学段→**年级**→课本→章节→小节→知识点（t_kg_textbook 有 stage+grade 两字段，课本应挂年级下）；新增 `GET /grades`（DISTINCT grade）+ `/textbooks` 加 `grade` 参数
+- [x] 6.6 章节查询接口补 `stage` 学段上下文参数（前端传入，后端仅接收不参与查询）

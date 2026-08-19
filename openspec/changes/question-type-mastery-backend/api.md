@@ -345,3 +345,20 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 | 别名维护 | 变体题型名 → canonical（复用 `t_kp_question_type_alias`） |
 
 > 演示用法：管理后台手动配几条「鸡兔同笼 → 鸡兔同笼问题(ratio 0.6) / 假设法(ratio 0.4)」→ 入口 `analyze-question` 命中题型库即返回权威分布；未命中返回「仅题型+canonical」，前端展示无关联态（不报错）。
+
+### 10. 知识地图下钻（替代 `/api/kg/knowledge-points` 分页，BREAKING）
+
+> 慢 SQL 优化：原「学段→知识点」7 表 JOIN 分页移除（`GROUP BY` 先于 `LIMIT` + `COUNT DISTINCT` 全扫），改为**点击式下钻**——每次单层查询（单表或 2 表 JOIN，索引命中）。前端知识地图改**菜单式下钻**：点学段→年级 → 点年级→课本 → 点课本→章节 → 点章节→小节 → 点小节→知识点。学段/学科作为默认上下文（如默认「数学·小学」），前端默认选中后从年级开始点。
+
+| 接口 | 层级 | 说明 |
+|------|------|------|
+| `GET /api/kg/grades?stage=primary` | 第 1 层 | 学段下年级列表（stage: `primary`/`middle`/`high`；`uri`/`label` 均为年级名，如「一年级」） |
+| `GET /api/kg/textbooks?stage=primary&grade=一年级` | 第 2 层 | 年级下课本列表（grade 需 URL encode） |
+| `GET /api/kg/textbooks/{textbookUri}/chapters?stage=primary` | 第 3 层 | 课本下章节（`stage` 为学段上下文，前端传入，当前不参与查询，可选） |
+| `GET /api/kg/chapters/{chapterUri}/sections` | 第 4 层 | 章节下小节 |
+| `GET /api/kg/sections/{sectionUri}/knowledge-points` | 第 5 层 | 小节下知识点 |
+
+- 每层返回 `[{ "uri", "label", "orderIndex" }]`（`orderIndex` 同级排序，0 起）
+- 登录即可（学生/教师/管理员），无 body
+- **uri 含特殊字符（`http://...`）及中文（年级），前端必须 `encodeURIComponent` 后放 path/query**；每层数据量小（几~十几条），无需分页
+- 旧 `POST /api/kg/knowledge-points`（7 JOIN 分页）已删除

@@ -147,28 +147,4 @@ public class KgKnowledgePointRepositoryImpl implements KgKnowledgePointRepositor
         return new ArrayList<>(byKp.values());
     }
 
-    @Override
-    public List<KgKpPlacement> findPageByStage(String stage, int offset, int limit) {
-        return kgKnowledgePointMapper.selectPageByStage(stage, offset, limit);
-    }
-
-    @Override
-    public long countByStage(String stage) {
-        return kgKnowledgePointMapper.countByStage(stage);
-    }
-
-    @Override
-    public List<String> findLabelsByStage(String stage) {
-        return kgKnowledgePointMapper.selectLabelsByStage(stage);
-    }
-
-    @Override
-    public List<KgKpPlacement> findPageByStageAndKeyword(String stage, String keyword, int offset, int limit) {
-        return kgKnowledgePointMapper.selectPageByStageAndKeyword(stage, keyword, offset, limit);
-    }
-
-    @Override
-    public long countByStageAndKeyword(String stage, String keyword) {
-        return kgKnowledgePointMapper.countByStageAndKeyword(stage, keyword);
-    }
 }
