@@ -28,8 +28,8 @@ public class MasterySignalItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /** 题型 label（Python label 接地：优先复用快照候选） */
-    @JsonProperty("kp_label")
-    @JsonAlias("topic_label")
+    @JsonProperty("topic_label")
+    @JsonAlias("kp_label")
     private String kpLabel;
 
     /** 信号（mastered / practicing / struggling，小写，应用层容错转换） */

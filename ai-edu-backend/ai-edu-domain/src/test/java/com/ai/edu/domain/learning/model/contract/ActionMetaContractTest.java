@@ -87,6 +87,29 @@ class ActionMetaContractTest {
     }
 
     @Test
+    @DisplayName("写回方向：generate 请求序列化 mastery_signals 用 topic_label（Python 新契约，旧 kp_label 引发 422）")
+    void serialize_generateContext_masterySignalUsesTopicLabel() throws Exception {
+        ActionMeta actionMeta = ActionMeta.builder()
+                .type("hint")
+                .masterySignals(List.of(MasterySignalItem.builder()
+                        .kpLabel("鸡兔同笼")
+                        .signal("practicing")
+                        .build()))
+                .build();
+        GenerateContext context = GenerateContext.builder()
+                .history(List.of(TutoringChatMessage.user("鸡兔同笼，共35头94脚")))
+                .subjectHint("math")
+                .actionType("hint")
+                .actionMeta(actionMeta)
+                .build();
+
+        String json = objectMapper.writeValueAsString(context);
+
+        assertTrue(json.contains("\"topic_label\":\"鸡兔同笼\""), json);
+        assertFalse(json.contains("\"kp_label\""), "旧字段名不应再序列化（Python 422 根因）");
+    }
+
+    @Test
     @DisplayName("decide 上下文序列化为 snake_case（不含 current_question）")
     void serialize_decideContext_snakeCase() throws Exception {
         DecideContext context = DecideContext.builder()
