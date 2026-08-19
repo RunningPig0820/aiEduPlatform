@@ -73,6 +73,15 @@ public interface TutoringConfig {
     /** Python 题型名向量 query 端点路径（POST /api/tutoring/vector/query）。 */
     String vectorQueryPath();
 
+    /** 学科分类失败重试次数（轻量分类，失败快速降级按 math 放行）。 */
+    int subjectClassifyRetry();
+
+    /** 学科分类调用超时（轻量分类小模型，5s 兜底防挂起）。 */
+    Duration subjectClassifyTimeout();
+
+    /** Python 学科分类端点路径（POST /api/tutoring/subject-classify，decide 之前）。 */
+    String subjectClassifyPath();
+
     /** 默认配置（回退值，与 TutoringConstants 对齐；测试/未注入时使用）。 */
     static TutoringConfig defaults() {
         return new TutoringConfig() {
@@ -169,6 +178,21 @@ public interface TutoringConfig {
             @Override
             public String vectorQueryPath() {
                 return "/api/tutoring/vector/query";
+            }
+
+            @Override
+            public int subjectClassifyRetry() {
+                return TutoringConstants.AGENT_RETRY;
+            }
+
+            @Override
+            public Duration subjectClassifyTimeout() {
+                return TutoringConstants.SUBJECT_CLASSIFY_TIMEOUT;
+            }
+
+            @Override
+            public String subjectClassifyPath() {
+                return "/api/tutoring/subject-classify";
             }
         };
     }

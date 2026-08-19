@@ -134,6 +134,21 @@ public class TutoringProperties implements TutoringConfig {
         return python.getVectorQueryPath();
     }
 
+    @Override
+    public int subjectClassifyRetry() {
+        return agentRetry;
+    }
+
+    @Override
+    public Duration subjectClassifyTimeout() {
+        return timeout.getSubjectClassify();
+    }
+
+    @Override
+    public String subjectClassifyPath() {
+        return python.getSubjectClassifyPath();
+    }
+
     @Data
     public static class Guardrail {
         /** 轮次上限（≤ 领域硬上限 20） */
@@ -158,6 +173,7 @@ public class TutoringProperties implements TutoringConfig {
         private Duration questionUnderstand = Duration.ofSeconds(40);
         private Duration vectorPut = Duration.ofSeconds(30);
         private Duration vectorQuery = Duration.ofSeconds(30);
+        private Duration subjectClassify = Duration.ofSeconds(5);
     }
 
     @Data
@@ -174,5 +190,6 @@ public class TutoringProperties implements TutoringConfig {
         private String questionUnderstandPath = "/api/tutoring/question-understand";
         private String vectorPutPath = "/api/tutoring/vector/put";
         private String vectorQueryPath = "/api/tutoring/vector/query";
+        private String subjectClassifyPath = "/api/tutoring/subject-classify";
     }
 }

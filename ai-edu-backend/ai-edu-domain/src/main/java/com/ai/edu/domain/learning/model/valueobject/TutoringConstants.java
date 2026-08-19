@@ -42,4 +42,7 @@ public final class TutoringConstants {
 
     /** 题型名向量 query 调用超时（embedding + 检索） */
     public static final Duration VECTOR_QUERY_TIMEOUT = Duration.ofSeconds(30);
+
+    /** 学科分类调用超时（subject-classify：轻量分类小模型，5s 兜底防挂起；失败按 math 放行） */
+    public static final Duration SUBJECT_CLASSIFY_TIMEOUT = Duration.ofSeconds(5);
 }

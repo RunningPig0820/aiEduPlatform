@@ -25,6 +25,8 @@ import com.ai.edu.domain.learning.model.contract.EvalInfo;
 import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
+import com.ai.edu.domain.learning.model.contract.SubjectClassifyRequest;
+import com.ai.edu.domain.learning.model.contract.SubjectClassifyResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
 import com.ai.edu.domain.learning.model.entity.QuestionAttempt;
@@ -47,6 +49,7 @@ import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
 import com.ai.edu.domain.learning.repository.TutoringSessionRepository;
 import com.ai.edu.domain.learning.service.ScoreMapper;
+import com.ai.edu.domain.learning.service.SubjectClassifyPort;
 import com.ai.edu.domain.learning.service.TutoringConfig;
 import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import com.ai.edu.domain.learning.service.TutoringLlmPort;
@@ -100,6 +103,8 @@ public class TutoringAppService {
     private static final String ROUND_LIMIT_REPLY = "本轮答疑已达 20 轮上限，先消化一下当前内容，有需要可以发起新一轮答疑。";
     /** Python 调用失败重试后仍失败的降级提示（会话保持 ACTIVE 不断开） */
     private static final String AGENT_ERROR_REPLY = "网络波动，请重试。";
+    /** 学科门：非数学题跳过提示（subject-classify 判非 math → 不建/不续会话、不落库，直接回复） */
+    private static final String SUBJECT_OUT_OF_SCOPE_REPLY = "目前仅支持数学答疑，换一道数学题试试吧。";
 
     /** agent 事件协议阶段/文案（tutoring-agent-protocol 契约，level 恒 sub） */
     private static final String AGENT_STAGE_GUARDRAIL = "guardrail";
@@ -159,6 +164,10 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private TutoringLlmPort llmPort;
+    /** 学科分类端口（subject-classify，decide 之前判学科；失败/空 → 按 math 放行）。 */
+    @Resource
+    @Setter(AccessLevel.PACKAGE)
+    private SubjectClassifyPort subjectClassifyPort;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private TutoringKpResolver kpResolver;
@@ -203,9 +212,25 @@ public class TutoringAppService {
      * <p>首条消息恒非换题（is_new_question=false）——会话开始无旧题可换，Python 绝不能判 switch。
      */
     public Flux<ServerSentEvent<String>> start(Long studentId, String message, byte[] imageData, String originalFilename) {
-        // 7.9 会话创建频率限制
+        // 学科门（tasks 2.2，decide 之前）：subject-classify 判学科，非 math 不建会话/不落库，
+        // 直接返回「仅支持数学」提示流；classify 失败/空 → 按 math 放行（宁可漏拦不误拦）。
+        String subject = "math";
+        if (subjectClassifyPort != null && (hasText(message) || hasImage(imageData))) {
+            // 图片题预检：先上传到 subject-check 目录拿 URL 供分类器看图（非 math 不建会话；
+            // 该图片对象留在 COS 属预期副作用，math 走正常流程再按会话路径上传一次）
+            String preImageUrl = hasImage(imageData)
+                    ? uploadSubjectCheckImage(studentId, imageData, originalFilename) : null;
+            SubjectClassifyResult classify = classifySafely(SubjectClassifyRequest.builder()
+                    .content(message).imageUrl(preImageUrl).build());
+            if (!subjectAllowed(classify)) {
+                log.info("[tutoring] 非数学题跳过（拍题）: subject={}", classify == null ? null : classify.getSubject());
+                return subjectHintStream(null);
+            }
+            subject = (classify != null && !classify.isEmpty()) ? classify.getSubject() : "math";
+        }
+        // 7.9 会话创建频率限制（仅真正建会话时限制，非 math 跳过不消耗创建配额）
         ensureCreateAllowed(studentId);
-        TutoringSession session = TutoringSession.start(studentId, "math");
+        TutoringSession session = TutoringSession.start(studentId, subject);
         // 会话标题：首条用户消息内容前 ~30 字（历史列表展示，见设计 D3）；须在首次落库前设置，
         // 图片路径（save 拿 sessionId）与文字路径（ensurePersisted）都随会话一起持久化。
         session.setTitle(buildSessionTitle(message, imageData));
@@ -249,6 +274,18 @@ public class TutoringAppService {
                 String url = uploadQuestionImage(session.getStudentId(), sessionId, imageData, originalFilename);
                 // 换题判定（Java 侧权威）：新图 URL 未在 history 中出现 = 本轮新增题目图 → 换题信号
                 isNewQuestion = !historyContainsImageUrl(history, url);
+                // 学科门（tasks 2.3，decide 之前）：仅「新题进入」（新图首次出现）判学科；
+                // 非 math 跳过该新题——不追加消息/不结算旧题/不记录，返回提示，原会话不受影响
+                if (isNewQuestion) {
+                    SubjectClassifyResult classify = classifySafely(SubjectClassifyRequest.builder()
+                            .content(content).imageUrl(url).build());
+                    if (!subjectAllowed(classify)) {
+                        log.info("[tutoring] 非数学题跳过（换题）: subject={}, sessionId={}",
+                                classify == null ? null : classify.getSubject(), sessionId);
+                        unlock.run();   // 临界区跳过，立即释放锁
+                        return subjectHintStream(session);
+                    }
+                }
                 sessionCache.appendMessage(sessionId, TutoringChatMessage.userWithImage(content, url));
             } else {
                 sessionCache.appendMessage(sessionId, TutoringChatMessage.user(content));
@@ -963,6 +1000,19 @@ public class TutoringAppService {
         return Flux.just(metaEvent(meta), contentToken(ROUND_LIMIT_REPLY), doneEvent(done));
     }
 
+    /**
+     * 非数学题跳过（学科门，tasks 2.2/2.3）：meta + 「仅支持数学」token + done，不建/不续会话、不落库。
+     * <p>拍题非数学 {@code session == null} → meta.sessionId=null；换题非数学 → 原会话 ID（不消耗轮次）。
+     */
+    private Flux<ServerSentEvent<String>> subjectHintStream(TutoringSession session) {
+        Long sid = session == null ? null : session.getId();
+        SseMetaDTO meta = SseMetaDTO.builder()
+                .sessionId(sid).status("ACTIVE").type("hint").roundCount(0).build();
+        SseDoneDTO done = SseDoneDTO.builder()
+                .sessionId(sid).status("ACTIVE").roundCount(0).build();
+        return Flux.just(metaEvent(meta), contentToken(SUBJECT_OUT_OF_SCOPE_REPLY), doneEvent(done));
+    }
+
     /** Python 调用失败（已有会话）：meta + "网络波动，请重试" token + done，会话保持 ACTIVE。 */
     private Flux<ServerSentEvent<String>> friendlyErrorStream(TutoringSession session) {
         SseMetaDTO meta = SseMetaDTO.builder()
@@ -1161,6 +1211,47 @@ public class TutoringAppService {
             return false;
         }
         return history.stream().anyMatch(m -> url.equals(m.getImageUrl()));
+    }
+
+    // ==================== 学科门（subject-classify，decide 之前） ====================
+
+    /** 安全判学科：端口未装配/调用异常 → null（视为失败，按 math 放行，绝不阻断答疑主链路）。 */
+    private SubjectClassifyResult classifySafely(SubjectClassifyRequest request) {
+        if (subjectClassifyPort == null) {
+            return null;
+        }
+        try {
+            return subjectClassifyPort.classify(request);
+        } catch (Exception e) {
+            log.warn("[tutoring] subject-classify 调用异常（按 math 放行）: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 学科门判定：classify 失败/空/数学 → 放行（math）；非数学 → 拦截。宁可漏拦不误拦。 */
+    private boolean subjectAllowed(SubjectClassifyResult classify) {
+        return classify == null || classify.isEmpty() || classify.isMath();
+    }
+
+    /** 拍题预检图片上传（subject-check 目录，sessionId 尚不存在）：供分类器看图后决定是否建会话。 */
+    private String uploadSubjectCheckImage(Long studentId, byte[] imageData, String originalFilename) {
+        validateImageFormat(originalFilename);
+        if (fileStorageService == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMS, "文件存储未配置");
+        }
+        String objectKey = "tutoring/questions/" + studentId + "/subject-check/"
+                + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").format(LocalDateTime.now())
+                + fileExtension(originalFilename);
+        fileStorageService.uploadToObjectKey(objectKey, imageData, imageContentType(originalFilename));
+        return fileStorageService.getUrl(objectKey);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private boolean hasImage(byte[] imageData) {
+        return imageData != null && imageData.length > 0;
     }
 
     // ==================== SSE 序列化 ====================

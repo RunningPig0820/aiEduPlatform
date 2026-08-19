@@ -83,7 +83,7 @@ public class TutoringSession {
         return session;
     }
 
-    /** 发起会话：置 ACTIVE，计数器清零。subject 本期恒为 math。 */
+    /** 发起会话：置 ACTIVE，计数器清零。subject 传学科分类结果（subject-classify；空/缺省回退 math）。 */
     public static TutoringSession start(Long studentId, String subject) {
         TutoringSession session = new TutoringSession();
         session.studentId = studentId;
