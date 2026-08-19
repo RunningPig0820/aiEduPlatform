@@ -109,8 +109,7 @@ public class TutoringGuardrailService {
     /**
      * 收尾护栏（type=end 放行后）：置 ARCHIVED + endReason。
      *
-     * <p>掌握度校正（COMPLETED 提升 75+ / 其余不提升）由编排服务执行
-     * （需 KpResolver 解析 label→URI + StudentKpMasteryRepository）。
+     * <p>掌握度校正（COMPLETED 提升 75+ / 其余不提升）由编排服务执行（题型掌握表）。
      */
     public void onEnd(TutoringSession session, EndReason reason) {
         EndReason actual = (reason == null) ? EndReason.ABANDONED : reason;

@@ -5,11 +5,11 @@ import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.KpSnapshot;
 import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
-import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.ActionType;
-import com.ai.edu.domain.learning.model.valueobject.KpKey;
 import com.ai.edu.domain.learning.model.valueobject.MasteryLevel;
+import com.ai.edu.domain.learning.model.valueobject.TopicKey;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -36,9 +36,8 @@ class TutoringContextAssemblerTest {
                 TutoringChatMessage.user("鸡兔同笼"),
                 TutoringChatMessage.ai("先找已知条件"));
 
-        StudentKpMastery mastery = StudentKpMastery.create(501L, KpKey.of("http://edukg.org/kp/1"), "二元一次方程组");
-        mastery.applySignal(com.ai.edu.domain.learning.model.valueobject.MasterySignal.of(
-                "二元一次方程组", com.ai.edu.domain.learning.model.valueobject.MasterySignal.Level.PRACTICING)); // 50
+        StudentTopicMastery mastery = StudentTopicMastery.restore(
+                1L, 501L, TopicKey.of("鸡兔同笼"), "鸡兔同笼", MasteryLevel.of(64), "ai", 3L, null);
 
         DecideContext ctx = assembler.buildDecideContext(session, history, List.of(mastery));
 
@@ -49,9 +48,9 @@ class TutoringContextAssemblerTest {
         assertEquals("math", ctx.getSubjectHint());
         assertEquals(1, ctx.getMasterySnapshot().size());
         KpSnapshot snapshot = ctx.getMasterySnapshot().get(0);
-        assertEquals("http://edukg.org/kp/1", snapshot.getKpKey());
-        assertEquals("二元一次方程组", snapshot.getLabel()); // label 必带（Python label 接地）
-        assertEquals(50, snapshot.getMasteryLevel());
+        assertEquals("鸡兔同笼", snapshot.getKpKey()); // kp_key 承载题型 key（学生掌握题型）
+        assertEquals("鸡兔同笼", snapshot.getLabel()); // label 必带（Python label 接地）
+        assertEquals(64, snapshot.getMasteryLevel());
     }
 
     @Test
@@ -95,13 +94,13 @@ class TutoringContextAssemblerTest {
     }
 
     @Test
-    @DisplayName("toKpSnapshot 跳过无 kpKey 的脏记录")
+    @DisplayName("toKpSnapshot 跳过无题型 key 的脏记录")
     void toKpSnapshot_skipDirty() {
         TutoringSession session = TutoringSession.start(501L, "math");
-        StudentKpMastery dirty = StudentKpMastery.create(501L, null, "无key");
-        StudentKpMastery valid = StudentKpMastery.create(501L, KpKey.of("http://edukg.org/kp/2"), "有理数");
-        valid.applySignal(com.ai.edu.domain.learning.model.valueobject.MasterySignal.of(
-                "有理数", com.ai.edu.domain.learning.model.valueobject.MasterySignal.Level.MASTERED)); // 75
+        StudentTopicMastery dirty = StudentTopicMastery.restore(
+                1L, 501L, null, "无key", MasteryLevel.of(0), "ai", 0L, null);
+        StudentTopicMastery valid = StudentTopicMastery.restore(
+                2L, 501L, TopicKey.of("有理数"), "有理数", MasteryLevel.of(75), "ai", 5L, null);
 
         List<KpSnapshot> snapshots = assembler.toKpSnapshot(List.of(dirty, valid));
 

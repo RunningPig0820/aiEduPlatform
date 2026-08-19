@@ -4,7 +4,7 @@ import com.ai.edu.domain.learning.model.contract.DecideContext;
 import com.ai.edu.domain.learning.model.contract.GenerateContext;
 import com.ai.edu.domain.learning.model.contract.KpSnapshot;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
-import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
+import com.ai.edu.domain.learning.model.entity.StudentTopicMastery;
 import com.ai.edu.domain.learning.model.entity.TutoringSession;
 import com.ai.edu.domain.learning.model.valueobject.ActionType;
 import org.springframework.stereotype.Component;
@@ -29,7 +29,7 @@ public class TutoringContextAssembler {
      */
     public DecideContext buildDecideContext(TutoringSession session,
                                             List<TutoringChatMessage> history,
-                                            List<StudentKpMastery> masteryList) {
+                                            List<StudentTopicMastery> masteryList) {
         return buildDecideContext(session, history, masteryList, false);
     }
 
@@ -40,7 +40,7 @@ public class TutoringContextAssembler {
      */
     public DecideContext buildDecideContext(TutoringSession session,
                                             List<TutoringChatMessage> history,
-                                            List<StudentKpMastery> masteryList,
+                                            List<StudentTopicMastery> masteryList,
                                             boolean isNewQuestion) {
         return DecideContext.builder()
                 .history(history == null ? List.of() : history)
@@ -67,17 +67,18 @@ public class TutoringContextAssembler {
     }
 
     /**
-     * 学生掌握度实体 → 快照项（kp_key=TextbookKP URI、label 必带、mastery_level 分值）。
+     * 题型掌握度实体 → 快照项（kp_key=题型 key（题型名）、label=题型展示名、mastery_level 分值）。
+     * 学生掌握主体为题型（域 B 独立化），不再读旧知识点掌握表。
      */
-    public List<KpSnapshot> toKpSnapshot(List<StudentKpMastery> masteryList) {
+    public List<KpSnapshot> toKpSnapshot(List<StudentTopicMastery> masteryList) {
         if (masteryList == null || masteryList.isEmpty()) {
             return List.of();
         }
         return masteryList.stream()
-                .filter(m -> m.getKpKey() != null)
+                .filter(m -> m.getTopicKey() != null)
                 .map(m -> KpSnapshot.builder()
-                        .kpKey(m.getKpKey().getValue())
-                        .label(m.getKpLabel())
+                        .kpKey(m.getTopicKey().getValue())
+                        .label(m.getTopicLabel())
                         .masteryLevel(m.getMasteryLevel() == null ? 0 : m.getMasteryLevel().getValue())
                         .build())
                 .toList();

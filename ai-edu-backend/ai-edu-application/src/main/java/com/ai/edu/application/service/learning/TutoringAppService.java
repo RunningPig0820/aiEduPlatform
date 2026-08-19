@@ -27,7 +27,6 @@ import com.ai.edu.domain.learning.model.contract.MasterySignalItem;
 import com.ai.edu.domain.learning.model.contract.OcrResult;
 import com.ai.edu.domain.learning.model.contract.TutoringChatMessage;
 import com.ai.edu.domain.learning.model.entity.ErrorEvent;
-import com.ai.edu.domain.learning.model.entity.StudentKpMastery;
 import com.ai.edu.domain.learning.model.entity.QuestionAttempt;
 import com.ai.edu.domain.learning.model.entity.RoundSignal;
 import com.ai.edu.domain.learning.model.entity.StudentQuestionRecord;
@@ -43,7 +42,6 @@ import com.ai.edu.domain.learning.model.valueobject.TutoringConstants;
 import com.ai.edu.domain.learning.model.valueobject.TutoringEmotion;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
-import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
 import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
@@ -131,9 +129,6 @@ public class TutoringAppService {
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private TutoringSessionRepository tutoringSessionRepository;
-    @Resource
-    @Setter(AccessLevel.PACKAGE)
-    private StudentKpMasteryRepository masteryRepository;
     @Resource
     @Setter(AccessLevel.PACKAGE)
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
@@ -545,7 +540,7 @@ public class TutoringAppService {
      */
     private Flux<ServerSentEvent<String>> orchestrate(TutoringSession session, List<TutoringChatMessage> history,
                                                       boolean isNewQuestion, Runnable unlock) {
-        List<StudentKpMastery> masteryList = masteryRepository.findByStudentId(session.getStudentId());
+        List<StudentTopicMastery> masteryList = studentTopicMasteryRepository.findByStudentId(session.getStudentId());
         DecideContext ctx = contextAssembler.buildDecideContext(session, history, masteryList, isNewQuestion);
 
         // decide 响应式中继：thinking + decide 阶段 agent 事件（perceive/analyze/plan/decide）实时透传；

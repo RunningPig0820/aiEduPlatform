@@ -26,7 +26,6 @@ import com.ai.edu.domain.learning.model.valueobject.MasterySignal;
 import com.ai.edu.domain.learning.model.valueobject.TopicKey;
 import com.ai.edu.domain.learning.model.valueobject.TutoringState;
 import com.ai.edu.domain.learning.repository.ErrorEventRepository;
-import com.ai.edu.domain.learning.repository.StudentKpMasteryRepository;
 import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
 import com.ai.edu.domain.learning.repository.StudentTopicMasteryRepository;
 import com.ai.edu.domain.learning.repository.TutoringSessionCache;
@@ -68,7 +67,6 @@ class TutoringAppServiceTest {
 
     private TutoringAppService service;
     private TutoringSessionRepository sessionRepository;
-    private StudentKpMasteryRepository masteryRepository;
     private StudentTopicMasteryRepository studentTopicMasteryRepository;
     private StudentQuestionRecordRepository questionRecordRepository;
     private TopicLabelAggregationService topicLabelAggregationService;
@@ -84,7 +82,6 @@ class TutoringAppServiceTest {
     void setUp() {
         service = new TutoringAppService();
         sessionRepository = mock(TutoringSessionRepository.class);
-        masteryRepository = mock(StudentKpMasteryRepository.class);
         studentTopicMasteryRepository = mock(StudentTopicMasteryRepository.class);
         errorEventRepository = mock(ErrorEventRepository.class);
         sessionCache = mock(TutoringSessionCache.class);
@@ -95,7 +92,6 @@ class TutoringAppServiceTest {
         redisService = mock(RedisService.class);
 
         service.setTutoringSessionRepository(sessionRepository);
-        service.setMasteryRepository(masteryRepository);
         service.setStudentTopicMasteryRepository(studentTopicMasteryRepository);
         service.setErrorEventRepository(errorEventRepository);
         service.setSessionCache(sessionCache);
@@ -121,15 +117,12 @@ class TutoringAppServiceTest {
         // 会话并发锁默认放行
         when(redisService.tryLock(anyString(), anyString(), anyLong(), any())).thenReturn(true);
         when(sessionCache.tryIncrementCreateCount(eq(STUDENT_ID), anyInt(), anyInt())).thenReturn(true);
-        when(masteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(fileStorageService.generatePresignedUrl(anyString(), anyInt()))
                 .thenAnswer(inv -> "https://cos/" + inv.getArgument(0));
         when(kpResolver.resolveReadOnly(anyString(), any())).thenReturn(KpResolution.resolved("label", KP_URI, "二元一次方程组", 100));
         when(studentTopicMasteryRepository.findByStudentId(eq(STUDENT_ID))).thenReturn(List.of());
         when(studentTopicMasteryRepository.findByStudentAndTopic(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
         when(studentTopicMasteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(masteryRepository.findByStudentAndKp(eq(STUDENT_ID), any())).thenReturn(Optional.empty());
-        when(masteryRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
         when(transcriptArchiver.archive(any(), any(), any(), anyList(), any(), any()))
                 .thenReturn("tutoring/transcripts/" + STUDENT_ID + "/" + SESSION_ID + ".json");
         when(sessionRepository.save(any())).thenAnswer(inv -> {
@@ -430,7 +423,6 @@ class TutoringAppServiceTest {
                 .verifyComplete();
         assertEquals(0, session.getRoundCount());
         assertEquals(TutoringState.ACTIVE, session.getStatus());
-        verify(masteryRepository, never()).upsert(any()); // 旧题知识点不点亮
     }
 
     @Test
@@ -601,7 +593,6 @@ class TutoringAppServiceTest {
 
         service.sendMessage(STUDENT_ID, SESSION_ID, "这题不会").subscribe();
 
-        verify(masteryRepository, never()).upsert(any());
         verify(errorEventRepository, never()).save(any());
     }
 
@@ -960,7 +951,6 @@ class TutoringAppServiceTest {
         assertEquals("ABANDONED", session.getEndReason().name());
         verify(transcriptArchiver).archive(any(), eq(SESSION_ID), any(), anyList(), eq(TutoringState.ARCHIVED), any());
         verify(sessionCache).clear(SESSION_ID);
-        verify(masteryRepository, never()).upsert(any()); // ABANDONED 不提升掌握度
     }
 
     @Test
