@@ -30,6 +30,9 @@ public class SseMetaDTO implements Serializable {
     /** 会话状态（ACTIVE / ARCHIVED / TERMINATED） */
     private String status;
 
+    /** 学科（subject-classify 输出闭集：math/physics/chemistry/biology/other；正常答疑轮带，非数学跳过流不带；可空，前端缺失隐藏该行） */
+    private String subject;
+
     /** 已放行 type（hint/approach/reveal/concept/switch/end） */
     private String type;
 

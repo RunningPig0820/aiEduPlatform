@@ -911,6 +911,7 @@ public class TutoringAppService {
         SseMetaDTO meta = SseMetaDTO.builder()
                 .sessionId(session.getId())
                 .status(session.getStatus() == null ? null : session.getStatus().name())
+                .subject(session.getSubject())
                 .type(allowedType.name().toLowerCase())
                 .roundCount(session.getRoundCount())
                 .answerRequestCount(session.getAnswerRequestCount())

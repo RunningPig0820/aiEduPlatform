@@ -11,6 +11,7 @@
 - [通用说明](#通用说明)
 - [1. 非数学题跳过响应（SSE）](#1-非数学题跳过响应sse)
 - [2. subject-classify（Java↔Python 内部，不对前端开放）](#2-subject-classifyjavapython-内部不对前端开放)
+- [3. SSE meta.subject 字段（学科）](#3-sse-metasubject-字段学科)
 - [前端调用注意事项](#前端调用注意事项)
 
 ---
@@ -48,6 +49,7 @@ event: done,  data: {"sessionId":null, "status":"ACTIVE", "roundCount":0}
 |------|------|------|
 | meta | sessionId | 拍题非数学为 `null`（未建会话）；换题非数学为原会话 ID |
 | meta | type | 复用 `hint`（提示语类型，不新建 ActionType） |
+| meta | subject | 非数学跳过**不带**（`null`），前端只展示提示语、隐藏学科行 |
 | token | content | 固定提示语「目前仅支持数学答疑，换一道数学题试试吧。」 |
 | done | status | `ACTIVE`（未结束） |
 
@@ -123,13 +125,26 @@ es.onmessage = (e) => {
 
 ---
 
+## 3. SSE meta.subject 字段（学科）
+
+**用途**：前端「学科分析」行展示学科来源。
+
+| 场景 | meta.subject | 说明 |
+|------|-------------|------|
+| 正常答疑轮（拍题建会话 / 发消息 / 请求答案 / 换题走 switch） | 会话真实 `subject` | 值域与 subject-classify 一致：`math` / `physics` / `chemistry` / `biology` / `other`；识别失败/异常降级为 `math` |
+| 非数学跳过流（`subjectHintStream`） | `null`（不带） | 前端只展示「仅支持数学」提示语，隐藏学科行 |
+
+**降级**：`subject` 为可空字段，缺失时前端隐藏「学科分析」行、不报错。
+
+---
+
 ## 前端调用注意事项
 
 1. **学科判定对前端透明**：前端照常发题目（文字/图片），后端内部先判学科再决定走答疑还是「仅支持数学」。
 2. **拍题非数学不建会话**：`meta.sessionId=null`，前端不能拿它做跳转；直接展示提示语即可。
 3. **不消耗轮次**：非数学题不扣 20 轮上限，可继续换数学题。
 4. **无落库**：非数学题不产生题目记录/掌握度/错误事件。
-5. 若前端希望差异化展示（弹窗/图标提示「仅支持数学」），后续可在 meta 增加标记，本期不新增。
+5. **学科行数据源**：正常答疑轮 `meta.subject` 提供学科（`math` / `physics` / `chemistry` / `biology` / `other`），前端「学科分析」行直接读取；非数学跳过流 `meta.subject` 为 `null`，前端只展示提示语并隐藏学科行（缺失不报错）。
 
 ---
 

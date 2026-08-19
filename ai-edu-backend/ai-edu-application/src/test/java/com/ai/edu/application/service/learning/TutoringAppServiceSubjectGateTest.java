@@ -129,6 +129,8 @@ class TutoringAppServiceSubjectGateTest {
                     assertEquals("meta", ev.event());
                     assertTrue(ev.data().contains("\"sessionId\":null"), ev.data());
                     assertTrue(ev.data().contains("\"type\":\"hint\""), ev.data());
+                    // 非数学跳过流 meta 不带 subject（subject=null，前端只展示提示语、隐藏学科行）
+                    assertTrue(ev.data().contains("\"subject\":null"), ev.data());
                 })
                 .assertNext(ev -> {
                     assertEquals("token", ev.event());
@@ -216,6 +218,69 @@ class TutoringAppServiceSubjectGateTest {
         TutoringSession saved = captor.getAllValues().get(0);
         assertEquals("math", saved.getSubject(), "会话 subject 应为 classify 结果 math");
         verify(subjectClassifyPort).classify(any());
+    }
+
+    // ==================== subject 字段（meta 契约收尾） ====================
+
+    @Test
+    @DisplayName("GATE-007: 拍题建会话正常轮 meta 带 subject（= 会话真实 subject，非硬编码）")
+    void start_math_metaCarriesSubject() {
+        mockClassify("math");
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"先找已知条件\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "鸡兔同笼，共35头94脚，各几只？");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail)
+                .assertNext(ev -> {
+                    assertEquals("meta", ev.event());
+                    assertTrue(ev.data().contains("\"subject\":\"math\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory)
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("GATE-008: 发消息/换题走 switch 正常轮 meta 带 subject（= 会话真实 subject）")
+    void sendMessage_metaCarriesSubject() {
+        activeSessionInCache();   // subject=math
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("switch")));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"新题我们开始\"}")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "换一题");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail)
+                .assertNext(ev -> {
+                    assertEquals("meta", ev.event());
+                    assertTrue(ev.data().contains("\"subject\":\"math\""), ev.data());
+                })
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory)
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("GATE-009: subject 缺失不报错——非数学跳过流序列化正常，subject 为 null（前端隐藏该行）")
+    void subjectMissing_noError_subjectNull() {
+        mockClassify("physics");
+
+        Flux<ServerSentEvent<String>> stream = service.start(STUDENT_ID, "自由落体运动的问题");
+
+        // 流正常结束（meta 序列化不抛异常），meta.subject=null（可空字段，前端隐藏学科行）
+        StepVerifier.create(stream)
+                .assertNext(ev -> {
+                    assertEquals("meta", ev.event());
+                    assertTrue(ev.data().contains("\"subject\":null"), ev.data());
+                })
+                .expectNextCount(2)   // token + done
+                .verifyComplete();
+        assertNoWrite();
+        verify(llmPort, never()).decideStream(any());
     }
 
     // ==================== GATE-003：换题非数学跳过 ====================
