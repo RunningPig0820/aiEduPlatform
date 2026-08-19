@@ -19,14 +19,18 @@ import java.util.List;
 public interface KgOverviewTreeMapper {
 
     /**
-     * 学段 → 年级（单表 DISTINCT grade，ORDER BY sort）。
+     * 学段 → 年级（GROUP BY grade 去重，MIN(sort) 作顺序）。
      *
      * <p>⚠️ 讨巧实现（数据现状仅人教版 + 数学，教材表年级够用）：年级由教材表推导。
      * 正确应取组织域 {@code SchoolStageEnum} + {@code GradeEnum} 的「学段→年级」权威关系，
      * 见 {@code KgKnowledgeOverviewController.grades} 注释——教材覆盖多版本/多学科后切换。
+     *
+     * <p>注意：不能用 {@code DISTINCT grade, sort}——DISTINCT 按全部 select 列去重，
+     * 同一年级多本教材（sort 不同）会重复；必须 GROUP BY grade 且仅按年级聚合（MIN(sort) 顺序）。
      */
-    @Select("SELECT DISTINCT grade AS uri, grade AS label, 0 AS orderIndex FROM t_kg_textbook " +
-            "WHERE stage = #{stage} AND is_deleted = false ORDER BY sort")
+    @Select("SELECT grade AS uri, grade AS label, MIN(sort) AS orderIndex FROM t_kg_textbook " +
+            "WHERE stage = #{stage} AND is_deleted = false AND grade IS NOT NULL AND grade <> '' " +
+            "GROUP BY grade ORDER BY MIN(sort)")
     List<KgTreeNode> selectGradesByStage(@Param("stage") String stage);
 
     /** 年级 → 课本（单表，WHERE stage+grade，ORDER BY sort）。 */

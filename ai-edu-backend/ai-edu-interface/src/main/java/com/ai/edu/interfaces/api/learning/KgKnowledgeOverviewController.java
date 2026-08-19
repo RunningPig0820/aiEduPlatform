@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,29 +55,30 @@ public class KgKnowledgeOverviewController {
         return ApiResponse.success(appService.textbooksByStage(stage, grade));
     }
 
-    /** GET /api/kg/textbooks/{textbookUri}/chapters?stage=primary — 课本下章节列表（第 3 层）。
+    /** GET /api/kg/textbooks/chapters?textbookUri=xxx&stage=primary — 课本下章节列表（第 3 层）。
+     *  uri 含 http://、# 等特殊字符，放 path segment 会被 Tomcat 拒 400——必须 query 传参；
      *  stage 为学段上下文（前端传入，当前章节查询按 textbookUri，不参与过滤）。 */
-    @Operation(summary = "课本下章节列表", description = "第 3 层：按课本查章节（stage 学段上下文，前端传入）")
-    @GetMapping("/textbooks/{textbookUri}/chapters")
-    public ApiResponse<List<KgTreeNodeDTO>> chapters(@PathVariable String textbookUri,
+    @Operation(summary = "课本下章节列表", description = "第 3 层：按课本查章节（textbookUri 须 encodeURIComponent；stage 学段上下文可选）")
+    @GetMapping("/textbooks/chapters")
+    public ApiResponse<List<KgTreeNodeDTO>> chapters(@RequestParam String textbookUri,
                                                      @RequestParam(required = false) String stage,
                                                      HttpSession session) {
         requireLogin(session);
         return ApiResponse.success(appService.chaptersByTextbook(textbookUri));
     }
 
-    /** GET /api/kg/chapters/{chapterUri}/sections — 章节下小节列表（第 4 层）。 */
-    @Operation(summary = "章节下小节列表", description = "第 4 层：按章节查小节")
-    @GetMapping("/chapters/{chapterUri}/sections")
-    public ApiResponse<List<KgTreeNodeDTO>> sections(@PathVariable String chapterUri, HttpSession session) {
+    /** GET /api/kg/chapters/sections?chapterUri=xxx — 章节下小节列表（第 4 层，query 传参防 path 400）。 */
+    @Operation(summary = "章节下小节列表", description = "第 4 层：按章节查小节（chapterUri 须 encodeURIComponent）")
+    @GetMapping("/chapters/sections")
+    public ApiResponse<List<KgTreeNodeDTO>> sections(@RequestParam String chapterUri, HttpSession session) {
         requireLogin(session);
         return ApiResponse.success(appService.sectionsByChapter(chapterUri));
     }
 
-    /** GET /api/kg/sections/{sectionUri}/knowledge-points — 小节下知识点列表（第 5 层）。 */
-    @Operation(summary = "小节下知识点列表", description = "第 5 层：按小节查知识点")
-    @GetMapping("/sections/{sectionUri}/knowledge-points")
-    public ApiResponse<List<KgTreeNodeDTO>> knowledgePoints(@PathVariable String sectionUri, HttpSession session) {
+    /** GET /api/kg/sections/knowledge-points?sectionUri=xxx — 小节下知识点列表（第 5 层，query 传参防 path 400）。 */
+    @Operation(summary = "小节下知识点列表", description = "第 5 层：按小节查知识点（sectionUri 须 encodeURIComponent）")
+    @GetMapping("/sections/knowledge-points")
+    public ApiResponse<List<KgTreeNodeDTO>> knowledgePoints(@RequestParam String sectionUri, HttpSession session) {
         requireLogin(session);
         return ApiResponse.success(appService.knowledgePointsBySection(sectionUri));
     }

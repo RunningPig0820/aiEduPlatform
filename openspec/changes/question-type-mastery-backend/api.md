@@ -354,11 +354,11 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 |------|------|------|
 | `GET /api/kg/grades?stage=primary` | 第 1 层 | 学段下年级列表（stage: `primary`/`middle`/`high`；`uri`/`label` 均为年级名，如「一年级」） |
 | `GET /api/kg/textbooks?stage=primary&grade=一年级` | 第 2 层 | 年级下课本列表（grade 需 URL encode） |
-| `GET /api/kg/textbooks/{textbookUri}/chapters?stage=primary` | 第 3 层 | 课本下章节（`stage` 为学段上下文，前端传入，当前不参与查询，可选） |
-| `GET /api/kg/chapters/{chapterUri}/sections` | 第 4 层 | 章节下小节 |
-| `GET /api/kg/sections/{sectionUri}/knowledge-points` | 第 5 层 | 小节下知识点 |
+| `GET /api/kg/textbooks/chapters?textbookUri=xxx&stage=primary` | 第 3 层 | 课本下章节（textbookUri 须 encode；`stage` 学段上下文可选，当前不参与查询） |
+| `GET /api/kg/chapters/sections?chapterUri=xxx` | 第 4 层 | 章节下小节（chapterUri 须 encode） |
+| `GET /api/kg/sections/knowledge-points?sectionUri=xxx` | 第 5 层 | 小节下知识点（sectionUri 须 encode） |
 
 - 每层返回 `[{ "uri", "label", "orderIndex" }]`（`orderIndex` 同级排序，0 起）
 - 登录即可（学生/教师/管理员），无 body
-- **uri 含特殊字符（`http://...`）及中文（年级），前端必须 `encodeURIComponent` 后放 path/query**；每层数据量小（几~十几条），无需分页
+- **所有层级统一 query 参数传参**（path 传 uri 会被 Tomcat 拒 400——uri 含 `http://`、`#`、`%2F`）；前端一律 `encodeURIComponent` 后放 query；每层数据量小（几~十几条），无需分页
 - 旧 `POST /api/kg/knowledge-points`（7 JOIN 分页）已删除
