@@ -21,13 +21,12 @@ import java.util.List;
 public interface StudentTopicMasteryMapper extends BaseMapper<StudentTopicMasteryPo> {
 
     /**
-     * 掌握度 UPSERT（存在则更新：label/level/evidence/last_session/source/train_count；不存在则插入）。
-     * 新建插入时经 useGeneratedKeys 回填主键。
+     * 掌握度 UPSERT（存在则更新：label/level/source/train_count；不存在则插入）。
+     * 新建插入时经 useGeneratedKeys 回填主键。evidence/last_session_id 已随 V21 迁移删除，不再读写。
      */
-    @Insert("INSERT INTO t_student_topic_mastery (student_id, topic_key, topic_label, mastery_level, evidence, last_session_id, source, train_count, created_by, modified_by, is_deleted) " +
-            "VALUES (#{studentId}, #{topicKey}, #{topicLabel}, #{masteryLevel}, #{evidence}, #{lastSessionId}, #{source}, #{trainCount}, #{createdBy}, #{modifiedBy}, 0) " +
+    @Insert("INSERT INTO t_student_topic_mastery (student_id, topic_key, topic_label, mastery_level, source, train_count, created_by, modified_by, is_deleted) " +
+            "VALUES (#{studentId}, #{topicKey}, #{topicLabel}, #{masteryLevel}, #{source}, #{trainCount}, #{createdBy}, #{modifiedBy}, 0) " +
             "ON DUPLICATE KEY UPDATE topic_label = VALUES(topic_label), mastery_level = VALUES(mastery_level), " +
-            "evidence = VALUES(evidence), last_session_id = VALUES(last_session_id), " +
             "source = VALUES(source), train_count = VALUES(train_count), " +
             "updated_at = NOW(), modified_by = VALUES(modified_by)")
     @Options(useGeneratedKeys = true, keyProperty = "id")
