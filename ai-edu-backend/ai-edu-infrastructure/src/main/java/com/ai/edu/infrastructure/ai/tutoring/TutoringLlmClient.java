@@ -120,7 +120,8 @@ public class TutoringLlmClient implements TutoringLlmPort {
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(QuestionUnderstandResult.class))
-                    .retry(config().agentRetry())
+                    // 图片理解视觉模型慢（Python 单次 30s+）：不重试（重试只放大延迟），超时 40s 容忍慢但成功的调用
+                    .retry(config().questionUnderstandRetry())
                     .block(config().questionUnderstandTimeout());
         } catch (Exception e) {
             log.error("[tutoring] question-understand 调用失败（降级空，调用方 PENDING）: {}", e.getMessage(), e);

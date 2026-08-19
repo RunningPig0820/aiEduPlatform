@@ -52,7 +52,10 @@ public interface TutoringConfig {
     /** Python OCR 端点路径。 */
     String ocrPath();
 
-    /** 图片题目理解调用超时（视觉模型看图，30s 兜底）。 */
+    /** 图片题目理解失败重试次数（视觉模型看图慢，默认 0 不重试——重试只放大延迟）。 */
+    int questionUnderstandRetry();
+
+    /** 图片题目理解调用超时（视觉模型看图，40s 兜底——Python 单次可能 30s+，30s 会误杀正常调用）。 */
     Duration questionUnderstandTimeout();
 
     /** Python 图片题目理解端点路径（POST /api/tutoring/question-understand，视觉模型看图）。 */
@@ -134,8 +137,13 @@ public interface TutoringConfig {
             }
 
             @Override
+            public int questionUnderstandRetry() {
+                return 0;
+            }
+
+            @Override
             public Duration questionUnderstandTimeout() {
-                return Duration.ofSeconds(30);
+                return Duration.ofSeconds(40);
             }
 
             @Override

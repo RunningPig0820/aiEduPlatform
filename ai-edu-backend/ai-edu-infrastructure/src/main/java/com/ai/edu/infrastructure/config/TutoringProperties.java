@@ -30,6 +30,9 @@ public class TutoringProperties implements TutoringConfig {
     /** Python decide/recognize 失败重试次数（generate 流式不可重试） */
     private int agentRetry = 1;
 
+    /** 图片题目理解失败重试次数（视觉模型慢，默认 0 不重试） */
+    private int questionUnderstandRetry = 0;
+
     /** 拍题 OCR 开关 */
     private Ocr ocr = new Ocr();
 
@@ -59,6 +62,11 @@ public class TutoringProperties implements TutoringConfig {
     @Override
     public int agentRetry() {
         return agentRetry;
+    }
+
+    @Override
+    public int questionUnderstandRetry() {
+        return questionUnderstandRetry;
     }
 
     @Override
@@ -147,7 +155,7 @@ public class TutoringProperties implements TutoringConfig {
         private Duration decide = Duration.ofSeconds(15);
         private Duration generate = Duration.ofSeconds(60);
         private Duration ocr = Duration.ofSeconds(30);
-        private Duration questionUnderstand = Duration.ofSeconds(30);
+        private Duration questionUnderstand = Duration.ofSeconds(40);
         private Duration vectorPut = Duration.ofSeconds(30);
         private Duration vectorQuery = Duration.ofSeconds(30);
     }
