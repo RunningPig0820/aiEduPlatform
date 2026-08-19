@@ -1,6 +1,5 @@
 package com.ai.edu.application.service.learning;
 
-import com.ai.edu.application.dto.learning.QuestionAnalysisDTO;
 import com.ai.edu.domain.edukg.model.entity.KgKnowledgePoint;
 import com.ai.edu.domain.edukg.repository.KgKnowledgePointRepository;
 import com.ai.edu.domain.learning.model.entity.QuestionType;
@@ -9,14 +8,10 @@ import com.ai.edu.domain.learning.model.entity.QuestionTypeKp;
 import com.ai.edu.domain.learning.repository.QuestionTypeAliasRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeKpRepository;
 import com.ai.edu.domain.learning.repository.QuestionTypeRepository;
-import com.ai.edu.domain.learning.repository.StudentQuestionRecordRepository;
-import com.ai.edu.domain.learning.service.QuestionUnderstandingPort;
-import com.ai.edu.domain.learning.service.TutoringKpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,15 +27,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 域 B 独立化闭环验证（tasks 2.0.7③）：独立维护接口写入 → 入口 analyze 查表命中 → 权威分布。
+ * 域 B 独立化维护接口持久化闭环验证（tasks 2.0.5）：独立维护接口写入 → 题型库可查（canonical/别名/分布）。
  *
- * <p>用共享内存存储桩联通「维护 service 写入」与「分析 service 读取」，验证编排层闭环：
- * 维护配「鸡兔同笼 + 分布 + 别名」→ analyze 识别「鸡兔同笼问题」→ findByTopicLabelOrAlias 命中
- * canonical → 返回权威分布（不再依赖 obs 共现自动聚合）。
+ * <p>题型分析（analyze）已简化为纯 Python 直通小工具（不再消费题型库），维护接口独立生效：
+ * 维护配「鸡兔同笼 + 分布 + 别名」→ 题型库 findByTopicLabel/findByTopicLabelOrAlias 可查 → 分布可读。
  */
 class KpQuestionTypeMaintenanceFlowTest {
-
-    private static final Long STUDENT_ID = 1001L;
 
     private QuestionTypeRepository qtRepo;
     private QuestionTypeKpRepository qtKpRepo;
@@ -98,23 +90,14 @@ class KpQuestionTypeMaintenanceFlowTest {
             aliasToTypeId.put(alias.getAliasLabel(), alias.getQuestionTypeId());
             return alias;
         });
-        // kg 镜像反查（catalogResult 的 kpLabel）
+        // kg 镜像反查
         when(kgRepo.findByUri(anyString()))
                 .thenAnswer(inv -> Optional.of(KgKnowledgePoint.create(inv.getArgument(0), inv.getArgument(0))));
     }
 
-    private void injectAnalysis(KpQuestionAnalysisAppService analysis) {
-        // 2.7 改造后 analyze 走 analyzeResult：题目落库 + 命中路径用权威名（不调聚集），仍需注入新依赖
-        StudentQuestionRecordRepository recordRepo = mock(StudentQuestionRecordRepository.class);
-        when(recordRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        TopicLabelAggregationService aggregation = mock(TopicLabelAggregationService.class);
-        inject(analysis, "questionRecordRepository", recordRepo);
-        inject(analysis, "topicLabelAggregationService", aggregation);
-    }
-
     @Test
-    @DisplayName("闭环：维护配题型+分布+别名 → analyze 入口命中返回权威分布（不依赖自动聚合）")
-    void maintenanceWrite_thenAnalyzeHits() {
+    @DisplayName("维护接口持久化闭环：写题型+分布+别名 → 题型库可查（独立于 analyze）")
+    void maintenanceWrite_persistsAndQueryable() {
         KpQuestionTypeMaintenanceAppService maintenance = new KpQuestionTypeMaintenanceAppService();
         maintenance.setQuestionTypeRepository(qtRepo);
         maintenance.setQuestionTypeKpRepository(qtKpRepo);
@@ -125,37 +108,13 @@ class KpQuestionTypeMaintenanceFlowTest {
         maintenance.bindKp(canonical.getId(), "uri-1", 0.6, "4-6");
         maintenance.addAlias(canonical.getId(), "鸡兔同笼问题");
 
-        // ② 入口 analyze：识别「鸡兔同笼问题」→ 别名命中 canonical → 权威分布
-        QuestionUnderstandingPort understandingPort = mock(QuestionUnderstandingPort.class);
-        when(understandingPort.understand(anyString(), any())).thenReturn(List.of("鸡兔同笼问题"));
-        TutoringKpResolver kpResolver = mock(TutoringKpResolver.class);
-
-        KpQuestionAnalysisAppService analysis = new KpQuestionAnalysisAppService();
-        inject(analysis, "questionUnderstandingPort", understandingPort);
-        inject(analysis, "tutoringKpResolver", kpResolver);
-        inject(analysis, "questionTypeRepository", qtRepo);
-        inject(analysis, "questionTypeKpRepository", qtKpRepo);
-        inject(analysis, "kgKnowledgePointRepository", kgRepo);
-        injectAnalysis(analysis); // 2.7: 题目落库 + 聚集依赖注入
-
-        QuestionAnalysisDTO dto = analysis.analyze("笼子里有鸡和兔", STUDENT_ID);
-
-        assertEquals("RESOLVED", dto.getStatus());
-        assertEquals("鸡兔同笼", dto.getTopicLabel(), "返回 canonical 而非变体名");
-        assertEquals(1, dto.getKnowledgePoints().size());
-        assertEquals("uri-1", dto.getKnowledgePoints().get(0).getKpUri());
-        assertEquals(0.6, dto.getKnowledgePoints().get(0).getRatio());
-        assertEquals(60, dto.getConfidence(), "confidence = max ratio × 100");
+        // ② 题型库可查：canonical + 别名命中 + 分布可读（知识点覆盖率派生的桥）
+        assertEquals("鸡兔同笼", qtRepo.findByTopicLabel("鸡兔同笼").orElseThrow().getTopicLabel());
+        assertEquals("鸡兔同笼", qtRepo.findByTopicLabelOrAlias("鸡兔同笼问题").orElseThrow().getTopicLabel());
+        List<QuestionTypeKp> kps = qtKpRepo.findByQuestionTypeId(canonical.getId());
+        assertEquals(1, kps.size());
+        assertEquals("uri-1", kps.get(0).getKpUri());
+        assertEquals(0.6, kps.get(0).getRatio());
         assertTrue(byLabel.containsKey("鸡兔同笼"), "维护数据已落库，非自动聚合产生");
-    }
-
-    private void inject(Object target, String fieldName, Object value) {
-        try {
-            Field f = target.getClass().getDeclaredField(fieldName);
-            f.setAccessible(true);
-            f.set(target, value);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 }

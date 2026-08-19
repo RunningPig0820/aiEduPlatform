@@ -181,3 +181,4 @@
 - [x] 6.5 层级修正：学段→**年级**→课本→章节→小节→知识点（t_kg_textbook 有 stage+grade 两字段，课本应挂年级下）；新增 `GET /grades`（DISTINCT grade）+ `/textbooks` 加 `grade` 参数
 - [x] 6.6 章节查询接口补 `stage` 学段上下文参数（前端传入，后端仅接收不参与查询）
 - [x] 6.7 删除 `/kp-coverage` 整条链路（`KpCoverageAppService`/Test + `KpCoverageDTO`/`ItemDTO` + `findPlacementByUris`/`selectPlacementByUris` 7 JOIN 反查 + `KgKpPlacement`）——知识点覆盖率按需由「题型掌握度 × 题型↔知识点映射」派生，无需独立聚合接口（原 2.0.6 保留的覆盖度派生一并清除）
+- [x] 7.1 题型分析简化为纯 Python 直通小工具（`analyze`/`analyzeImage`）：去掉题库命中 / canonical 聚集 / 落 record 表——无业务功能纯展示模型能力（图片保留 COS 传输）；`KpQuestionTypeMaintenanceFlowTest` 改为维护接口持久化自测（analyze 不再命中题库）；api.md 第 8 节 analyze 契约更新

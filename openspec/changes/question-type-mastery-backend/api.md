@@ -326,8 +326,9 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 
 ### 8. 前端联调契约（题型分析页 ↔ 掌握度）
 
-- **analyze 返回 canonical**：`analyze-question` 返回的 `topicLabel` 是**动态聚集后的 canonical**（「解一元二次方程」→「一元二次方程」）——前端用它直接查 `queryMastery`（POST /mastery/query），能对上，不会误判「未开始」。
-- **域 B 独立化（analyze 只到题型）**：`analyze-question` 识别题型后**不再自动关联知识点**——`knowledgePoints` 来自题型库权威分布（有则返回 / 无则空），不会因「无知识点」挂起 PENDING。题型↔知识点关联由 ADMIN 维护接口手动配（见 9）。
+- **analyze 纯 Python 直通（小工具，无业务功能）**：`analyze-question` / `analyze-question/image` 只做「文本/图片 → Python 识别 → 题型名」直通——**不做题库命中、不做 canonical 聚集、不落题目记录**。返回 `topicLabel` 是模型识别原始名（可能带变体），**不能直接当 canonical 查 `queryMastery`**（前端仅展示模型能力；查掌握度走答疑路径的 canonical）。
+- **识别失败 → `status=PENDING`**（不报错），前端展示无关联态。题型↔知识点关联由 ADMIN 维护接口手动配（见 9），analyze 不消费。
+- **图片分析返回原题图**：`analyze-question/image` 响应带 `imageUrl`（原图 URL，1h 有效，供前端展示原题）；文本 `analyze-question` 的 `imageUrl` 为 null。
 - **两态语义**（不能混）：
   - `items[]` 只有 `status=RESOLVED`（已归属，掌握表有行）→ `masteryLevel` = 累计平均正确率
   - 不在 `items[]` = **未开始或未归属** → 引导去 AI 答疑做题。题型识别失败（canonical 未归属）的题目记录**仍在题目表**（事实源完整、可追溯），只是不进掌握表、不在掌握度列表展示；后续批量聚集（`POST /api/kp/aggregation/topic-cluster`）扫描 `canonical_label` 为空 → 重新聚集回填 → 重算掌握表补上
@@ -344,7 +345,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 | `POST /api/kp/type/{id}/kp` | 绑定知识点分布（kpUri + ratio + gradeRange）→ `t_kp_question_type_kp` |
 | 别名维护 | 变体题型名 → canonical（复用 `t_kp_question_type_alias`） |
 
-> 演示用法：管理后台手动配几条「鸡兔同笼 → 鸡兔同笼问题(ratio 0.6) / 假设法(ratio 0.4)」→ 入口 `analyze-question` 命中题型库即返回权威分布；未命中返回「仅题型+canonical」，前端展示无关联态（不报错）。
+> 演示用法：管理后台手动配几条「鸡兔同笼 → 鸡兔同笼问题(ratio 0.6) / 假设法(ratio 0.4)」→ 题型库可查（canonical/别名/分布），作为**知识点覆盖率派生**的桥（已知知识点 → 题型↔知识点映射 → 题型掌握度）。analyze 已不消费题型库（纯 Python 直通小工具）。
 
 ### 10. 知识地图下钻（替代 `/api/kg/knowledge-points` 分页，BREAKING）
 

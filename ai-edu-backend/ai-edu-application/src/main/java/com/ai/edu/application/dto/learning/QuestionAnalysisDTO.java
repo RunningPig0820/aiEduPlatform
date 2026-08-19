@@ -40,6 +40,9 @@ public class QuestionAnalysisDTO implements Serializable {
     /** PENDING 时的澄清候选（学科概念名，不暴露 kp_uri）；RESOLVED 为空 */
     private List<String> candidates;
 
+    /** 图片分析的原题图 URL（仅 analyze-question/image 返回，供前端展示原题；文本分析为 null） */
+    private String imageUrl;
+
     public static QuestionAnalysisDTO resolved(String topicLabel, int confidence,
                                                List<QuestionAnalysisKpDTO> knowledgePoints) {
         return QuestionAnalysisDTO.builder()
