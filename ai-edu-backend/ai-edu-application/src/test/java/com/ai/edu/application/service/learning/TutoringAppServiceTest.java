@@ -248,6 +248,21 @@ class TutoringAppServiceTest {
         verify(sessionRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("P0: decide 抛非 agent 异常（已有会话）→ 兜底终态流（meta+token+done），不 Flux.error 断连")
+    void sendMessage_decideNonAgentFailure_terminal() {
+        activeSessionInCache();
+        when(llmPort.decideStream(any())).thenReturn(Flux.error(new RuntimeException("boom")));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
+    }
+
     // ==================== sendMessage() ====================
 
     @Test
@@ -268,6 +283,29 @@ class TutoringAppServiceTest {
                 .verifyComplete();
         assertEquals(1, session.getRoundCount()); // round 0→1
         verify(sessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("P0: 落库副作用 DB 异常（非 agent）→ 降级继续，SSE 仍以 done 终态结束（防前端永久卡 SENDING）")
+    void sendMessage_sideEffectDbFailure_stillTerminal() {
+        TutoringSession session = activeSessionInCache();
+        ActionMeta hintWithError = ActionMeta.builder()
+                .type("hint")
+                .eval(EvalInfo.builder().correct(false).errorType("COMPUTATION").build())
+                .build();
+        when(llmPort.decideStream(any())).thenReturn(decideStreamOf(hintWithError));
+        when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"注意\"}")));
+        when(errorEventRepository.save(any())).thenThrow(new RuntimeException("DB insert failed: 数据过长"));
+
+        Flux<ServerSentEvent<String>> stream = service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94");
+
+        StepVerifier.create(stream)
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(guardrail)
+                .assertNext(ev -> assertEquals("meta", ev.event()))
+                .assertNext(ev -> assertEquals("token", ev.event()))
+                .assertNext(ev -> assertEquals("agent", ev.event()))    // agent(memory) 流尾
+                .assertNext(ev -> assertEquals("done", ev.event()))
+                .verifyComplete();
     }
 
     @Test

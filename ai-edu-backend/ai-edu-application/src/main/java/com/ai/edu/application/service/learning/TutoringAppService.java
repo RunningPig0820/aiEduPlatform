@@ -606,11 +606,17 @@ public class TutoringAppService {
         // 6. 新会话落库 + 消息入缓存；已有会话复用
         ensurePersisted(session, history);
 
-        // 7. 落库副作用（掌握度/错误/情绪/round/换题/收尾）
+        // 7. 落库副作用（掌握度/错误/情绪/round/换题/收尾）——失败降级继续（不阻断 SSE 终态），
+        //    教学回答照常流式；掌握度/记录丢失记完整日志（P1 定位用，含 sessionId + content + stack）
         String lastUserContent = lastUserContent(history);
-        applySideEffects(session, action, allowedType, lastUserContent, isNewQuestion);
-        tutoringSessionRepository.save(session);
-        sessionCache.saveSession(session);
+        try {
+            applySideEffects(session, action, allowedType, lastUserContent, isNewQuestion);
+            tutoringSessionRepository.save(session);
+            sessionCache.saveSession(session);
+        } catch (Exception e) {
+            log.error("[tutoring] 落库副作用失败（降级继续，SSE 不中断）: sessionId={}, studentId={}, content={}",
+                    session.getId(), session.getStudentId(), lastUserContent, e);
+        }
 
         // 8. 每轮实时整写 COS（幂等整写，首次即回填 transcript_url）——异步提交，首条 SSE 不等待 COS
         archiveAsync(session, history, action.getSummary());
@@ -624,8 +630,11 @@ public class TutoringAppService {
     }
 
     /**
-     * decide 失败处理（D7）：start 阶段（id==null）重抛由接口层映射；已有会话回"网络波动"，会话保持 ACTIVE。
-     * 仅 TutoringAgentException 走降级，其他异常原样上抛（非 agent 故障，不吞）。
+     * 失败兜底（P0）：SSE 已建立后任何异常都必须给终态——start 阶段（id==null）重抛由接口层映射
+     * （前端未开始渲染，可重新发起）；已有会话一律降级为终态流（meta + 兜底 token + done），
+     * 会话保持 ACTIVE 可重试。不再区分 agent/非 agent：非 agent 异常（如 DB 落库）也兜底，
+     * 否则 SSE 200 已发出后 Flux.error 直接断连 → 前端永久卡 SENDING（会话 116 卡死根因）。
+     * 落库副作用本身的异常已由 postDecide 内 try-catch 降级继续，此处是最终防线（generate 阶段等）。
      */
     private Flux<ServerSentEvent<String>> handleDecideFailure(TutoringSession session, Throwable e) {
         if (session.getId() == null) {
@@ -633,9 +642,10 @@ public class TutoringAppService {
         }
         if (e instanceof TutoringAgentException) {
             log.warn("[tutoring] Python agent 调用失败，回复网络波动, sessionId={}", session.getId());
-            return friendlyErrorStream(session);
+        } else {
+            log.error("[tutoring] 答疑异常（兜底终态，防 SSE 卡死）: sessionId={}", session.getId(), e);
         }
-        return Flux.error(e);
+        return friendlyErrorStream(session);
     }
 
     /** 解析 decide meta 事件 data → ActionMeta（宽容 ObjectMapper，容忍 Python 调试字段 reason 等未知字段）。 */
