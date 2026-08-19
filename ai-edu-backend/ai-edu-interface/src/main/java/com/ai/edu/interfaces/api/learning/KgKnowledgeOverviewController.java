@@ -31,8 +31,15 @@ public class KgKnowledgeOverviewController {
     @Resource
     private KgKnowledgeOverviewAppService appService;
 
-    /** GET /api/kg/grades?stage=primary — 学段下年级列表（知识地图第 1 层）。 */
-    @Operation(summary = "学段下年级列表", description = "第 1 层：按学段查年级（stage: primary/middle/high）")
+    /**
+     * GET /api/kg/grades?stage=primary — 学段下年级列表（知识地图第 1 层）。
+     *
+     * <p>⚠️ 讨巧实现：当前年级直接由教材表 {@code t_kg_textbook} 的 {@code DISTINCT grade} 推导
+     * （数据现状仅人教版 + 数学，教材表年级够用）。**正确方向**：从组织域取「学段→年级」权威关系
+     * （{@code com.ai.edu.domain.organization} 的 {@code SchoolStageEnum} + {@code GradeEnum} / Grade 实体），
+     * 待教材覆盖多版本/多学科或组织域年级数据就绪后切换，避免教材表年级不完整时漏年级。
+     */
+    @Operation(summary = "学段下年级列表", description = "第 1 层：按学段查年级（stage: primary/middle/high；当前由教材表推导，正确应从组织域取年级权威关系）")
     @GetMapping("/grades")
     public ApiResponse<List<KgTreeNodeDTO>> grades(@RequestParam String stage, HttpSession session) {
         requireLogin(session);

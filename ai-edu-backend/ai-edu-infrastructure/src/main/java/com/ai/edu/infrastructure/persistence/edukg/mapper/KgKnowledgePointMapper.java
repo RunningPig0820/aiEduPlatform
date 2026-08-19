@@ -1,6 +1,5 @@
 package com.ai.edu.infrastructure.persistence.edukg.mapper;
 
-import com.ai.edu.domain.edukg.model.valueobject.KgKpPlacement;
 import com.ai.edu.infrastructure.persistence.edukg.po.KgKnowledgePointPo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.dynamic.datasource.annotation.DS;
@@ -45,20 +44,5 @@ public interface KgKnowledgePointMapper extends BaseMapper<KgKnowledgePointPo> {
 
     @Update("UPDATE t_kg_knowledge_point SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")
     int updateStatus(@Param("uri") String uri, @Param("status") String status, @Param("modifiedBy") Long modifiedBy);
-
-    /** 批量反查 kp 归属（kp→section→chapter→textbook 的 stage/chapter/section 投影）。 */
-    @Select("<script>" +
-            "SELECT kp.uri AS kpUri, kp.label AS kpLabel, tb.stage AS stage, ch.label AS chapterLabel, sec.label AS sectionLabel " +
-            "FROM t_kg_knowledge_point kp " +
-            "LEFT JOIN t_kg_section_kp skp ON skp.kp_uri = kp.uri AND skp.is_deleted = false " +
-            "LEFT JOIN t_kg_section sec ON sec.uri = skp.section_uri AND sec.is_deleted = false " +
-            "LEFT JOIN t_kg_chapter_section cs ON cs.section_uri = skp.section_uri AND cs.is_deleted = false " +
-            "LEFT JOIN t_kg_chapter ch ON ch.uri = cs.chapter_uri AND ch.is_deleted = false " +
-            "LEFT JOIN t_kg_textbook_chapter tc ON tc.chapter_uri = cs.chapter_uri AND tc.is_deleted = false " +
-            "LEFT JOIN t_kg_textbook tb ON tb.uri = tc.textbook_uri AND tb.is_deleted = false " +
-            "WHERE kp.uri IN " +
-            "<foreach item='uri' collection='uris' open='(' separator=',' close=')'>#{uri}</foreach>" +
-            "</script>")
-    List<KgKpPlacement> selectPlacementByUris(@Param("uris") List<String> uris);
 
 }

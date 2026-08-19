@@ -18,9 +18,15 @@ import java.util.List;
 @DS("kg")
 public interface KgOverviewTreeMapper {
 
-    /** 学段 → 年级（单表 DISTINCT grade，ORDER BY grade）。 */
+    /**
+     * 学段 → 年级（单表 DISTINCT grade，ORDER BY sort）。
+     *
+     * <p>⚠️ 讨巧实现（数据现状仅人教版 + 数学，教材表年级够用）：年级由教材表推导。
+     * 正确应取组织域 {@code SchoolStageEnum} + {@code GradeEnum} 的「学段→年级」权威关系，
+     * 见 {@code KgKnowledgeOverviewController.grades} 注释——教材覆盖多版本/多学科后切换。
+     */
     @Select("SELECT DISTINCT grade AS uri, grade AS label, 0 AS orderIndex FROM t_kg_textbook " +
-            "WHERE stage = #{stage} AND is_deleted = false ORDER BY grade")
+            "WHERE stage = #{stage} AND is_deleted = false ORDER BY sort")
     List<KgTreeNode> selectGradesByStage(@Param("stage") String stage);
 
     /** 年级 → 课本（单表，WHERE stage+grade，ORDER BY sort）。 */

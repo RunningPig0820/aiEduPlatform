@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * 累计平均（new = old×n/(n+1) + score×1/(n+1)，score 为生效分值 0.0/0.5/1.0 × 打折），trainCount 递增。
  * 替代旧 max 单调不减（备用信号 {@link #applySignal(MasterySignal)} 保留至聚合改写任务 3.4 移除）。
  *
- * <p>知识点掌握度不再直接观测，改为由本实体 + 题型→知识点映射运行时派生（见 KpCoverageAppService）。
+ * <p>知识点覆盖率按需由「本实体（题型掌握度）× 题型→知识点映射（t_kp_question_type_kp）」派生，不直接观测。
  */
 @Getter
 public class StudentTopicMastery {

@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 /**
  * 教材树浏览节点——知识地图点击式下钻每层的扁平投影（uri + label + orderIndex）。
  *
- * <p>跨 4 层复用（课本/章节/小节/知识点），由 Mapper 直接映射（列别名对齐 uri/label/orderIndex）。
- * 替代原 7 表 JOIN 分页投影 {@link KgKpPlacement}（每层单次查询，≤2 表 JOIN）。
+ * <p>跨 5 层复用（年级/课本/章节/小节/知识点），由 Mapper 直接映射（列别名对齐 uri/label/orderIndex）。
+ * 替代原 7 表 JOIN 的分页/归属反查投影（每层单次查询，单表或 2 表 JOIN）。
  */
 @Data
 @Builder

@@ -180,3 +180,4 @@
 - [x] 6.4 api.md 第 10 节下钻契约 + 前端树形下钻改造说明
 - [x] 6.5 层级修正：学段→**年级**→课本→章节→小节→知识点（t_kg_textbook 有 stage+grade 两字段，课本应挂年级下）；新增 `GET /grades`（DISTINCT grade）+ `/textbooks` 加 `grade` 参数
 - [x] 6.6 章节查询接口补 `stage` 学段上下文参数（前端传入，后端仅接收不参与查询）
+- [x] 6.7 删除 `/kp-coverage` 整条链路（`KpCoverageAppService`/Test + `KpCoverageDTO`/`ItemDTO` + `findPlacementByUris`/`selectPlacementByUris` 7 JOIN 反查 + `KgKpPlacement`）——知识点覆盖率按需由「题型掌握度 × 题型↔知识点映射」派生，无需独立聚合接口（原 2.0.6 保留的覆盖度派生一并清除）

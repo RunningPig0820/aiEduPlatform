@@ -27,7 +27,12 @@ public class KgKnowledgeOverviewAppService {
     @Setter(AccessLevel.PACKAGE)
     private KgOverviewTreeRepository kgOverviewTreeRepository;
 
-    /** 学段 → 年级列表（stage code → 中文查库）。 */
+    /**
+     * 学段 → 年级列表（stage code → 中文查库）。
+     *
+     * <p>⚠️ 讨巧实现：年级由教材表推导（数据现状仅人教版+数学）；正确应从组织域取
+     * {@code SchoolStageEnum}/{@code GradeEnum} 的学段→年级权威关系，见 Controller.grades 注释。
+     */
     public List<KgTreeNodeDTO> gradesByStage(String stage) {
         KgStageEnum stageEnum = resolveStage(stage);
         return kgOverviewTreeRepository.findGradesByStage(stageEnum.getLabel()).stream()

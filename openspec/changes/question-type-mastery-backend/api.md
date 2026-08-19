@@ -301,7 +301,7 @@ curl -X POST http://localhost:8080/api/kp/aggregation/topic-cluster \
 - **默认排序 `updatedAt` 倒序**（最近练的在前）；`sortBy=masteryLevel` + `order=asc/desc` 可切（`asc` 看最薄弱）。
 - 新增 `source`（ai/bank）与 `trainCount`（训练数）——掌握度页加「来源」「训练数」列。
 - 未开始题型不出现在 `items[]`（引导去 AI 答疑做题）。`items[]` 只含**已归属**（掌握表有行）题型——题目记录 canonical 未归属的不进掌握表，也不在 items 展示。
-- **知识点总览页不再消费本接口做覆盖度**（本期题型↔知识点断联）。
+- **知识点覆盖率不再有独立聚合接口**（原 `/kp-coverage` 已删）——需要时按需由「题型掌握度 × 题型↔知识点映射（ADMIN 维护的 kp/ratio）」派生，已知知识点经关联题型反查掌握度。
 
 ### 3. 掌握度 = 累计平均正确率（可追溯）
 
