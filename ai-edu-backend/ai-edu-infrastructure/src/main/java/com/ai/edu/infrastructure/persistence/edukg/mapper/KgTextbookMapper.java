@@ -20,26 +20,28 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
     @Select("SELECT * FROM t_kg_textbook WHERE uri = #{uri} AND is_deleted = false")
     KgTextbookPo selectByUri(@Param("uri") String uri);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY grade")
+    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY sort")
     List<KgTextbookPo> selectBySubject(@Param("subject") String subject);
 
-    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND stage = #{stage} AND is_deleted = false ORDER BY grade")
+    @Select("SELECT * FROM t_kg_textbook WHERE subject = #{subject} AND stage = #{stage} AND is_deleted = false ORDER BY sort")
     List<KgTextbookPo> selectBySubjectAndStage(@Param("subject") String subject, @Param("stage") String stage);
 
     @Update("UPDATE t_kg_textbook SET status = #{status}, modified_by = #{modifiedBy} WHERE uri = #{uri} AND is_deleted = false")
     int updateStatus(@Param("uri") String uri, @Param("status") String status, @Param("modifiedBy") Long modifiedBy);
 
-    @Select("SELECT DISTINCT grade FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false ORDER BY grade")
+    @Select("SELECT grade FROM t_kg_textbook WHERE subject = #{subject} AND is_deleted = false "
+            + "GROUP BY grade ORDER BY MIN(sort)")
     List<String> selectDistinctGradesBySubject(@Param("subject") String subject);
 
     /**
      * 按版本+学科查询不重复的年级列表（动态 SQL，参数为 null 时不过滤）
      */
     @Select("<script>" +
-            "SELECT DISTINCT grade FROM t_kg_textbook WHERE is_deleted = false " +
+            "SELECT grade FROM t_kg_textbook WHERE is_deleted = false " +
             "<if test='edition != null'> AND edition = #{edition}</if>" +
             "<if test='subject != null'> AND subject = #{subject}</if>" +
-            " ORDER BY grade" +
+            " GROUP BY grade" +
+            " ORDER BY MIN(sort)" +
             "</script>")
     List<String> selectDistinctGradesByEditionSubject(
             @Param("edition") String edition,
@@ -52,14 +54,14 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
             "SELECT * FROM t_kg_textbook WHERE is_deleted = false " +
             "<if test='edition != null'> AND edition = #{edition}</if>" +
             "<if test='subject != null'> AND subject = #{subject}</if>" +
-            " ORDER BY grade" +
+            " ORDER BY sort" +
             "</script>")
     List<KgTextbookPo> selectByEditionSubject(
             @Param("edition") String edition,
             @Param("subject") String subject);
 
     @Select("SELECT * FROM t_kg_textbook WHERE edition = #{edition} AND subject = #{subject} "
-            + "AND grade = #{grade} AND is_deleted = false ORDER BY grade, sort")
+            + "AND grade = #{grade} AND is_deleted = false ORDER BY  sort")
     List<KgTextbookPo> selectAllActiveByEditionSubjectGrade(
             @Param("edition") String edition,
             @Param("subject") String subject,
