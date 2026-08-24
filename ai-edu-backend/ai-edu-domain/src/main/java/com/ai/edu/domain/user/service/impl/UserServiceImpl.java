@@ -1,5 +1,6 @@
 package com.ai.edu.domain.user.service.impl;
 
+import com.ai.edu.common.util.PasswordUtil;
 import com.ai.edu.domain.user.model.entity.User;
 import com.ai.edu.domain.user.repository.UserRepository;
 import com.ai.edu.domain.user.service.UserService;
@@ -54,8 +55,8 @@ public class UserServiceImpl implements UserService {
 
         // 生成用户名（基于手机号）
         String username = phone;
-        // 默认密码
-        String password = "password123";
+        // 默认密码（必须哈希存储；明文会让 BCrypt.checkpw 失败，导致该用户永远无法登录）
+        String password = PasswordUtil.encode("password123");
 
         // 根据角色创建用户实体
         User user;
