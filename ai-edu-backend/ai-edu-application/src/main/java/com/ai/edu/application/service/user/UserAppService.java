@@ -350,16 +350,6 @@ public class UserAppService {
     }
 
     /**
-     * 登出
-     *
-     * @param session HTTP Session
-     */
-    public void logout(HttpSession session) {
-        session.invalidate();
-        log.info("用户已登出");
-    }
-
-    /**
      * 根据ID获取用户
      *
      * @param id 用户ID

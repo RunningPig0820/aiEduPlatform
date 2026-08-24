@@ -807,19 +807,10 @@ public class AuthApiControllerTest {
     // ==================== 登出测试 ====================
 
     /**
-     * 场景9.1: 登出成功
+     * 登出由 Spring Security LogoutFilter 处理（/api/unauth/logout），
+     * 自定义控制器登出已移除，此处不再有对应单测。
+     * 失效会话 save 的容错见 config/SafeLogoutSessionRepository。
      */
-    @Test
-    @Order(900)
-    @Transactional
-    void logout_Success() {
-        User user = createTestUser(TEST_USERNAME, TEST_PHONE);
-        HttpSession session = createLoginSession(user);
-
-        ApiResponse<Void> response = authApiController.logout(session);
-
-        assertEquals(ErrorCode.SUCCESS, response.getCode());
-    }
 
     // ==================== 获取当前用户测试 ====================
 

@@ -118,16 +118,6 @@ public class AuthApiController {
     }
 
     /**
-     * 登出
-     */
-    @PostMapping("/logout")
-    public ApiResponse<Void> logout(HttpSession session) {
-        log.info("logout: session={}", session.getAttribute("userId"));
-        userAppService.logout(session);
-        return ApiResponse.success(null);
-    }
-
-    /**
      * 获取当前登录用户
      */
     @GetMapping("/current-user")
