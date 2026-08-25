@@ -13,6 +13,7 @@ import reactor.test.StepVerifier;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,6 +100,47 @@ class RagAssistantAppServiceTest {
         assertTrue(result.containsKey("reason"));
         assertNull(result.get("reason"));
         assertTrue(result.containsKey("stages"));
+    }
+
+    @Test
+    @DisplayName("ask: 全量时序 permission→intent→rewrite→rerank→token*→done（RAG-SSE-001），token 逐块重建、done 带 tokensUsage")
+    void ask_fullTokenSequence() {
+        when(port.ask(any())).thenAnswer(inv -> {
+            RagAskRequest req = inv.getArgument(0);
+            return Flux.just(
+                    sse("intent", "{\"anchor\":\"rag-system\",\"category\":\"项目介绍\"}"),
+                    sse("rewrite", "{\"original_question\":\"这个项目的整体架构是什么？\",\"rewritten_query\":\"项目 整体 架构\"}"),
+                    sse("rerank", "{\"blocks\":[{\"block_id\":\"b1\",\"title\":\"架构\",\"summary\":\"摘要\",\"file_path\":\"4.完善文档/02-…md\",\"score\":0.0323}]}"),
+                    sse("token", "{\"text\":\"RAG 项目\"}"),
+                    sse("token", "{\"text\":\"的整体架构\"}"),
+                    sse("done", "{\"answer\":\"RAG 项目的整体架构\",\"quoted_keys\":[\"b1\"],\"tokens_usage\":{\"prompt_tokens\":320,\"completion_tokens\":140,\"cache_hit_tokens\":0,\"total_tokens\":460},\"trace_id\":\"" + req.getTraceId() + "\",\"suggestions\":[],\"reason\":null}"));
+        });
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextMatches(ev -> "permission".equals(ev.event()))
+                .expectNextMatches(ev -> "intent".equals(ev.event()))
+                .expectNextMatches(ev -> "rewrite".equals(ev.event()))
+                .expectNextMatches(ev -> "rerank".equals(ev.event()))
+                .assertNext(ev -> {
+                    assertEquals("token", ev.event());
+                    assertTrue(ev.data().contains("\"text\":\"RAG 项目\""), ev.data());
+                    assertFalse(ev.data().contains("snake"), ev.data());
+                })
+                .assertNext(ev -> {
+                    assertEquals("token", ev.event());
+                    assertTrue(ev.data().contains("\"text\":\"的整体架构\""), ev.data());
+                })
+                .assertNext(ev -> {
+                    assertEquals("done", ev.event());
+                    assertTrue(ev.data().contains("\"tokensUsage\""), ev.data());
+                    assertTrue(ev.data().contains("\"promptTokens\":320"), ev.data());
+                    assertTrue(ev.data().contains("\"completionTokens\":140"), ev.data());
+                    assertTrue(ev.data().contains("\"cacheHitTokens\":0"), ev.data());
+                    assertTrue(ev.data().contains("\"totalTokens\":460"), ev.data());
+                    assertFalse(ev.data().contains("tokens_usage"), ev.data());
+                    assertFalse(ev.data().contains("cache_hit_tokens"), ev.data());
+                })
+                .verifyComplete();
     }
 
     @Test

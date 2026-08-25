@@ -18,11 +18,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -154,6 +156,40 @@ class RagAssistantBridgeImplTest {
 
         assertThrows(TutoringAgentException.class,
                 () -> client.ask(askRequest()).blockLast());
+    }
+
+    @Test
+    @DisplayName("ask: Python HTTP 500 → TutoringAgentException（网关降级，不吞错不 200 化）")
+    void ask_http500Bubbles() {
+        WebClientResponseException ex = WebClientResponseException.create(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error",
+                HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8);
+        RagAssistantBridgeImpl client = buildClient(Flux.error(ex));
+
+        assertThrows(TutoringAgentException.class, () -> client.ask(askRequest()).blockLast());
+    }
+
+    // ==================== M4 真流消费（token* 逐块） ====================
+
+    @Test
+    @DisplayName("ask: 真流消费 intent→rewrite→rerank→token*→done 保序透传，token 逐块不重排不丢失")
+    void ask_relaysTokenStream() {
+        RagAssistantBridgeImpl client = buildClient(Flux.just(
+                sse("intent", "{\"anchor\":\"rag-system\"}"),
+                sse("rewrite", "{\"original_question\":\"Q\",\"rewritten_query\":\"R\"}"),
+                sse("rerank", "{\"blocks\":[]}"),
+                sse("token", "{\"text\":\"RAG 项目\"}"),
+                sse("token", "{\"text\":\"的整体架构\"}"),
+                sse("done", "{\"answer\":\"RAG 项目的整体架构\",\"tokens_usage\":{\"prompt_tokens\":320,\"completion_tokens\":140,\"cache_hit_tokens\":0,\"total_tokens\":460},\"trace_id\":\"trc-abc123\"}")));
+
+        StepVerifier.create(client.ask(askRequest()))
+                .expectNextMatches(ev -> "intent".equals(ev.event()))
+                .expectNextMatches(ev -> "rewrite".equals(ev.event()))
+                .expectNextMatches(ev -> "rerank".equals(ev.event()))
+                .expectNextMatches(ev -> "token".equals(ev.event()) && ev.data().contains("RAG"))
+                .expectNextMatches(ev -> "token".equals(ev.event()) && ev.data().contains("整体架构"))
+                .expectNextMatches(ev -> "done".equals(ev.event()) && ev.data().contains("tokens_usage"))
+                .verifyComplete();
     }
 
     // ==================== source 查看原文 ====================

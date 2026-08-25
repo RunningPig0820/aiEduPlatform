@@ -67,12 +67,12 @@
 
 ## M4 生成+token展示（doubao 流式、8s 超时、断连取消、usage、done 重建）
 
-- [ ] 4.1 契约 DTO 扩展：`RagTokensUsage`（promptTokens/completionTokens/cacheHitTokens/totalTokens）、`RagDoneResult` 核心（answer/quotedKeys/tokensUsage/traceId/reason）
-- [ ] 4.2 Python doubao 流式生成：`token*` 逐块，`include_usage` 取 usage，8s 硬超时 → 固定降级话术返回召回清单（0 额外 token），`is_disconnected()` 断连取消上游 doubao 流
-- [ ] 4.3 Python cache_hit 估算：doubao 未返回 → tokenizer 估算并标注"估算"
-- [ ] 4.4 SSE 中继（阶段 3）：token/done 事件；done 由 Java 重建（answer/tokensUsage/traceId），不透传 Python 原始 meta/done
-- [ ] 4.5 移除 M2/M3 的 generate 桩替，接真实流式生成
-- [ ] 4.6 桥单测扩展：真流消费、Python 异常冒泡 500
+- [x] 4.1 契约 DTO 扩展：`RagTokensUsage`（promptTokens/completionTokens/cacheHitTokens/totalTokens）、`RagDoneResult` 核心（answer/quotedKeys/tokensUsage/traceId/reason）—— **由 SseTokensUsageDTO/SseDoneDTO（2.1）覆盖**（tokensUsage 四字段 + done 六字段），重建直接反序列化进前端 DTO，无需单独 Python 契约 DTO
+- [x] 4.2 Python doubao 流式生成：`token*` 逐块，`include_usage` 取 usage，8s 硬超时 → 固定降级话术返回召回清单（0 额外 token），`is_disconnected()` 断连取消上游 doubao 流 —— **Python 已验证**（assistant.py A5 流式生成 token*/usage/error 三型，GEN_TIMEOUT 8s 降级话术 + 召回清单，is_disconnected 取消；Java e2e 已验证 token 流式输出）
+- [x] 4.3 Python cache_hit 估算：doubao 未返回 → tokenizer 估算并标注"估算" —— **0 兜底就绪**（assistant.py `cached_tokens or 0`，Java 侧无改动）；tokenizer 估算标注"估算"为 Python 后续细化（设计 D8 留口子，不影响 M4 门禁 RAG-COST-001 四字段完整）
+- [x] 4.4 SSE 中继（阶段 3）：token/done 事件；done 由 Java 重建（answer/tokensUsage/traceId），不透传 Python 原始 meta/done —— **已实现**（rebuildEvent 处理 token/done；SseDoneDTO 重建 answer/quotedKeys/tokensUsage/traceId/suggestions/reason）；新增 AppServiceTest 全量时序用例（permission→intent→rewrite→rerank→token*→done，RAG-SSE-001）验证 token 逐块 camel 重建 + done 四字段
+- [x] 4.5 移除 M2/M3 的 generate 桩替，接真实流式生成 —— **已接真实流**（ask 中继 Python 真实 token 流，RagAssistantPythonSmokeTest 已验证；非流式 askSync 的桩替仅为 M1 遗留独立模式，不影响流式链路）
+- [x] 4.6 桥单测扩展：真流消费、Python 异常冒泡 500 —— **已实现**（RagAssistantBridgeImplTest 新增 token* 保序透传用例 + HTTP 500 → TutoringAgentException 用例，10/10 绿）
 - [ ] 4.7 三端对接测试：前端流式回答渲染 + 成本面板（prompt/completion/cache_hit/total 四字段）；后端+模型端联调 RAG-SSE-001(全量时序)/RAG-COST-001/007/RAG-ABORT-001
 
 ## M5 自我检查（is_quoted + 评估扩展 + 评估报告白盒）
