@@ -13,7 +13,7 @@
 - **纯函数单测**：is_quoted LCS 匹配、契约 snake↔camel 映射（Java 侧）。
 - **数据库回滚**：`@Transactional`，测试完成后自动回滚。
 - **端到端**：真实 Java↔Python 联调单独跑（tasks 8.3），不纳入常规单元测试。
-- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（38 行：35 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
+- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（39 行：36 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
 
 ### 1.3 测试环境配置
 
@@ -82,9 +82,10 @@
 |---------|---------|---------|------|---------|
 | RAG-SSE-002 | 无语料模块低置信过滤 | 桥 mock boundary 流 | QUESTION_LOWCONF | 四模块放行→正常召回→命中空→rerank 后 boundary(reason=low_confidence)，无 token，随后 done |
 | RAG-SSE-003 | 语料未覆盖边界时序 | 桥 mock boundary 流 | 语料未覆盖问题 | rerank（可为空）后 boundary(reason=low_confidence)，无 token，随后 done |
-| RAG-BRIDGE-001 | 正常消费 SSE | MockWebServer 返回预设 SSE | 正常请求 | 事件按序重建，顺序稳定 |
+| RAG-BRIDGE-001 | 正常消费 SSE | MockWebServer 返回预设 SSE | 正常请求 | 事件按序重建，顺序稳定；从 intent 开始转发，不消费 Python 侧 permission |
 | RAG-BRIDGE-002 | Python 异常冒泡 | MockWebServer 返回 500 | 问答请求 | 抛 TutoringAgentException（或等价），网关降级处理 |
 | RAG-BRIDGE-003 | degraded 200 | Python 返回 200+degraded | 问答请求 | 按普通结果处理，不 503 |
+| RAG-BRIDGE-004 | history/trace 组装透传 | 桥带最近 N 轮 + trace_id | 正常请求 | 请求含 history（最近 3 轮含 clarify 轮）+ trace_id（Java 生成）；done 回显 trace_id 与请求一致 |
 | RAG-COST-002 | 低置信过滤零生成 usage | 范围门 | QUESTION_LOWCONF | 无 generate，tokensUsage 为 0 或仅含实际消耗（boundary 路径 recall 不计入/单列） |
 
 ## 3D. M4 生成 + token 展示（RAG-SSE 全量 / RAG-COST / RAG-ABORT）
@@ -127,7 +128,7 @@
 | RAG-CLOSE-004 | 关闭不存在会话 | 无该 session | POST close/unknown | 10002 会话不存在 |
 | RAG-CLOSE-005 | 关闭非学生 | session 角色=TEACHER | POST close/{SESSION_ID} | 403 固定响应 |
 | RAG-CLOSE-006 | 关闭中止在途流 | 该 session 有在途生成流 | POST close | 中止上游 doubao 流，前端可关连接 |
-| RAG-COST-004 | 断线补查成功 | 已有 trace | GET turns/{TRACE_ID} | 返回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions） |
+| RAG-COST-004 | 断线补查成功 | 已有 trace 落 Redis | GET turns/{TRACE_ID} | 从 Redis 读回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions）；Python 无状态不落会话 trace |
 | RAG-COST-005 | 补查不存在 | 无该 trace | GET turns/unknown | 10002 trace 不存在 |
 | RAG-COST-006 | 补查非学生 | session 角色=TEACHER | GET turns/{TRACE_ID} | 403 固定响应 |
 
@@ -151,12 +152,12 @@
 |--------|---------|
 | M1 角色硬门 RAG-GATE | 4 |
 | M2 意图+改写 RAG-SSE(桩)/CONTRACT/COST | 4 |
-| M3 召回+边界 RAG-SSE/BRIDGE/COST | 6 |
+| M3 召回+边界 RAG-SSE/BRIDGE/COST | 7 |
 | M4 生成+token RAG-SSE/COST/ABORT | 4 |
 | M5 自我检查 RAG-QUOTE/CONTRACT | 6 |
 | M6 问题提示 RAG-SSE/SUGG | 5 |
 | M7 会话收尾 RAG-CLOSE/COST | 9 |
-| **总计** | **38** |
+| **总计** | **39** |
 
 ---
 
@@ -167,7 +168,7 @@
 ```
 100-103  : M1 角色硬门（RAG-GATE）
 200-203  : M2 意图+改写（RAG-SSE 桩 / CONTRACT / COST）
-300-305  : M3 召回+边界（RAG-SSE / BRIDGE / COST）
+300-306  : M3 召回+边界（RAG-SSE / BRIDGE / COST）
 400-403  : M4 生成+token（RAG-SSE 全量 / COST / ABORT）
 500-505  : M5 自我检查（RAG-QUOTE / CONTRACT）
 600-604  : M6 问题提示（RAG-SSE / SUGG）

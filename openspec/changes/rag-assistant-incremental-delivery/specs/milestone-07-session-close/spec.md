@@ -36,7 +36,7 @@ M7 SHALL 交付会话累计：Java 每轮 done 后将 tokens_usage 累加进 Red
 
 ### Requirement: trace_id 断线补查
 
-M7 SHALL 交付补查：`GET /api/rag/assistant/turns/{traceId}`（角色门同上）返回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions）；trace 不存在 → 10002。供前端断线后凭 trace_id 单轮补查（不做会话恢复）。
+M7 SHALL 交付补查：每轮 done 后按 trace_id 落 Java Redis（`rag:assistant:trace:{traceId}`，TTL 24h）；`GET /api/rag/assistant/turns/{traceId}`（角色门同上）读 Redis 返回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions）；trace 不存在 → 10002。供前端断线后凭 trace_id 单轮补查（不做会话恢复）。**turns 只存 Java Redis，Python 无状态不落会话 trace**（eval trace jsonl 与补查分开）。
 
 #### Scenario: 断线补查成功
 

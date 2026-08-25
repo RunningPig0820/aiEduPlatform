@@ -8,7 +8,7 @@ M3 交付"多路召回 + remark 打分 + 边界拒答"切片——向量 + BM25 
 
 ### Requirement: 多路召回与超时降级
 
-M3 SHALL 交付双路召回：向量（COS）+ BM25（本地 jsonl），单路 2s 硬超时 → 降级为纯另一路（`{hits:[], confidence:0}` 捕获，degraded 标记），链路不中断。四模块全放行无禁区，语料有无由数据驱动。
+M3 SHALL 交付双路召回：向量（COS）+ BM25（本地 jsonl），单路 2s 硬超时 → 降级为纯另一路（`{hits:[], confidence:0}` 捕获，degraded 标记），链路不中断。四模块全放行无禁区，语料有无由数据驱动。**按 anchor 选语料池**：模块级 anchor 决定召回目录（多模块语料），orchestrate 入参加 corpus 参数，节级 authority × lockedSections 锚定加权逻辑保留不改。
 
 #### Scenario: 双路召回
 

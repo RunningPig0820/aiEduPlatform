@@ -89,7 +89,7 @@
 | RAG-COST-001 | done 返回 usage | 正常流 | 桥 mock usage | tokensUsage 含 prompt/completion/cacheHit/total 四字段 |
 | RAG-COST-002 | 低置信过滤零生成 usage | 范围门 | QUESTION_FORBIDDEN | 无 generate，tokensUsage 为 0 或仅含实际消耗（boundary 路径 recall 不计入/单列） |
 | RAG-COST-003 | trace 贯穿 | 正常流 | 无 | done.traceId = 请求入口生成值，非空 |
-| RAG-COST-004 | 断线补查成功 | 已有 trace | GET turns/{TRACE_ID} | 返回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions） |
+| RAG-COST-004 | 断线补查成功 | 已有 trace 落 Redis | GET turns/{TRACE_ID} | 从 Redis 读回该轮完整结果（answer/quotedKeys/tokensUsage/suggestions）；Python 无状态不落会话 trace |
 | RAG-COST-005 | 补查不存在 | 无该 trace | GET turns/unknown | 10002 trace 不存在 |
 | RAG-COST-006 | 补查非学生 | session 角色=TEACHER | GET turns/{TRACE_ID} | 403 固定响应 |
 | RAG-COST-007 | 会话累计累加 | 多轮 done 完成 | 桥 mock 多轮 usage | Redis 会话累计 = 各轮之和（prompt/completion/cache_hit/total） |
@@ -109,9 +109,10 @@
 
 | 用例编号 | 场景描述 | 前置条件 | 输入 | 预期结果 |
 |---------|---------|---------|------|---------|
-| RAG-BRIDGE-001 | 正常消费 SSE | MockWebServer 返回预设 SSE | 正常请求 | 事件按序重建，顺序稳定 |
+| RAG-BRIDGE-001 | 正常消费 SSE | MockWebServer 返回预设 SSE | 正常请求 | 事件按序重建，顺序稳定；从 intent 开始转发，不消费 Python 侧 permission |
 | RAG-BRIDGE-002 | Python 异常冒泡 | MockWebServer 返回 500 | 问答请求 | 抛 TutoringAgentException（或等价异常），网关降级处理 |
 | RAG-BRIDGE-003 | degraded 200 | Python 返回 200+degraded | 问答请求 | 按普通结果处理，不视为错误（不 503） |
+| RAG-BRIDGE-004 | history/trace 组装透传 | 桥带最近 N 轮 + trace_id | 正常请求 | 请求含 history（最近 3 轮含 clarify 轮）+ trace_id（Java 生成）；done 回显 trace_id 与请求一致 |
 
 ### 3.8 断连取消（RAG-ABORT）
 
@@ -151,10 +152,10 @@
 | is_quoted 纯函数 RAG-QUOTE | 5 |
 | tokens_usage/trace RAG-COST | 7 |
 | 关闭对话 RAG-CLOSE | 6 |
-| 桥实现 RAG-BRIDGE | 3 |
+| 桥实现 RAG-BRIDGE | 4 |
 | 断连取消 RAG-ABORT | 1 |
 | 问题提示 SUGG（开始/结束引导，RAG 常驻） | 3 |
-| **总计** | **39** |
+| **总计** | **40** |
 
 ---
 
@@ -169,7 +170,7 @@
 400-403  : is_quoted 纯函数测试（RAG-QUOTE）
 500-506  : usage/trace 测试（RAG-COST）
 550-555  : 关闭对话测试（RAG-CLOSE）
-600-602  : 桥实现测试（RAG-BRIDGE）
+600-603  : 桥实现测试（RAG-BRIDGE）
 700      : 断连取消测试（RAG-ABORT）
 800-802  : 问题提示测试（SUGG）
 ```

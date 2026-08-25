@@ -8,12 +8,17 @@ Python 侧白盒 RAG 链路：intent（LLM 结构化输出，anchor/category/swi
 
 ### Requirement: intent 结构化输出
 
-系统 SHALL 在每轮开头调用 LLM（非流式、快模型、0 温度、关思考）将学生问题分类为闭集类别，并输出结构化元数据 `{anchor, category, switch_detected, ambiguous}`；LLM 失败/超时/非闭集输出时回退关键词锚定（复用 `ANCHOR_RULES` + `_fallback_anchor`），标记 degraded 且走 200 返回。
+系统 SHALL 在每轮开头调用 LLM（非流式、快模型、0 温度、关思考）将学生问题分类为闭集类别，并输出结构化元数据 `{anchor, category, switch_detected, ambiguous, candidates}`；LLM 失败/超时/非闭集输出时回退关键词锚定（复用 `ANCHOR_RULES` + `_fallback_anchor`），标记 degraded 且走 200 返回。`anchor` 为**模块级**（路由层，决定语料池）；`locked_sections` 为**节级**（加权层，池内 authority × 节锚定），两层并存，orchestrate 节级锚定逻辑保留、仅新增按 anchor 选池。
 
 #### Scenario: 正常分类
 
 - **WHEN** 学生问题"这个项目的整体架构是什么"
-- **THEN** intent 输出 `{anchor:"ai-tutoring", category:"项目介绍", switch_detected:false, ambiguous:false}` 及锁定章节
+- **THEN** intent 输出 `{anchor:"ai-tutoring", category:"项目介绍", switch_detected:false, ambiguous:false, candidates:[]}` 及锁定章节
+
+#### Scenario: 歧义输出候选
+
+- **WHEN** 学生问题"这个功能的流转是什么样的"（跨功能指代不明）
+- **THEN** intent 输出 `ambiguous:true` 及候选模块 `candidates:["ai-tutoring","rag-project"]`（主源；LLM 未给/给 <2 时以会话最近 N 轮锚过的模块去重兜底）
 
 #### Scenario: LLM 失败兜底
 

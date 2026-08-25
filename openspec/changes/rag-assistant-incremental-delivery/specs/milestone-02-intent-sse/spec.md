@@ -8,7 +8,7 @@ M2 交付"白盒骨架 + 意图分析 + Query 改写"切片——SSE 事件通�
 
 ### Requirement: SSE 白盒事件通道与时序冻结
 
-M2 SHALL 搭建 SSE 事件通道并冻结时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`。前端可订阅各阶段事件并展示中间状态；字段命名 camelCase，沿用 `FAIL_ON_UNKNOWN_PROPERTIES=false` 容忍未知字段。generate 未实现期间以固定桩替占位答案回填 `done`，保证整轮可通。
+M2 SHALL 搭建 SSE 事件通道并冻结时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`。前端可订阅各阶段事件并展示中间状态；字段命名 camelCase，沿用 `FAIL_ON_UNKNOWN_PROPERTIES=false` 容忍未知字段。generate 未实现期间以固定桩替占位答案回填 `done`，保证整轮可通。**归属（定死）**：`permission` 仅 Java 网关产出（角色门在 Java），Python API 从 `intent` 开始，桥从 intent 转发不消费 Python 侧 permission；`history`（最近 N 轮含 clarify 轮）+ `trace_id`（Java 生成）随 ask 请求传 Python，Python done 回显。
 
 #### Scenario: 阶段时序展示
 
@@ -20,14 +20,24 @@ M2 SHALL 搭建 SSE 事件通道并冻结时序 `permission → intent → (clar
 - **WHEN** 后续里程碑（M3-M7）新增事件字段
 - **THEN** 只向既有事件追加字段，不得重排事件顺序、不得删除已发布字段
 
+#### Scenario: permission 仅 Java
+
+- **WHEN** Java 桥中继 Python SSE 流
+- **THEN** 桥从 Python 的 `intent` 事件开始转发，不消费/不透传 Python 侧任何 permission（permission 由 Java 在调用桥前已发）
+
 ### Requirement: intent 结构化输出与规则兜底
 
-M2 SHALL 交付 intent 语义分析：LLM 结构化输出 `{anchor, category, switch_detected, ambiguous}`；失败/超时/非闭集 → 回退关键词锚定（复用 `_fallback_anchor`），degraded 标记走 200 不报错。前端展示意图分类标签与路由目标。
+M2 SHALL 交付 intent 语义分析：LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`；失败/超时/非闭集 → 回退关键词锚定（复用 `_fallback_anchor`），degraded 标记走 200 不报错。前端展示意图分类标签与路由目标。**两层锚定**：`anchor`=模块级（路由层，选语料池），`lockedSections`=节级（加权层，池内精化），两层并存，orchestrate 节级锚定逻辑保留仅加选池。**candidates**：ambiguous 时 LLM 输出候选模块闭集（主源），会话最近 N 轮锚点兜底。
 
 #### Scenario: 意图分类展示
 
 - **WHEN** 学生提问指向某模块
 - **THEN** intent 事件携带 anchor/category，前端展示分类标签（如 #ai_tutoring / #rag_project）
+
+#### Scenario: 歧义输出候选
+
+- **WHEN** 学生问题"这个功能的流转是什么样的"（跨功能指代不明）
+- **THEN** intent 输出 ambiguous=true 及 candidates（如 ["ai-tutoring","rag-project"]），供 M6 clarify 判定
 
 #### Scenario: LLM 失败兜底
 

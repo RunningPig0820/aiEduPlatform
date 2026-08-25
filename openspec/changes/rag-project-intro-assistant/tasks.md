@@ -31,7 +31,7 @@
 
 ## M1 权限判断（纯 Java，0 依赖，第一个）
 
-- [ ] 1.1 契约 DTO 基线：`RagAskRequest`（question/sessionId/currentProject/topK），snake→camel 映射，`@JsonProperty`，`FAIL_ON_UNKNOWN_PROPERTIES=false`
+- [ ] 1.1 契约 DTO 基线：`RagAskRequest`（question/sessionId/currentProject/topK/**history**/**traceId**——history=最近 N 轮（默认 3，含 clarify 轮，Java 网关组装传入），traceId=Java 生成传 Python），snake→camel 映射，`@JsonProperty`，`FAIL_ON_UNKNOWN_PROPERTIES=false`
 - [ ] 1.2 新增 `RagAssistantController` 骨架：`POST /api/rag/assistant/ask`（SSE 流式 + 非流式两模式占位），SSE 通道建立
 - [ ] 1.3 角色硬门：从 `HttpSession.getAttribute("role")` 取角色（STUDENT 才放行），非学生/缺失 → 固定 403 响应体；忽略 body 传 role；角色门不调 LLM、不产生 trace
 - [ ] 1.4 桥桩替：`RagAssistantPort` 骨架 + infra 桥占位（Python 未就绪前返回桩替流），学生放行 → `permission{allowed:true}` → 桩替 done，ask 整轮可通
@@ -40,11 +40,11 @@
 ## M2 意图+改写+骨架（SSE 契约冻结、trace、intent LLM、rewrite、switch、上下文窗口）
 
 - [ ] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；定义全部 `Sse*DTO`（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseRejectDTO/SseBoundaryDTO/SseClarifyDTO/SseSwitchDTO/SseTokenDTO/SseDoneDTO，camelCase）
-- [ ] 2.2 契约 DTO 扩展：`RagIntentMeta`（anchor/category/switchDetected/ambiguous/lockedSections/degraded）
-- [ ] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
-- [ ] 2.4 trace_id 生成：每轮入口 UUID，透传 Python 贯穿日志，done 事件返回
+- [ ] 2.2 契约 DTO 扩展：`RagIntentMeta`（anchor/category/switchDetected/ambiguous/candidates/lockedSections/degraded；anchor=模块路由，lockedSections=节级加权，两层并存）
+- [ ] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥组装 **history（最近 N 轮，含 clarify 轮）+ traceId** 传给 Python；SSE 中继从 Python 的 `intent` 事件开始（**permission 仅 Java 发，桥不消费 Python 的 permission**）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
+- [ ] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
 - [ ] 2.5 SSE 中继（阶段 1）：permission/intent/rewrite/done 按序透传，meta/done 由 Java 重建不透传原始
-- [ ] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous}`，失败回退 `_fallback_anchor`（保留），degraded 标记
+- [ ] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块级路由，locked_sections=节级加权，两层并存），失败回退 `_fallback_anchor`（保留），degraded 标记
 - [ ] 2.7 Python rewrite：生成改写后 query，透传 `rewrite` 事件
 - [ ] 2.8 Python switch 判定：`switch_detected=(前端 current_project≠会话锚点 或 问题明确指向另一有语料模块)`，发 `switch` 事件（from/to），收敛下一轮 intent，不做生成中切换
 - [ ] 2.9 Python 上下文窗口截断：intent/generate 历史仅保留最近 N 轮（默认 3，可配），不设轮数上限；锚点由 session 独立携带
@@ -54,7 +54,7 @@
 ## M3 召回+remark+边界（双路召回、RRF top-K、范围门、硬路由、数据驱动）
 
 - [ ] 3.1 契约 DTO 扩展：`RagBlock`（blockId/title/summary/filePath/score）
-- [ ] 3.2 Python 双路召回：向量（COS）+ BM25（本地 jsonl），单路各 2s 硬超时 → 降级纯另一路（degraded 标记）
+- [ ] 3.2 Python 双路召回：向量（COS）+ BM25（本地 jsonl），单路各 2s 硬超时 → 降级纯另一路（degraded 标记）；**按 anchor 选语料池**（多模块目录，orchestrate 入参加 corpus 参数，节级锚定加权逻辑保留不改）
 - [ ] 3.3 Python RRF 精排：RRF_K=60 融合 Top-K（默认 3，可配），仅回传精排块，不吐全量召回
 - [ ] 3.4 Python 模块全放行 + 硬路由：四模块（AI答疑/知识图谱/题型分析/RAG）均可路由无禁区；硬路由（架构/代码/部署/评测/接口 → RAG 项目）
 - [ ] 3.5 Python 范围门低置信过滤：综合分低于 0.75/0.5 → `boundary`（reason=low_confidence）固定话术，0 生成 token（唯一拒答路径）；模块可用性数据驱动（语料即边界，无语料模块正常召回命中空→过滤）
@@ -88,7 +88,7 @@
 
 - [ ] 6.1 Python 开始引导：`GET /api/rag/assistant/guide` 返回 RAG 定向静态引导池（定位/架构/数据流/评测/坑），0 token、非 SSE、不占冻结时序
 - [ ] 6.2 Python 结束建议：done 后 LLM 生成 1~3 条（向 ①项目介绍②操作③数据关联④难点），**必含 ≥1 条 RAG 方向**（RAG 始终带上，非并列模块）；失败静态池兜底（对齐 Python 6 引导方向）
-- [ ] 6.3 Python clarify 澄清轮：`ambiguous=true` 且候选 ≥2 → `clarify` 事件（固定话术+candidates+default），0 生成 token、不计答案轮次、最多一轮；default 绑定 current_project > 会话锚点；再模糊直接默认
+- [ ] 6.3 Python clarify 澄清轮：`ambiguous=true` 且候选 ≥2 → `clarify` 事件（固定话术+candidates+default），0 生成 token、不计答案轮次、最多一轮；default 绑定 current_project > 会话锚点；再模糊直接默认；**候选来源** = ① intent LLM 输出 candidates（主源）② 会话最近 N 轮锚点去重（兜底）③ 仍 <2 不澄清
 - [ ] 6.4 done 补 suggestions 字段 + guide 接口中继（Java）
 - [ ] 6.5 三端对接测试：前端开始引导 chips + 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI；后端+模型端联调 RAG-SSE-004/005、SUGG-001~003
 
@@ -96,7 +96,7 @@
 
 - [ ] 7.1 Java 会话累计 token：每轮 done 后累加进 Redis `rag:assistant:session:{sessionId}:usage`（TTL 24h 对齐 tutoring），含轮数
 - [ ] 7.2 Java close 端点：`POST /api/rag/assistant/sessions/{sessionId}/close`（角色门同上；中止在途流 + 置 session closed + 返回累计 usage/轮数）；closed 后再 ask → 固定话术"本轮对话已结束，可开启新对话"0 token；幂等处理
-- [ ] 7.3 Java `GET /api/rag/assistant/turns/{traceId}` 补查端点 + 桥实现（角色门同上；返回完整结果 answer/quotedKeys/tokensUsage/suggestions；不存在 → 10002）
+- [ ] 7.3 Java turns 存储与补查：每轮 done 后按 trace_id 落 Redis（`rag:assistant:trace:{traceId}`，TTL 24h）；`GET /api/rag/assistant/turns/{traceId}` 读 Redis 返回完整结果（answer/quotedKeys/tokensUsage/suggestions；不存在 → 10002）。**turns 只存 Java Redis，Python 不落会话 trace**（Python eval trace jsonl 与补查分开）
 - [ ] 7.4 控制器测试全量：角色门/事件时序/断线补查/评估报告/关闭对话（累计结算/关闭后再问/幂等）
 - [ ] 7.5 三端对接测试：前端关闭对话按钮 + 结算面板（累计 token + 轮数）+ 断线凭 trace_id 补查；后端+模型端联调 RAG-CLOSE-001~006、RAG-COST-004~006
 

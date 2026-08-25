@@ -32,7 +32,7 @@ Java 侧 RAG 项目介绍助手网关：从可信 session 取角色（仅 STUDEN
 #### Scenario: 正常问答时序
 
 - **WHEN** 学生发送问题且流程正常
-- **THEN** 前端依次收到 `permission`（角色门结果）→ `intent`（anchor/category/switch/ambiguous）→ `rewrite`（改写后 query）→ `rerank`（精排 top-K 块）→ `token`（正文流）→ `done`（完整结果）
+- **THEN** 前端依次收到 `permission`（角色门结果）→ `intent`（anchor/category/switch/ambiguous/candidates）→ `rewrite`（改写后 query）→ `rerank`（精排 top-K 块）→ `token`（正文流）→ `done`（完整结果）
 
 #### Scenario: 澄清/切换时序
 
@@ -51,7 +51,7 @@ Java 侧 RAG 项目介绍助手网关：从可信 session 取角色（仅 STUDEN
 #### Scenario: 事件字段齐备
 
 - **WHEN** 各事件产生
-- **THEN** `permission` 含 `{role, allowed}`；`intent` 含 `{anchor, category, switchDetected, ambiguous, lockedSections}`；`rewrite` 含 `{originalQuestion, rewrittenQuery}`；`rerank` 含 `{blocks:[{blockId, title, summary, filePath}]}`；`boundary` 含 `{message, reason}`；`clarify` 含 `{message, candidates, default}`；`switch` 含 `{fromAnchor, toAnchor}`；`done` 含 `{answer, quotedKeys, tokensUsage, traceId, suggestions}`
+- **THEN** `permission` 含 `{role, allowed}`；`intent` 含 `{anchor, category, switchDetected, ambiguous, candidates, lockedSections}`；`rewrite` 含 `{originalQuestion, rewrittenQuery}`；`rerank` 含 `{blocks:[{blockId, title, summary, filePath}]}`；`boundary` 含 `{message, reason}`；`clarify` 含 `{message, candidates, default}`；`switch` 含 `{fromAnchor, toAnchor}`；`done` 含 `{answer, quotedKeys, tokensUsage, traceId, suggestions}`
 
 #### Scenario: snake_case 内部契约映射
 

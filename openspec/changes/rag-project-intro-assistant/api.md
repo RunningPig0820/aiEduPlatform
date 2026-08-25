@@ -64,6 +64,10 @@
   "current_project": "ai-tutoring",
   "question": "这个项目的整体架构是什么？",
   "session_id": "sess-001",
+  "history": [
+    { "question": "RAG 是什么？", "answer": "……", "anchor": "ai-tutoring" }
+  ],
+  "trace_id": "trc-abc123",
   "stream": true,
   "top_k": 3
 }
@@ -74,8 +78,12 @@
 | current_project | String | 否 | 覆盖模块 id（ai-tutoring/rag-system 等） | 页面锚定；缺省=全局模式。**仅作提示，角色以 session 为准** |
 | question | String | 是 | 非空，长度 ≤ 500 | 学生问题 |
 | session_id | String | 否 | 会话 id | 续接会话（锚点 + 轮次计数 + switch/clarify 判定） |
+| history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传入（每轮过手 done 天然有）；供 intent/rewrite/clarify 兜底消费，Python 只读 |
+| trace_id | String | 否 | 非空 | **Java 生成**传 Python；Python 贯穿日志并在 done 回显（两端 trace 一致） |
 | stream | Boolean | 否 | 默认 false | true 时走 SSE 流式 |
 | top_k | Integer | 否 | 1~5，默认 3 | RRF 精排块数（建议保持默认 3） |
+
+> **permission 归属**：`permission` 事件仅由 Java 网关产出（角色门在 Java）；Python 侧 API 不产 permission（从 `intent` 开始）。Java 桥中继时从 Python 的 `intent` 事件开始转发，不消费/不透传 Python 侧任何 permission。
 
 ### SSE 事件序列
 
@@ -84,7 +92,7 @@
 | 事件 | data 内容 | 说明 |
 |------|----------|------|
 | `permission` | `{role, allowed}` | 角色门结果（正常流恒为 allowed=true；非学生不会到 SSE） |
-| `intent` | `{anchor, category, switchDetected, ambiguous, lockedSections, degraded}` | LLM 意图分类结果（四模块全放行，无禁区拒答） |
+| `intent` | `{anchor, category, switchDetected, ambiguous, candidates, lockedSections, degraded}` | LLM 意图分类结果（anchor=模块路由 + lockedSections=节级加权两层并存；candidates=歧义候选模块，供 clarify） |
 | `clarify` | `{message, candidates, default}` | 澄清轮，随后 `done` |
 | `switch` | `{fromAnchor, toAnchor}` | 上下文切换，随后按新锚点 continue |
 | `rewrite` | `{originalQuestion, rewrittenQuery}` | Query 改写结果 |

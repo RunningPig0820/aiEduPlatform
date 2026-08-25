@@ -45,12 +45,12 @@
 
 ### Requirement: clarify 澄清轮
 
-系统 SHALL 在 intent 判定 `ambiguous=true` 且候选功能 ≥2 时发出 `clarify` 事件（固定话术模板 + candidates + default），不进入召回与生成、0 token、**不计入答案轮次**，并写入历史；学生下一条消息重跑 intent。若下一条仍模糊，**不再二次澄清**，直接默认当前功能继续。
+系统 SHALL 在 intent 判定 `ambiguous=true` 且候选功能 ≥2 时发出 `clarify` 事件（固定话术模板 + candidates + default），不进入召回与生成、0 token、**不计入答案轮次**，并写入历史；学生下一条消息重跑 intent。若下一条仍模糊，**不再二次澄清**，直接默认当前功能继续。**候选判定输入**：`candidates` = ① intent LLM 结构化输出直接给出（`ambiguous=true` 时输出候选模块闭集 2~4 个，主源）→ ② LLM 未给/给 <2 → 会话最近 N 轮锚过的模块去重填充（兜底）→ ③ 仍 <2 → 不触发 clarify 直接默认。`default` = 前端 `current_project` > 会话最后成功锚定功能。
 
 #### Scenario: 多候选澄清
 
-- **WHEN** 学生问"这个功能的流转是什么样的"，且会话内已出现多个功能候选
-- **THEN** 系统发 `clarify` 事件（如"您的问题涉及多个功能，请明确功能名。默认回答当前功能：RAG项目" + candidates + default=RAG项目），无 recall/generate
+- **WHEN** 学生问"这个功能的流转是什么样的"，intent LLM 判定 ambiguous 并输出 `candidates:["ai-tutoring","rag-project"]`（或会话历史锚点兜底 ≥2）
+- **THEN** 系统发 `clarify` 事件（如"您的问题涉及多个功能，请明确功能名。默认回答当前功能：AI答疑" + candidates + default=AI答疑，default 绑定 current_project），无 recall/generate
 
 #### Scenario: 澄清一次后仍模糊
 

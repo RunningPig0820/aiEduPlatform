@@ -49,7 +49,7 @@ SSE 问答为独立事件流；其余接口返回统一 JSON：
 | 事件 | 归属里程碑 | 核心字段 | 说明 |
 |------|-----------|---------|------|
 | `permission` | M1 | `allowed` | 角色门结果，学生放行 true |
-| `intent` | M2 | `anchor` `category` `switchDetected` `ambiguous` | 意图分析（闭集标签 + 锚点） |
+| `intent` | M2 | `anchor` `category` `switchDetected` `ambiguous` `candidates` | 意图分析（闭集标签 + 模块锚点 + 歧义候选） |
 | `switch` | M2 | `from` `to` | 功能切换（下一轮重路由） |
 | `clarify` | M6 | `message` `candidates` `default` | 澄清追问（歧义才发） |
 | `rewrite` | M2 | `rewrittenQuery` | 改写后检索式 |
@@ -94,6 +94,10 @@ SSE 问答为独立事件流；其余接口返回统一 JSON：
   "question": "这个项目的整体架构是什么？",
   "sessionId": "sess-001",
   "currentProject": "ai-tutoring",
+  "history": [
+    { "question": "RAG 是什么？", "answer": "……", "anchor": "ai-tutoring" }
+  ],
+  "traceId": "trc-abc123",
   "topK": 3
 }
 ```
@@ -103,9 +107,12 @@ SSE 问答为独立事件流；其余接口返回统一 JSON：
 | question | String | 是 | 非空、≤500 字符 | 学生问题 |
 | sessionId | String | 是 | 非空 | 会话 id |
 | currentProject | String | 否 | - | 页面锚定模块（clarify default 绑定、switch 判定用） |
+| history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传 Python（每轮过手 done 天然有），Python 只读 |
+| traceId | String | 否 | 非空 | **Java 生成**传 Python，Python done 回显（两端 trace 一致） |
 | topK | Integer | 否 | 默认 3 | RRF 精排回传块数 |
 
 > **role 字段禁止出现在 body**：前端传 role 一律忽略，角色只认可信 session。
+> **permission 归属**：`permission` 事件仅由 Java 网关产出（角色门在 Java）；Python API 从 `intent` 开始，桥中继时从 intent 转发，不消费/不透传 Python 侧 permission。
 
 ### 响应参数
 
@@ -214,6 +221,8 @@ const decoder = new TextDecoder();
   "suggestions": ["想了解RAG的整体架构吗？"]
 }
 ```
+
+> **存储定死**：turns 只存 **Java Redis**（每轮 done 按 trace_id 落 `rag:assistant:trace:{traceId}`，TTL 24h），补查读 Redis；Python 无状态不落会话 trace（eval trace jsonl 与补查分开）。
 
 ### 常见错误
 

@@ -12,8 +12,8 @@
 ## M2 白盒骨架 + 意图分析 + Query 改写
 
 - [ ] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；事件 DTO（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseTokenDTO/SseDoneDTO，camelCase）
-- [ ] 2.2 trace_id 生成（每轮 UUID）并透传 Python 贯穿日志
-- [ ] 2.3 Python：intent LLM 结构化输出 `{anchor, category, switch_detected, ambiguous}`；失败回退 `_fallback_anchor`，degraded 走 200
+- [ ] 2.2 trace_id（定死 Java 生成）+ history（Java 组装最近 N 轮含 clarify 轮）随 ask 请求传 Python，Python done 回显 trace_id（两端一致）
+- [ ] 2.3 Python：intent LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块路由 + lockedSections=节级加权两层并存）；失败回退 `_fallback_anchor`，degraded 走 200
 - [ ] 2.4 Python：rewrite 事件透传 + generate 桩替（固定占位答案"（桩替）…"），整轮可通
 - [ ] 2.5 Java 桥：`POST /api/rag/assistant/ask`（`x-internal-token`）SSE 消费并重建为 Java 事件；degraded 走 200 不 503
 - [ ] 2.6 前端：阶段展示区（权限✓/意图分类标签/改写后问题）+ 桩替答案渲染
@@ -21,7 +21,7 @@
 
 ## M3 多路召回 + remark 打分 + 边界拒答
 
-- [ ] 3.1 Python：双路召回（向量 COS + BM25 本地 jsonl），单路 2s 硬超时 → 降级纯另一路（degraded 标记）
+- [ ] 3.1 Python：双路召回（向量 COS + BM25 本地 jsonl），单路 2s 硬超时 → 降级纯另一路（degraded 标记）；按 anchor 选语料池（orchestrate 加 corpus 参数，节级锚定加权保留不改）
 - [ ] 3.2 Python：RRF 融合（RRF_K=60）精排 Top-K（默认 3），精排块字段 blockId/title/summary/filePath/score
 - [ ] 3.3 Python：范围门低置信过滤（索引层 0.75 / 源文档池 0.5）→ `boundary`（reason=low_confidence）固定话术，0 生成 token
 - [ ] 3.4 Java：rerank/boundary 事件中继
@@ -50,7 +50,7 @@
 
 - [ ] 6.1 Python：结束建议（done 后）运行时 LLM 生成 1~3 条（向 ①项目介绍②操作③数据关联④难点），**必含 ≥1 条 RAG 方向**（RAG 始终带上，非并列模块）；失败 → 静态池兜底（对齐 Python 6 引导方向：定位/架构/数据流/防作弊/评测/坑）；completion_tokens 计入本轮 usage
 - [ ] 6.2 Python：开始引导（会话入口）RAG 定向静态池（定位/架构/数据流/评测/坑）+ `GET /api/rag/assistant/guide` 接口，0 token、非 SSE、不占冻结时序
-- [ ] 6.3 Python：clarify 澄清（`ambiguous=true` 且候选 ≥2 → 事件 + candidates + default，0 生成 token、不计答案轮次、最多一轮；default 绑定 `current_project` > 会话锚点；再模糊直接默认）
+- [ ] 6.3 Python：clarify 澄清（`ambiguous=true` 且候选 ≥2 → 事件 + candidates + default，0 生成 token、不计答案轮次、最多一轮；default 绑定 `current_project` > 会话锚点；再模糊直接默认；候选来源 = intent LLM 输出 candidates 主源 / 会话最近 N 轮锚点兜底 / 仍 <2 不澄清）
 - [ ] 6.4 Java：clarify 事件中继 + done 补 suggestions 字段 + guide 接口中继
 - [ ] 6.5 前端：开始引导 chips（定向 RAG，进入页面展示）+ 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI（默认当前功能）
 - [ ] 6.6 对接测试：RAG-SSE-004/005、SUGG-001~003 全绿

@@ -40,9 +40,11 @@
 - **为什么**：与 tutoring 认证桥接（方案 A）一致——前端走 Java 网关，Python 不自己认证、不碰会话；严禁信任前端传参（spec 硬性要求）。
 - **备选**：Python 自校验 → 破坏"Python 无状态"边界，弃。
 
-### D2. 意图识别用 LLM 结构化输出 + 规则兜底，输出 `{anchor, category, switch_detected, ambiguous}`
+### D2. 意图识别用 LLM 结构化输出 + 规则兜底，输出 `{anchor, category, switch_detected, ambiguous, candidates}`
 intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考），输出闭集元数据。失败/超时/非闭集 → 回退关键词锚定（复用 `_fallback_anchor` + `ANCHOR_RULES`），degraded 标记走 200。
-- **为什么**：白盒展示"语义分析"必须真实发生；LLM 判意图类别（复用 `_CLASSIFY_SYSTEM` 的闭集分类）+ 关键词兜底 = 语义与成本平衡。接口返回结构固定（`{locked_sections, strategy}` → 扩展为 `{anchor, category, switch, ambiguous}`），检索/生成只消费结果。
+- **两层锚定（Python 侧校准确认）**：`anchor` 是**模块级**（路由层，决定从哪个语料池召回）；`locked_sections`（节级，既有语义，如 04-安全/07-流式）保留为**加权层**（池内 authority × 节锚定精化）。两层并存、不是替换：orchestrate 的节级锚定加权**逻辑不改**，只新增 recall 前置"按 anchor 选语料池"（corpus 参数）。anchor 明确 → 单池召回 + 池内节加权；anchor 缺失/ambiguous → 维持现状（跨池或先 clarify）。
+- **candidates（歧义候选模块）**：`ambiguous=true` 时 LLM 直接输出候选模块闭集（2~4 个，主源）；LLM 未给/给 <2 → 取会话最近 N 轮锚过的模块去重填充（兜底）；仍 <2 → 不触发 clarify，走默认 current_project。为 clarify 判定（D5）提供确定性输入。
+- **为什么**：白盒展示"语义分析"必须真实发生；LLM 判意图类别（复用 `_CLASSIFY_SYSTEM` 的闭集分类）+ 关键词兜底 = 语义与成本平衡。接口返回结构固定（`{locked_sections, strategy}` → 扩展为 `{anchor, category, switch, ambiguous, candidates, lockedSections}`），检索/生成只消费结果。
 - **备选**：纯规则 → 零成本但"语义分析"是假的，白盒露怯；纯 LLM 无兜底 → 挂了链路全断。
 
 ### D3. 切换判定收敛在下一轮 intent，服务端不做生成中切换
@@ -59,6 +61,7 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 
 ### D5. clarify 澄清轮：歧义才问，默认当前功能，最多一轮
 `ambiguous=true` 且 `candidates ≥ 2`（多候选功能）→ 发 `event: clarify`（固定话术模板 + candidates + default），**0 token 生成、不计答案轮次、写 history**。学生下一条重跑 intent；仍模糊（"就那个嘛"）→ 不再 clarify，直接默认当前功能继续。`default` 绑定源优先级：前端 `current_project` > 会话最后成功锚定功能。
+- **候选判定输入（Python 侧校准确认）**：`candidates` 来源 = ① intent LLM 结构化输出直接给出（`ambiguous=true` 时输出候选模块闭集 2~4 个，主源，能"读懂"问题里的功能指代）→ ② LLM 未给/给 <2 → 会话最近 N 轮锚过的模块去重填充（兜底）→ ③ 仍 <2 → 不触发 clarify，直接走默认。`candidates` 是**模块级**（非节级），与 D2 的模块 anchor 同一闭集。
 - **为什么**：低摩擦引导（单一候选直接走不问），防死循环（最多一轮），降本（写死话术）。spec 第 6 条"题型引导"的歧义场景正是"切换功能后问'这个功能怎么流转'"。
 - **备选**：不问直接默认 → 答错功能体验更差；无限追问 → 死循环。
 
@@ -76,9 +79,9 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 - **备选**：统一 20s 超时 → 学生等待过久；生成超时也调 LLM 重试 → 重复花钱。
 
 ### D8. tokens_usage + trace_id
-`done` 事件携带 `tokens_usage{prompt_tokens, completion_tokens, cache_hit_tokens, total_tokens}` + `trace_id`。usage 取流结束 ark 返回（`include_usage`）；cache_hit 取不到 → tokenizer 估算标注"估算"。`trace_id` 由 Java 生成透传 Python（同源贯穿日志），供前端 `GET /api/rag/assistant/turns/{trace_id}` 断线补查。
-- **为什么**：spec 第 8 条透明计费；tutoring 已改 ark_stream 取 usage，复用。cache_hit 是 doubao prompt 缓存命中计数，用于成本叙事。
-- **备选**：不补查接口 → trace_id 是死口（spec 要求"供断线后补查"）。
+`done` 事件携带 `tokens_usage{prompt_tokens, completion_tokens, cache_hit_tokens, total_tokens}` + `trace_id`。usage 取流结束 ark 返回（`include_usage`）；cache_hit 取不到 → tokenizer 估算标注"估算"。`trace_id` 由 Java 生成透传 Python（同源贯穿日志，Python done 回显），供前端 `GET /api/rag/assistant/turns/{trace_id}` 断线补查。**history 由 Java 网关组装**（最近 N 轮，含 clarify 轮，随 ask 请求传 Python，Python 无状态只消费）；**turns 只存 Java Redis**（每轮 done 按 trace_id 落 `rag:assistant:trace:{traceId}` TTL 24h，补查读 Redis；Python 不落会话 trace）。
+- **为什么**：spec 第 8 条透明计费；tutoring 已改 ark_stream 取 usage，复用。cache_hit 是 doubao prompt 缓存命中计数，用于成本叙事。history/trace 归 Java 因 Java 是天然聚合点（每轮过手 done），Python 保持无状态（Python 侧校准确认）。
+- **备选**：不补查接口 → trace_id 是死口（spec 要求"供断线后补查"）；Python 落 trace JSONL → 破坏无状态边界，弃。
 
 ### D9. 模块可用性数据驱动：四模块放行，无语料自然低置信过滤
 知识库按模块组织；`rag_slices.jsonl`（AI答疑）现状。其它模块语料不存在时，提问**正常进入召回**但命中为空/低置信 → 范围门低置信度过滤（固定话术），不是意图层拒答。未来某模块入库切片 → 自动可答（**无需改代码**）。
