@@ -4,6 +4,7 @@ import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
+import com.ai.edu.infrastructure.ai.LlmGatewayProperties;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -43,6 +44,9 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
     @Resource(name = "ragWebClient")
     private WebClient ragWebClient;
 
+    @Resource
+    private LlmGatewayProperties llmGatewayProperties;
+
     @Override
     public Flux<ServerSentEvent<String>> ask(RagAskRequest request) {
         log.info("[rag-assistant] 桥调 Python ask, sessionId={}, traceId={}",
@@ -64,15 +68,22 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
                 });
     }
 
+    private static String stripTrailingSlash(String url) {
+        return url == null ? "" : url.replaceAll("/+$", "");
+    }
+
     @Override
     public Mono<String> source(String filePath) {
         // Python StaticFiles 按目录分隔服务：逐段 urlencode 保留 "/" 目录结构（中文/空格安全）
         String encodedPath = Arrays.stream(filePath.split("/"))
                 .map(seg -> URLEncoder.encode(seg, StandardCharsets.UTF_8))
                 .collect(Collectors.joining("/"));
-        log.info("[rag-assistant] 桥调 Python source, filePath={}", filePath);
+        // 必须用绝对 URI：.uri(URI) 传相对路径(无 scheme/host)无法与 baseUrl 拼接 → WebClientRequestException
+        URI fullUri = URI.create(stripTrailingSlash(llmGatewayProperties.getBaseUrl())
+                + SOURCE_PATH + "/" + encodedPath);
+        log.info("[rag-assistant] 桥调 Python source, filePath={}, uri={}", filePath, fullUri);
         return ragWebClient.get()
-                .uri(URI.create(SOURCE_PATH + "/" + encodedPath))
+                .uri(fullUri)
                 .retrieve()
                 // 原文不存在 → EntityNotFoundException（10002，HTTP 404）
                 .onStatus(status -> status.value() == 404,

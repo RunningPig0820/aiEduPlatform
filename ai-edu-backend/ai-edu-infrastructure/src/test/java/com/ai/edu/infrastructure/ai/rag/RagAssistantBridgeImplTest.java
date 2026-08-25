@@ -3,6 +3,7 @@ package com.ai.edu.infrastructure.ai.rag;
 import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
+import com.ai.edu.infrastructure.ai.LlmGatewayProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -167,6 +168,15 @@ class RagAssistantBridgeImplTest {
         return webClient;
     }
 
+    private RagAssistantBridgeImpl buildSourceClient(WebClient.ResponseSpec responseSpec) {
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+        var props = new LlmGatewayProperties();
+        props.setBaseUrl("http://127.0.0.1:9527");
+        ReflectionTestUtils.setField(client, "llmGatewayProperties", props);
+        return client;
+    }
+
     @Test
     @DisplayName("source: 原文存在 → 返回文件内容")
     void source_returnsContent() {
@@ -174,8 +184,7 @@ class RagAssistantBridgeImplTest {
         when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("# 文档内容\n正文"));
 
-        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
-        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+        RagAssistantBridgeImpl client = buildSourceClient(responseSpec);
 
         StepVerifier.create(client.source("4.完善文档/02-一次完整答疑怎么走.md"))
                 .expectNext("# 文档内容\n正文")
@@ -195,8 +204,7 @@ class RagAssistantBridgeImplTest {
         });
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("x"));
 
-        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
-        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+        RagAssistantBridgeImpl client = buildSourceClient(responseSpec);
         client.source("不存在.md").block();
 
         assertTrue(predicateRef.get().test(HttpStatus.NOT_FOUND), "404 应命中谓词");
@@ -213,8 +221,7 @@ class RagAssistantBridgeImplTest {
                 .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
                         org.springframework.http.HttpMethod.GET, URI.create("http://x"), HttpHeaders.EMPTY)));
 
-        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
-        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+        RagAssistantBridgeImpl client = buildSourceClient(responseSpec);
 
         assertThrows(TutoringAgentException.class, () -> client.source("x.md").block());
     }

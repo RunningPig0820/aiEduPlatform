@@ -58,12 +58,12 @@ public class RagAssistantController {
         return ApiResponse.success(ragAssistantAppService.askStages(command));
     }
 
-    /** 查看原文（Java 代理）：转发 Python 源文件静态服务，返回原文内容。非学生 → 403。 */
+    /** 查看原文（Java 代理）：转发 Python 源文件静态服务，返回原文内容（ApiResponse 包裹，匹配前端 axios 拦截器）。非学生 → 403。 */
     @Operation(summary = "查看原文", description = "Java 网关代理 Python 源文件，前端不直连 Python；STUDENT 角色门")
     @GetMapping("/source")
-    public Mono<String> source(@RequestParam("path") String path, HttpSession session) {
+    public Mono<ApiResponse<String>> source(@RequestParam("path") String path, HttpSession session) {
         requireStudent(session);
-        return ragAssistantAppService.source(path);
+        return ragAssistantAppService.source(path).map(ApiResponse::success);
     }
 
     private void requireStudent(HttpSession session) {

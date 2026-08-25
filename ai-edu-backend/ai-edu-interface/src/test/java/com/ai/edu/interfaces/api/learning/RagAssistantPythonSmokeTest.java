@@ -45,6 +45,7 @@ class RagAssistantPythonSmokeTest {
 
         RagAssistantBridgeImpl bridge = new RagAssistantBridgeImpl();
         ReflectionTestUtils.setField(bridge, "ragWebClient", ragWebClient);
+        ReflectionTestUtils.setField(bridge, "llmGatewayProperties", props);
 
         RagAssistantAppService appService = new RagAssistantAppService();
         ReflectionTestUtils.setField(appService, "ragAssistantPort", bridge);
@@ -59,6 +60,15 @@ class RagAssistantPythonSmokeTest {
                 .build();
 
         AtomicReference<String> permissionTraceId = new AtomicReference<>();
+
+        // 复现：前端实测 source 50005 的路径（中文目录/文件名）
+        var sourceMono = bridge.source("3.代码/分析-04-学科门.md");
+        try {
+            String content = sourceMono.block();
+            assertTrue(content != null && content.contains("学科"), "source 应返回原文, got=" + (content == null ? "null" : content.substring(0, Math.min(50, content.length()))));
+        } catch (Exception e) {
+            throw new AssertionError("source 50005 复现: " + e, e);
+        }
 
         Flux<ServerSentEvent<String>> stream = appService.ask(command);
         StepVerifier.create(stream)

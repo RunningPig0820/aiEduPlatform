@@ -142,7 +142,8 @@ class RagAssistantControllerTest {
     void source_studentOk_teacher403() {
         when(appService.source(any())).thenReturn(reactor.core.publisher.Mono.just("# 原文"));
         clearInvocations(appService); // 清掉桩调用计数，verify 只看真实调用
-        assertTrue(controller.source("4.完善文档/02-…md", loginSession(STUDENT_ID, "STUDENT")).block().contains("原文"));
+        assertTrue(controller.source("4.完善文档/02-…md", loginSession(STUDENT_ID, "STUDENT"))
+                .block().getData().contains("原文"));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> controller.source("4.完善文档/02-…md", loginSession(TEACHER_ID, "TEACHER")));
