@@ -5,10 +5,12 @@ import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.common.exception.LlmGatewayException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 
@@ -84,6 +86,15 @@ public class GlobalExceptionHandler {
         result.put("code", "10003");
         result.put("message", "请以 multipart/form-data 上传图片文件");
         return result;
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException e) {
+        log.warn("Response status exception: {} - {}", e.getStatusCode(), e.getReason());
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", String.valueOf(e.getStatusCode().value()));
+        result.put("message", e.getReason() == null ? "请求失败" : e.getReason());
+        return ResponseEntity.status(e.getStatusCode()).body(result);
     }
 
     @ExceptionHandler(Exception.class)
