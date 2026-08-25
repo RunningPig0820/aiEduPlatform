@@ -42,4 +42,7 @@ public class RagAskRequest implements Serializable {
 
     @JsonProperty("top_k")
     private Integer topK;
+
+    /** 是否 SSE 流式（桥恒传 true；false → Python 返回非流式 done 结构） */
+    private Boolean stream;
 }

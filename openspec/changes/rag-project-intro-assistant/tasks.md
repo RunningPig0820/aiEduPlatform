@@ -41,11 +41,11 @@
 
 ## M2 意图+改写+骨架（SSE 契约冻结、trace、intent LLM、rewrite、switch、上下文窗口）
 
-- [ ] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；定义全部 `Sse*DTO`（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseRejectDTO/SseBoundaryDTO/SseClarifyDTO/SseSwitchDTO/SseTokenDTO/SseDoneDTO，camelCase）
-- [ ] 2.2 契约 DTO 扩展：`RagIntentMeta`（anchor/category/switchDetected/ambiguous/candidates/lockedSections/degraded；anchor=模块路由，lockedSections=节级加权，两层并存）
-- [ ] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥组装 **history（最近 N 轮，含 clarify 轮）+ traceId** 传给 Python；SSE 中继从 Python 的 `intent` 事件开始（**permission 仅 Java 发，桥不消费 Python 的 permission**）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
-- [ ] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ **permission 事件携带 traceId（前端流开始即取，供断线补查）** → 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
-- [ ] 2.5 SSE 中继（阶段 1）：permission/intent/rewrite/done 按序透传，meta/done 由 Java 重建不透传原始
+- [x] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；定义全部 `Sse*DTO`（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseRejectDTO/SseBoundaryDTO/SseClarifyDTO/SseSwitchDTO/SseTokenDTO/SseDoneDTO，camelCase）
+- [x] 2.2 契约 DTO 扩展：`RagIntentMeta`（anchor/category/switchDetected/ambiguous/candidates/lockedSections/degraded；anchor=模块路由，lockedSections=节级加权，两层并存）
+- [x] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥组装 **history（最近 N 轮，含 clarify 轮）+ traceId** 传给 Python；SSE 中继从 Python 的 `intent` 事件开始（**permission 仅 Java 发，桥不消费 Python 的 permission**）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
+- [x] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ **permission 事件携带 traceId（前端流开始即取，供断线补查）** → 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
+- [x] 2.5 SSE 中继（阶段 1）：permission/intent/rewrite/done 按序透传，meta/done 由 Java 重建不透传原始
 - [ ] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块级路由，locked_sections=节级加权，两层并存），失败回退 `_fallback_anchor`（保留），degraded 标记
 - [ ] 2.7 Python rewrite：生成改写后 query，透传 `rewrite` 事件
 - [ ] 2.8 Python switch 判定：`switch_detected=(前端 current_project≠会话锚点 或 问题明确指向另一有语料模块)`，发 `switch` 事件（from/to），收敛下一轮 intent，不做生成中切换
