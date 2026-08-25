@@ -18,7 +18,7 @@ Python 侧白盒 RAG 链路：intent（LLM 结构化输出，anchor/category/swi
 #### Scenario: 歧义输出候选
 
 - **WHEN** 学生问题"这个功能的流转是什么样的"（跨功能指代不明）
-- **THEN** intent 输出 `ambiguous:true` 及候选模块 `candidates:["ai-tutoring","rag-project"]`（主源；LLM 未给/给 <2 时以会话最近 N 轮锚过的模块去重兜底）
+- **THEN** intent 输出 `ambiguous:true` 及候选模块 `candidates:["ai-tutoring","rag-system"]`（主源；LLM 未给/给 <2 时以会话最近 N 轮锚过的模块去重兜底）
 
 #### Scenario: LLM 失败兜底
 

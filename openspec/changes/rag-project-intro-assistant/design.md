@@ -62,6 +62,7 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 ### D5. clarify 澄清轮：歧义才问，默认当前功能，最多一轮
 `ambiguous=true` 且 `candidates ≥ 2`（多候选功能）→ 发 `event: clarify`（固定话术模板 + candidates + default），**0 token 生成、不计答案轮次、写 history**。学生下一条重跑 intent；仍模糊（"就那个嘛"）→ 不再 clarify，直接默认当前功能继续。`default` 绑定源优先级：前端 `current_project` > 会话最后成功锚定功能。
 - **候选判定输入（Python 侧校准确认）**：`candidates` 来源 = ① intent LLM 结构化输出直接给出（`ambiguous=true` 时输出候选模块闭集 2~4 个，主源，能"读懂"问题里的功能指代）→ ② LLM 未给/给 <2 → 会话最近 N 轮锚过的模块去重填充（兜底）→ ③ 仍 <2 → 不触发 clarify，直接走默认。`candidates` 是**模块级**（非节级），与 D2 的模块 anchor 同一闭集。
+- **点选交互定稿（前端校准确认）**：学生点选候选 chip 后，前端**重发原问题 + `current_project=点选模块`**（非发裸功能名）——复用 Q2 已确认的"每次带 current_project 锚点"机制，intent 以 `current_project` 为**权威消歧锚点**直接锚定（不依赖 LLM 从功能名猜），原问保留供改写/召回；点选模块与会话锚点不同 → `switch` 事件照常触发（前端可提示"已切换至 X"）。
 - **为什么**：低摩擦引导（单一候选直接走不问），防死循环（最多一轮），降本（写死话术）。spec 第 6 条"题型引导"的歧义场景正是"切换功能后问'这个功能怎么流转'"。
 - **备选**：不问直接默认 → 答错功能体验更差；无限追问 → 死循环。
 
@@ -111,6 +112,20 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 - **返回会话累计 token**：Java 每轮 `done` 后将 `tokens_usage` 累加进 Redis（`rag:assistant:session:{sessionId}:usage`，TTL 24h 对齐 tutoring）；close 时读回返回 `{prompt/completion/cache_hit/total}` 会话累计值 + 轮数。**这补上 spec 第 4 条"对话消耗总 token"的缺口**（原来只有每轮）。
 - **为什么**：显式 close 与断连取消是两件事——断连是异常路径（仅中止流），close 是学生主动结束（结束会话 + 结算）。累计 token 放 Java（每轮都经过它，天然聚合点），Python 保持无状态。
 - **备选**：close 仅前端清空 UI 不发后端 → 无法结算累计 token、session 状态残留；累计 token 放 Python → 破坏无状态边界。
+
+### 定稿契约对齐（2026-08-25 三端：前端/Python/Java）
+
+**D-A. 模块 id 闭集（三端统一）**
+闭集 = `ai-tutoring`（AI答疑）/ `knowledge-graph`（知识图谱）/ `question-analysis`（题型分析）/ `rag-system`（RAG 项目）。**弃用** `rag-project`、`question-type`。语料选池按块级 metadata `tags.module == anchor` 过滤（**不依赖目录同名**）；`slice_corpus` 的 module 参数化（不再硬编码）。clarify `candidates` 为**字符串 id 数组**，中文 label 由前端 `pageModuleMap` 维护（Python 不产 label、契约零改动），点选候选以 id 作 `currentProject` 重发原问。
+
+**D-B. permission 携带 trace_id**
+`permission` 事件 = `{role, allowed, traceId}`；trace_id 由 Java 网关入口生成，流一开始前端即可取（断线补查**不依赖 done**）。Python 无感（不产 permission）。
+
+**D-C. sessionId 由前端生成**
+前端面板挂载生成 UUID（复用 `generateSessionId` 模式）整场复用；Java 以 sessionId 为键累计 token；ask 未知 session 按新会话（累计从 0），close 未知 session → 10002。
+
+**D-D. 查看原文走 Java 代理**
+新增 `GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}`；Python 保留挂载作转发目标，前端**不直连 Python**。file_path 走 query 传参（不走 path，避免特殊字符被容器拒）。
 
 ## Risks / Trade-offs
 

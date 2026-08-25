@@ -12,7 +12,7 @@
 ## M2 白盒骨架 + 意图分析 + Query 改写
 
 - [ ] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；事件 DTO（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseTokenDTO/SseDoneDTO，camelCase）
-- [ ] 2.2 trace_id（定死 Java 生成）+ history（Java 组装最近 N 轮含 clarify 轮）随 ask 请求传 Python，Python done 回显 trace_id（两端一致）
+- [ ] 2.2 trace_id（定死 Java 生成，**permission 事件携带 traceId，前端流开始即取供断线补查**）+ history（Java 组装最近 N 轮含 clarify 轮）随 ask 请求传 Python，Python done 回显 trace_id（两端一致）
 - [ ] 2.3 Python：intent LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块路由 + lockedSections=节级加权两层并存）；失败回退 `_fallback_anchor`，degraded 走 200
 - [ ] 2.4 Python：rewrite 事件透传 + generate 桩替（固定占位答案"（桩替）…"），整轮可通
 - [ ] 2.5 Java 桥：`POST /api/rag/assistant/ask`（`x-internal-token`）SSE 消费并重建为 Java 事件；degraded 走 200 不 503
@@ -25,8 +25,9 @@
 - [ ] 3.2 Python：RRF 融合（RRF_K=60）精排 Top-K（默认 3），精排块字段 blockId/title/summary/filePath/score
 - [ ] 3.3 Python：范围门低置信过滤（索引层 0.75 / 源文档池 0.5）→ `boundary`（reason=low_confidence）固定话术，0 生成 token
 - [ ] 3.4 Java：rerank/boundary 事件中继
-- [ ] 3.5 前端：召回块面板（标题/摘要/file_path，点击查看原文）+ 边界拒答话术展示
-- [ ] 3.6 对接测试：RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002 全绿
+- [ ] 3.4b Java：查看原文代理 `GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python source 端点；file_path 走 query 传参
+- [ ] 3.5 前端：召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术展示
+- [ ] 3.6 对接测试：RAG-SSE-002/003、RAG-BRIDGE-001~003/005、RAG-COST-002 全绿
 
 ## M4 生成 + token 展示
 

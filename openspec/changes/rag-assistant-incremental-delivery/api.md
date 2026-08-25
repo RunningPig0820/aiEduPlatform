@@ -48,7 +48,7 @@ SSE 问答为独立事件流；其余接口返回统一 JSON：
 
 | 事件 | 归属里程碑 | 核心字段 | 说明 |
 |------|-----------|---------|------|
-| `permission` | M1 | `allowed` | 角色门结果，学生放行 true |
+| `permission` | M1 | `allowed` `traceId` | 角色门结果，学生放行 true；traceId 由 Java 入口生成，流一开始前端即可取（断线补查不依赖 done） |
 | `intent` | M2 | `anchor` `category` `switchDetected` `ambiguous` `candidates` | 意图分析（闭集标签 + 模块锚点 + 歧义候选） |
 | `switch` | M2 | `from` `to` | 功能切换（下一轮重路由） |
 | `clarify` | M6 | `message` `candidates` `default` | 澄清追问（歧义才发） |
@@ -105,7 +105,7 @@ SSE 问答为独立事件流；其余接口返回统一 JSON：
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 |------|------|------|----------|------|
 | question | String | 是 | 非空、≤500 字符 | 学生问题 |
-| sessionId | String | 是 | 非空 | 会话 id |
+| sessionId | String | 是 | 非空 | 会话 id（**前端生成 UUID 整场复用**；Java 以 sessionId 为键累计，未知 session 按新会话） |
 | currentProject | String | 否 | - | 页面锚定模块（clarify default 绑定、switch 判定用） |
 | history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传 Python（每轮过手 done 天然有），Python 只读 |
 | traceId | String | 否 | 非空 | **Java 生成**传 Python，Python done 回显（两端 trace 一致） |
@@ -302,6 +302,40 @@ const decoder = new TextDecoder();
 | code | message | 说明 |
 |------|---------|------|
 | 403 | 仅学生可访问此助手 | 非学生/角色缺失 |
+
+---
+
+## 6. 查看原文（Java 代理）
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/rag/assistant/source?path=<urlencoded>` |
+| 需要登录 | 是（仅 STUDENT，非学生固定 403） |
+
+### 请求参数
+
+**Query**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | String | 是 | rerank 块的 `filePath`（urlencoded；**走 query 传参不走 path**，避免特殊字符被容器拒） |
+
+### 响应
+
+- 成功：Java 转发 Python `/api/rag/source/{file_path}` 返回原文（前端打开/下载）。
+- 角色门：非 STUDENT → 固定 403（同 ask）。
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 403 | 仅学生可访问此助手 | 非学生/角色缺失 |
+| 10002 | 原文不存在 | file_path 无对应源文件 |
+
+> **定稿（2026-08-25）**：查看原文走 Java 网关代理，前端**不直连 Python**（Python `/api/rag/source` 保留挂载作 Java 转发目标）。
 
 ---
 

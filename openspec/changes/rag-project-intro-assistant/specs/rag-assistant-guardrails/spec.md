@@ -49,8 +49,13 @@
 
 #### Scenario: 多候选澄清
 
-- **WHEN** 学生问"这个功能的流转是什么样的"，intent LLM 判定 ambiguous 并输出 `candidates:["ai-tutoring","rag-project"]`（或会话历史锚点兜底 ≥2）
+- **WHEN** 学生问"这个功能的流转是什么样的"，intent LLM 判定 ambiguous 并输出 `candidates:["ai-tutoring","rag-system"]`（或会话历史锚点兜底 ≥2）
 - **THEN** 系统发 `clarify` 事件（如"您的问题涉及多个功能，请明确功能名。默认回答当前功能：AI答疑" + candidates + default=AI答疑，default 绑定 current_project），无 recall/generate
+
+#### Scenario: 点选候选重发
+
+- **WHEN** 学生点选候选 chip（如 [RAG项目]），前端重发 **原问题 + current_project=rag-system**（含 clarify 轮 history）
+- **THEN** intent 以 current_project 为权威消歧锚点直接锚定 `anchor=rag-system`，不再 ambiguous；若与会话锚点不同则 `switch` 事件照常触发，随后正常 rewrite/recall/generate
 
 #### Scenario: 澄清一次后仍模糊
 

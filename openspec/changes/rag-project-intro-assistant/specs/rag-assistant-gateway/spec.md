@@ -51,7 +51,7 @@ Java 侧 RAG 项目介绍助手网关：从可信 session 取角色（仅 STUDEN
 #### Scenario: 事件字段齐备
 
 - **WHEN** 各事件产生
-- **THEN** `permission` 含 `{role, allowed}`；`intent` 含 `{anchor, category, switchDetected, ambiguous, candidates, lockedSections}`；`rewrite` 含 `{originalQuestion, rewrittenQuery}`；`rerank` 含 `{blocks:[{blockId, title, summary, filePath}]}`；`boundary` 含 `{message, reason}`；`clarify` 含 `{message, candidates, default}`；`switch` 含 `{fromAnchor, toAnchor}`；`done` 含 `{answer, quotedKeys, tokensUsage, traceId, suggestions}`
+- **THEN** `permission` 含 `{role, allowed, traceId}`（trace_id 由 Java 入口生成，流一开始前端即可取，供断线补查）；`intent` 含 `{anchor, category, switchDetected, ambiguous, candidates, lockedSections}`；`rewrite` 含 `{originalQuestion, rewrittenQuery}`；`rerank` 含 `{blocks:[{blockId, title, summary, filePath}]}`；`boundary` 含 `{message, reason}`；`clarify` 含 `{message, candidates, default}`；`switch` 含 `{fromAnchor, toAnchor}`；`done` 含 `{answer, quotedKeys, tokensUsage, traceId, suggestions}`
 
 #### Scenario: snake_case 内部契约映射
 

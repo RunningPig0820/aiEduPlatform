@@ -41,7 +41,7 @@ M6 SHALL 交付结束后建议：每轮 done 后调 LLM 生成 1~3 条建议（�
 
 ### Requirement: clarify 澄清追问
 
-M6 SHALL 交付歧义澄清：`ambiguous=true` 且 candidates ≥ 2 → `clarify` 事件（固定话术 + candidates + default），0 生成 token、不计答案轮次、写 history；最多一轮，再模糊直接默认当前功能继续；`default` 绑定优先级：前端 `current_project` > 会话最后成功锚定功能。**候选来源**：① intent LLM 输出 candidates（主源）→ ② 会话最近 N 轮锚点去重（兜底）→ ③ 仍 <2 不触发澄清直接默认。
+M6 SHALL 交付歧义澄清：`ambiguous=true` 且 candidates ≥ 2 → `clarify` 事件（固定话术 + candidates + default），0 生成 token、不计答案轮次、写 history；最多一轮，再模糊直接默认当前功能继续；`default` 绑定优先级：前端 `current_project` > 会话最后成功锚定功能。**候选来源**：① intent LLM 输出 candidates（主源）→ ② 会话最近 N 轮锚点去重（兜底）→ ③ 仍 <2 不触发澄清直接默认。**点选交互定稿**：点选候选 chip → 前端重发原问题 + `current_project=点选模块`（含 clarify 轮 history），intent 以 current_project 为权威消歧锚点直接锚定，不再 ambiguous；点选锚点与会话锚点不同则 switch 事件照常。
 
 #### Scenario: 澄清追问触发
 

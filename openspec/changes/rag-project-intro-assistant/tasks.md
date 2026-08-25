@@ -3,6 +3,8 @@
 > **里程碑原则**：按 M1→M7 逐个切片完成，每个里程碑 = 纵向切片 + **前后端 + 模型端三端对接测试**（完成即联调，问题早暴露，不等到最后一次对接才排查）。M8 为全链路回归收尾。
 >
 > 契约 DTO 按里程碑**渐进定义、字段随里程碑扩展**（SSE 事件契约在 M2 冻结，后续只追加字段不重排）；`@JsonProperty` snake→camel、`FAIL_ON_UNKNOWN_PROPERTIES=false`、degraded 走 200 不 503，沿用既有纪律。
+>
+> **模块 id 闭集（2026-08-25 三端定稿）**：`ai-tutoring` / `knowledge-graph` / `question-analysis` / `rag-system`。弃用 `rag-project`/`question-type`。前端 → Java 网关 camelCase（`currentProject`），Java 桥 → Python snake_case（`current_project`）。查看原文走 Java 代理 `GET /api/rag/assistant/source?path=`。
 
 ## 设计功能点 → 里程碑 映射（防漏核对）
 
@@ -42,7 +44,7 @@
 - [ ] 2.1 SSE 事件契约冻结：时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`；定义全部 `Sse*DTO`（SsePermissionDTO/SseIntentDTO/SseRewriteDTO/SseRerankDTO/SseRejectDTO/SseBoundaryDTO/SseClarifyDTO/SseSwitchDTO/SseTokenDTO/SseDoneDTO，camelCase）
 - [ ] 2.2 契约 DTO 扩展：`RagIntentMeta`（anchor/category/switchDetected/ambiguous/candidates/lockedSections/degraded；anchor=模块路由，lockedSections=节级加权，两层并存）
 - [ ] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥组装 **history（最近 N 轮，含 clarify 轮）+ traceId** 传给 Python；SSE 中继从 Python 的 `intent` 事件开始（**permission 仅 Java 发，桥不消费 Python 的 permission**）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
-- [ ] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
+- [ ] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ **permission 事件携带 traceId（前端流开始即取，供断线补查）** → 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
 - [ ] 2.5 SSE 中继（阶段 1）：permission/intent/rewrite/done 按序透传，meta/done 由 Java 重建不透传原始
 - [ ] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块级路由，locked_sections=节级加权，两层并存），失败回退 `_fallback_anchor`（保留），degraded 标记
 - [ ] 2.7 Python rewrite：生成改写后 query，透传 `rewrite` 事件
@@ -60,7 +62,8 @@
 - [ ] 3.5 Python 范围门低置信过滤：综合分低于 0.75/0.5 → `boundary`（reason=low_confidence）固定话术，0 生成 token（唯一拒答路径）；模块可用性数据驱动（语料即边界，无语料模块正常召回命中空→过滤）
 - [ ] 3.6 SSE 中继（阶段 2）：rerank/boundary 事件按序透传
 - [ ] 3.7 桥单测扩展：边界流重建（rerank→boundary）、Python 异常冒泡（500 → 网关降级）
-- [ ] 3.8 三端对接测试：前端召回块面板（标题/摘要/file_path，点击查看原文）+ 边界拒答话术；后端+模型端联调 RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002
+- [ ] 3.7b 查看原文代理：`GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}`；file_path 走 query 传参（不走 path，避免特殊字符被容器拒）；原文不存在 → 10002
+- [ ] 3.8 三端对接测试：前端召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术；后端+模型端联调 RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002
 
 ## M4 生成+token展示（doubao 流式、8s 超时、断连取消、usage、done 重建）
 
@@ -89,6 +92,7 @@
 - [ ] 6.1 Python 开始引导：`GET /api/rag/assistant/guide` 返回 RAG 定向静态引导池（定位/架构/数据流/评测/坑），0 token、非 SSE、不占冻结时序
 - [ ] 6.2 Python 结束建议：done 后 LLM 生成 1~3 条（向 ①项目介绍②操作③数据关联④难点），**必含 ≥1 条 RAG 方向**（RAG 始终带上，非并列模块）；失败静态池兜底（对齐 Python 6 引导方向）
 - [ ] 6.3 Python clarify 澄清轮：`ambiguous=true` 且候选 ≥2 → `clarify` 事件（固定话术+candidates+default），0 生成 token、不计答案轮次、最多一轮；default 绑定 current_project > 会话锚点；再模糊直接默认；**候选来源** = ① intent LLM 输出 candidates（主源）② 会话最近 N 轮锚点去重（兜底）③ 仍 <2 不澄清
+  - **点选交互定稿（2026-08-25）**：clarify 后前端点选候选 → **重发原问 + current_project=点选模块**（非裸功能名）；intent 以 current_project 为**权威消歧锚点**直接锚定、**不因问题含糊再拉 ambiguous**；点选模块与会话锚点不同 → `switch` 事件照常触发
 - [ ] 6.4 done 补 suggestions 字段 + guide 接口中继（Java）
 - [ ] 6.5 三端对接测试：前端开始引导 chips + 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI；后端+模型端联调 RAG-SSE-004/005、SUGG-001~003
 

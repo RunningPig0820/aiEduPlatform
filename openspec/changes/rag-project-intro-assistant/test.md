@@ -63,6 +63,7 @@
 | RAG-SSE-005 | switch 时序 | 桥 mock switch 流 | 切换功能问题 | switch 事件（from/to）后按新锚点 continue rewrite→recall→token→done |
 | RAG-SSE-006 | meta/done 不透传原始 | 桥 mock 含 Python meta/done 事件 | 正常问答 | Java 重建为自定义事件，Python 原始 meta/done 不暴露给前端 |
 | RAG-SSE-007 | 上下文窗口截断 | 会话第 4 轮发起（历史 >3 轮） | 正常问答 | intent/generate 上下文仅含最近 3 轮，第 1 轮截断；锚点由 session 独立携带不受影响 |
+| RAG-SSE-008 | clarify 点选后重发 | 上一轮 clarify 发出，学生点选 [RAG项目] | 重发原问题 + currentProject=rag-system（含 clarify 轮 history） | intent 以 currentProject 为权威锚点直接锚定 anchor=rag-system，不再 ambiguous；锚点与会话不同则 switch 后正常 rewrite/recall/generate |
 
 ### 3.3 事件契约字段（RAG-CONTRACT）
 
@@ -71,6 +72,7 @@
 | RAG-CONTRACT-001 | done 完整字段 | 正常流完成 | 桥 mock done | done 含 answer/quotedKeys/tokensUsage/traceId/suggestions |
 | RAG-CONTRACT-002 | snake↔camel 映射 | Python 返回 snake_case | 桥 mock `switch_detected`/`quoted_keys` | Java DTO 映射为 camelCase，SSE 输出 `switchDetected`/`quotedKeys` |
 | RAG-CONTRACT-003 | 未知字段容忍 | Python 返回未知字段 | 桥 mock 额外字段 | 不报错（FAIL_ON_UNKNOWN_PROPERTIES=false），不影响解析 |
+| RAG-CONTRACT-004 | permission 携带 traceId | 学生放行 | 正常问答 | permission 首事件含 traceId（=Java 入口生成值），前端流开始即可取，断线补查不依赖 done |
 
 ### 3.4 is_quoted（纯函数，RAG-QUOTE）
 
@@ -113,6 +115,7 @@
 | RAG-BRIDGE-002 | Python 异常冒泡 | MockWebServer 返回 500 | 问答请求 | 抛 TutoringAgentException（或等价异常），网关降级处理 |
 | RAG-BRIDGE-003 | degraded 200 | Python 返回 200+degraded | 问答请求 | 按普通结果处理，不视为错误（不 503） |
 | RAG-BRIDGE-004 | history/trace 组装透传 | 桥带最近 N 轮 + trace_id | 正常请求 | 请求含 history（最近 3 轮含 clarify 轮）+ trace_id（Java 生成）；done 回显 trace_id 与请求一致 |
+| RAG-BRIDGE-005 | 查看原文代理 | rerank 块 filePath 存在 | GET source?path=<encoded> | Java 转发 Python source 端点返回原文；file_path 走 query 传参；原文不存在 → 10002 |
 
 ### 3.8 断连取消（RAG-ABORT）
 
@@ -147,15 +150,15 @@
 | 模块 | 用例数量 |
 |-----|---------|
 | 角色硬门 RAG-GATE | 4 |
-| SSE 事件时序 RAG-SSE | 7 |
-| 事件契约字段 RAG-CONTRACT | 3 |
+| SSE 事件时序 RAG-SSE | 8 |
+| 事件契约字段 RAG-CONTRACT | 4 |
 | is_quoted 纯函数 RAG-QUOTE | 5 |
 | tokens_usage/trace RAG-COST | 7 |
 | 关闭对话 RAG-CLOSE | 6 |
-| 桥实现 RAG-BRIDGE | 4 |
+| 桥实现 RAG-BRIDGE | 5 |
 | 断连取消 RAG-ABORT | 1 |
 | 问题提示 SUGG（开始/结束引导，RAG 常驻） | 3 |
-| **总计** | **40** |
+| **总计** | **43** |
 
 ---
 
@@ -165,12 +168,12 @@
 
 ```
 100-103  : 角色硬门测试（RAG-GATE）
-200-205  : SSE 时序测试（RAG-SSE）
-300-302  : 契约字段测试（RAG-CONTRACT）
+200-207  : SSE 时序测试（RAG-SSE）
+300-303  : 契约字段测试（RAG-CONTRACT）
 400-403  : is_quoted 纯函数测试（RAG-QUOTE）
 500-506  : usage/trace 测试（RAG-COST）
 550-555  : 关闭对话测试（RAG-CLOSE）
-600-603  : 桥实现测试（RAG-BRIDGE）
+600-604  : 桥实现测试（RAG-BRIDGE）
 700      : 断连取消测试（RAG-ABORT）
 800-802  : 问题提示测试（SUGG）
 ```

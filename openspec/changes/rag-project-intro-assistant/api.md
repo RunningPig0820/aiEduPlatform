@@ -57,31 +57,33 @@
 
 ### 请求参数
 
-**RequestBody**
+**RequestBody**（前端 → Java 网关，**camelCase**）
 
 ```json
 {
-  "current_project": "ai-tutoring",
+  "currentProject": "ai-tutoring",
   "question": "这个项目的整体架构是什么？",
-  "session_id": "sess-001",
+  "sessionId": "sess-001",
   "history": [
     { "question": "RAG 是什么？", "answer": "……", "anchor": "ai-tutoring" }
   ],
-  "trace_id": "trc-abc123",
+  "traceId": "trc-abc123",
   "stream": true,
-  "top_k": 3
+  "topK": 3
 }
 ```
 
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 |------|------|------|----------|------|
-| current_project | String | 否 | 覆盖模块 id（ai-tutoring/rag-system 等） | 页面锚定；缺省=全局模式。**仅作提示，角色以 session 为准** |
+| currentProject | String | 否 | 模块 id 闭集（ai-tutoring/knowledge-graph/question-analysis/rag-system） | 页面锚定；缺省=rag-system。**仅作提示，角色以 session 为准** |
 | question | String | 是 | 非空，长度 ≤ 500 | 学生问题 |
-| session_id | String | 否 | 会话 id | 续接会话（锚点 + 轮次计数 + switch/clarify 判定） |
-| history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传入（每轮过手 done 天然有）；供 intent/rewrite/clarify 兜底消费，Python 只读 |
-| trace_id | String | 否 | 非空 | **Java 生成**传 Python；Python 贯穿日志并在 done 回显（两端 trace 一致） |
+| sessionId | String | 否 | 会话 id | **前端生成 UUID 整场复用**（首问即带）；Java 以 sessionId 为键累计，未知 session 按新会话（累计从 0） |
+| history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传入（每轮过手 done 天然有）；供 intent/rewrite/clarify 兜底消费，Python 只读，前端不传 |
+| traceId | String | 否 | 非空 | **Java 生成**传 Python；Python 贯穿日志并在 done 回显（两端 trace 一致）；permission 事件已携带，前端流开始即可取 |
 | stream | Boolean | 否 | 默认 false | true 时走 SSE 流式 |
-| top_k | Integer | 否 | 1~5，默认 3 | RRF 精排块数（建议保持默认 3） |
+| topK | Integer | 否 | 1~5，默认 3 | RRF 精排块数（建议保持默认 3） |
+
+> **snake↔camel 分工**：前端 → Java 网关为 **camelCase**；Java 桥 → Python 为 **snake_case**（`current_project`/`session_id`/`trace_id`/`top_k`），桥内转换。
 
 > **permission 归属**：`permission` 事件仅由 Java 网关产出（角色门在 Java）；Python 侧 API 不产 permission（从 `intent` 开始）。Java 桥中继时从 Python 的 `intent` 事件开始转发，不消费/不透传 Python 侧任何 permission。
 
@@ -91,7 +93,7 @@
 
 | 事件 | data 内容 | 说明 |
 |------|----------|------|
-| `permission` | `{role, allowed}` | 角色门结果（正常流恒为 allowed=true；非学生不会到 SSE） |
+| `permission` | `{role, allowed, traceId}` | 角色门结果（正常流恒为 allowed=true；非学生不会到 SSE）；**traceId 由 Java 入口生成，流一开始前端即可取，供断线补查（不依赖 done）** |
 | `intent` | `{anchor, category, switchDetected, ambiguous, candidates, lockedSections, degraded}` | LLM 意图分类结果（anchor=模块路由 + lockedSections=节级加权两层并存；candidates=歧义候选模块，供 clarify） |
 | `clarify` | `{message, candidates, default}` | 澄清轮，随后 `done` |
 | `switch` | `{fromAnchor, toAnchor}` | 上下文切换，随后按新锚点 continue |
@@ -411,6 +413,40 @@ const result = await response.json();
 
 ---
 
+## 7. 查看原文（Java 代理）
+
+### 基本信息
+
+| 项目 | 值 |
+|------|-----|
+| HTTP 方法 | `GET` |
+| 接口路径 | `/api/rag/assistant/source?path=<urlencoded>` |
+| 需要登录 | 是（仅 STUDENT，非学生固定 403） |
+
+### 请求参数
+
+**Query**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | String | 是 | rerank 块的 `filePath`（urlencoded；**走 query 传参不走 path**，避免 file_path 特殊字符被容器拒） |
+
+### 响应
+
+- **成功**：透传 Python `/api/rag/source/{file_path}` 的原文内容（前端打开/下载）。
+- **角色门**：非 STUDENT → 固定 403（同 ask）。
+
+### 常见错误
+
+| code | message | 说明 |
+|------|---------|------|
+| 403 | 仅学生可访问此助手 | 非学生/角色缺失 |
+| 10002 | 原文不存在 | file_path 无对应源文件 |
+
+> **定稿（2026-08-25）**：查看原文走 Java 网关代理，前端**不直连 Python**（Python `/api/rag/source` 保留挂载作 Java 转发目标）。
+
+---
+
 ## 错误码说明
 
 ### 通用错误码 (1xxxx)
@@ -447,6 +483,7 @@ const result = await response.json();
 - `clarify` / `switch` / `boundary` 是**正常分支**，不是错误——按对应文案渲染，不要弹错误。
 - `boundary`（low_confidence）出现时，展示"未找到关联文档，我尚未掌握"，并附当前 `rerank` 块（若有）。
 - `clarify` 出现时，展示 candidates 让用户点选或输入明确功能名；`default` 提示为当前功能。
+- **clarify 点选交互（定稿）**：用户点选候选 chip → 前端**重发原问题 + `currentProject=点选模块`**（含 clarify 轮 history）作为下一条 ask——**不要**把候选功能名当 question 裸发。后端 intent 以 currentProject 为权威消歧锚点直接锚定，不再 ambiguous；点选模块与会话锚点不同会触发 `switch` 事件，前端提示"已切换至 X"即可。
 
 ### 3. 引用面板（先灰后亮）
 

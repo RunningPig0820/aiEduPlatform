@@ -13,7 +13,7 @@
 - **纯函数单测**：is_quoted LCS 匹配、契约 snake↔camel 映射（Java 侧）。
 - **数据库回滚**：`@Transactional`，测试完成后自动回滚。
 - **端到端**：真实 Java↔Python 联调单独跑（tasks 8.3），不纳入常规单元测试。
-- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（39 行：36 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
+- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（41 行：38 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
 
 ### 1.3 测试环境配置
 
@@ -47,8 +47,8 @@
 | 里程碑 | 门禁用例（全绿才过） | 前端可见物验收 |
 |--------|---------------------|---------------|
 | M1 权限判断 | RAG-GATE-001~004 | 403 页 / 学生放行 |
-| M2 意图+改写+骨架 | RAG-SSE-001（桩）、RAG-CONTRACT-002/003、RAG-COST-003 | 阶段展示区 + 桩替答案 |
-| M3 召回+remark+边界 | RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002 | 召回块面板 + 边界话术 |
+| M2 意图+改写+骨架 | RAG-SSE-001（桩）、RAG-CONTRACT-002~004、RAG-COST-003 | 阶段展示区 + 桩替答案 |
+| M3 召回+remark+边界 | RAG-SSE-002/003、RAG-BRIDGE-001~005、RAG-COST-002 | 召回块面板（含查看原文代理）+ 边界话术 |
 | M4 生成+token | RAG-SSE-001（全量）、RAG-COST-001/007、RAG-ABORT-001 | 流式回答 + 成本面板 |
 | M5 自我检查 | RAG-QUOTE-001~005、RAG-CONTRACT-001 | 引用高亮 + 评估报告 |
 | M6 问题提示 | RAG-SSE-004/005、SUGG-001~003 | 开始/结束引导 chips + 澄清 UI |
@@ -72,6 +72,7 @@
 | RAG-SSE-001 | 正常时序（M2 桩替） | 桥 mock 桩替流 | QUESTION_OK | 顺序 permission→intent→rewrite→done，无重排丢失 |
 | RAG-CONTRACT-002 | snake↔camel 映射 | Python 返回 snake_case | 桥 mock `switch_detected`/`quoted_keys` | Java DTO 映射 camelCase，SSE 输出 `switchDetected`/`quotedKeys` |
 | RAG-CONTRACT-003 | 未知字段容忍 | Python 返回未知字段 | 桥 mock 额外字段 | 不报错（FAIL_ON_UNKNOWN_PROPERTIES=false），不影响解析 |
+| RAG-CONTRACT-004 | permission 携带 traceId | 学生放行 | 正常问答 | permission 首事件含 traceId（=Java 入口生成值），前端流开始即可取，断线补查不依赖 done |
 | RAG-COST-003 | trace 贯穿 | 正常流 | 无 | done.traceId = 请求入口生成值，非空 |
 
 > M2 门禁后 SSE 契约冻结：后续里程碑只补字段不重排（回归断言见 8.2）。
@@ -86,6 +87,7 @@
 | RAG-BRIDGE-002 | Python 异常冒泡 | MockWebServer 返回 500 | 问答请求 | 抛 TutoringAgentException（或等价），网关降级处理 |
 | RAG-BRIDGE-003 | degraded 200 | Python 返回 200+degraded | 问答请求 | 按普通结果处理，不 503 |
 | RAG-BRIDGE-004 | history/trace 组装透传 | 桥带最近 N 轮 + trace_id | 正常请求 | 请求含 history（最近 3 轮含 clarify 轮）+ trace_id（Java 生成）；done 回显 trace_id 与请求一致 |
+| RAG-BRIDGE-005 | 查看原文代理 | rerank 块 filePath 存在 | GET source?path=<encoded> | Java 转发 Python source 端点返回原文；file_path 走 query 传参；原文不存在 → 10002 |
 | RAG-COST-002 | 低置信过滤零生成 usage | 范围门 | QUESTION_LOWCONF | 无 generate，tokensUsage 为 0 或仅含实际消耗（boundary 路径 recall 不计入/单列） |
 
 ## 3D. M4 生成 + token 展示（RAG-SSE 全量 / RAG-COST / RAG-ABORT）
@@ -114,6 +116,7 @@
 |---------|---------|---------|------|---------|
 | RAG-SSE-004 | clarify 时序 | 桥 mock clarify 流 | QUESTION_AMBIGUOUS | intent 后 clarify(message/candidates/default)，无 recall/generate，随后 done |
 | RAG-SSE-005 | switch 时序 | 桥 mock switch 流 | 切换功能问题 | switch(from/to) 后按新锚点 continue rewrite→recall→token→done |
+| RAG-SSE-008 | clarify 点选后重发 | 上一轮 clarify 发出，学生点选 [RAG项目] | 重发原问题 + currentProject=rag-system（含 clarify 轮 history） | intent 以 currentProject 为权威锚点直接锚定 anchor=rag-system，不再 ambiguous；锚点与会话不同则 switch 后正常 rewrite/recall/generate |
 | SUGG-001 | 开始引导定向 RAG | 学生进入助手页 | GET /guide | 返回 RAG 定向静态引导池（定位/架构/数据流/评测/坑），0 token、非 SSE、不占冻结时序 |
 | SUGG-002 | 结束建议必含 RAG | 桥 mock done 带 suggestions | 学生问 AI答疑 完成一轮 | done.suggestions 1~3 条中至少 1 条指向 RAG 方向，前端渲染引导 chips |
 | SUGG-003 | suggestions 静态池兜底 | suggestions LLM 失败 | 正常问答 | 返回静态池预写建议（含 RAG 方向，对齐 Python 6 引导方向），链路不中断 |
@@ -151,13 +154,13 @@
 | 里程碑 | 用例数量 |
 |--------|---------|
 | M1 角色硬门 RAG-GATE | 4 |
-| M2 意图+改写 RAG-SSE(桩)/CONTRACT/COST | 4 |
-| M3 召回+边界 RAG-SSE/BRIDGE/COST | 7 |
+| M2 意图+改写 RAG-SSE(桩)/CONTRACT/COST | 5 |
+| M3 召回+边界 RAG-SSE/BRIDGE/COST | 8 |
 | M4 生成+token RAG-SSE/COST/ABORT | 4 |
 | M5 自我检查 RAG-QUOTE/CONTRACT | 6 |
-| M6 问题提示 RAG-SSE/SUGG | 5 |
+| M6 问题提示 RAG-SSE/SUGG | 6 |
 | M7 会话收尾 RAG-CLOSE/COST | 9 |
-| **总计** | **39** |
+| **总计** | **41** |
 
 ---
 
@@ -167,11 +170,11 @@
 
 ```
 100-103  : M1 角色硬门（RAG-GATE）
-200-203  : M2 意图+改写（RAG-SSE 桩 / CONTRACT / COST）
-300-306  : M3 召回+边界（RAG-SSE / BRIDGE / COST）
+200-204  : M2 意图+改写（RAG-SSE 桩 / CONTRACT / COST）
+300-307  : M3 召回+边界（RAG-SSE / BRIDGE / COST）
 400-403  : M4 生成+token（RAG-SSE 全量 / COST / ABORT）
 500-505  : M5 自我检查（RAG-QUOTE / CONTRACT）
-600-604  : M6 问题提示（RAG-SSE / SUGG）
+600-605  : M6 问题提示（RAG-SSE / SUGG）
 700-708  : M7 会话收尾（RAG-CLOSE / COST）
 800      : 契约冻结回归（SSE 时序未被重排/删字段）
 ```

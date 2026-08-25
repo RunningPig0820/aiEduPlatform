@@ -39,6 +39,20 @@ M3 SHALL 交付 remark 打分：RRF 融合（RRF_K=60）精排，默认 Top-K=3�
 - **WHEN** 召回原始结果 >Top-K
 - **THEN** 前端仅收到精排后 Top-K 块，原始召回列表不暴露
 
+### Requirement: 查看原文 Java 代理
+
+M3 SHALL 交付查看原文代理：`GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}` 返回原文；file_path 走 **query 传参**（不走 path，避免特殊字符被容器拒）；原文不存在 → 10002。前端**不直连 Python**（Python 保留挂载作 Java 转发目标）。
+
+#### Scenario: 查看原文
+
+- **WHEN** 前端点击 rerank 块 filePath
+- **THEN** 调 `GET /api/rag/assistant/source?path=<encoded>`，Java 转发 Python 返回原文
+
+#### Scenario: 原文不存在
+
+- **WHEN** file_path 无对应源文件
+- **THEN** 返回 10002 原文不存在
+
 ### Requirement: 范围门低置信度过滤（边界拒答）
 
 M3 SHALL 交付边界拒答：RRF 精排综合分低于阈值（索引层 0.75 / 源文档池 0.5）→ `boundary` 事件（reason=low_confidence），固定话术"未找到关联文档，我尚未掌握"，0 生成 token。这是唯一拒答路径。

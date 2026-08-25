@@ -8,7 +8,7 @@ M2 交付"白盒骨架 + 意图分析 + Query 改写"切片——SSE 事件通�
 
 ### Requirement: SSE 白盒事件通道与时序冻结
 
-M2 SHALL 搭建 SSE 事件通道并冻结时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`。前端可订阅各阶段事件并展示中间状态；字段命名 camelCase，沿用 `FAIL_ON_UNKNOWN_PROPERTIES=false` 容忍未知字段。generate 未实现期间以固定桩替占位答案回填 `done`，保证整轮可通。**归属（定死）**：`permission` 仅 Java 网关产出（角色门在 Java），Python API 从 `intent` 开始，桥从 intent 转发不消费 Python 侧 permission；`history`（最近 N 轮含 clarify 轮）+ `trace_id`（Java 生成）随 ask 请求传 Python，Python done 回显。
+M2 SHALL 搭建 SSE 事件通道并冻结时序 `permission → intent → (clarify|switch) → rewrite → rerank → (boundary) → token* → done`。前端可订阅各阶段事件并展示中间状态；字段命名 camelCase，沿用 `FAIL_ON_UNKNOWN_PROPERTIES=false` 容忍未知字段。generate 未实现期间以固定桩替占位答案回填 `done`，保证整轮可通。**归属（定死）**：`permission` 仅 Java 网关产出（角色门在 Java），**携带 `traceId`（Java 入口生成，前端流开始即可取，供断线补查不依赖 done）**；Python API 从 `intent` 开始，桥从 intent 转发不消费 Python 侧 permission；`history`（最近 N 轮含 clarify 轮）+ `trace_id`（Java 生成）随 ask 请求传 Python，Python done 回显。
 
 #### Scenario: 阶段时序展示
 
@@ -37,7 +37,7 @@ M2 SHALL 交付 intent 语义分析：LLM 结构化输出 `{anchor, category, sw
 #### Scenario: 歧义输出候选
 
 - **WHEN** 学生问题"这个功能的流转是什么样的"（跨功能指代不明）
-- **THEN** intent 输出 ambiguous=true 及 candidates（如 ["ai-tutoring","rag-project"]），供 M6 clarify 判定
+- **THEN** intent 输出 ambiguous=true 及 candidates（如 ["ai-tutoring","rag-system"]，闭集见设计 D-A），供 M6 clarify 判定
 
 #### Scenario: LLM 失败兜底
 
