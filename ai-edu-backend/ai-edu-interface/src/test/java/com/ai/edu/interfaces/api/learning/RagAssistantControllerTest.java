@@ -19,8 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -131,6 +133,21 @@ class RagAssistantControllerTest {
         assertThrows(ResponseStatusException.class, () -> controller.askSync(
                 RagAskCommand.builder().question("这个项目的整体架构是什么？").sessionId("sess-001").build(),
                 loginSession(TEACHER_ID, "TEACHER")));
+    }
+
+    // ==================== source 查看原文 ====================
+
+    @Test
+    @DisplayName("source：学生 → 代理返回原文；非学生 → 403 且不调 appService")
+    void source_studentOk_teacher403() {
+        when(appService.source(any())).thenReturn(reactor.core.publisher.Mono.just("# 原文"));
+        clearInvocations(appService); // 清掉桩调用计数，verify 只看真实调用
+        assertTrue(controller.source("4.完善文档/02-…md", loginSession(STUDENT_ID, "STUDENT")).block().contains("原文"));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.source("4.完善文档/02-…md", loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).source(any()); // 仅学生路径 1 次，教师路径 0 次
     }
 
     // ==================== helpers ====================

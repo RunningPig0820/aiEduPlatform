@@ -1,18 +1,28 @@
 package com.ai.edu.infrastructure.ai.rag;
 
+import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 /**
  * RAG 助手 Python 引擎桥（WebClient，复用 llm-gateway internalToken 模式）。
@@ -27,6 +37,7 @@ import java.time.Duration;
 public class RagAssistantBridgeImpl implements RagAssistantPort {
 
     private static final String ASK_PATH = "/api/rag/assistant/ask";
+    private static final String SOURCE_PATH = "/api/rag/source";
     private static final Duration ASK_TIMEOUT = Duration.ofSeconds(60);
 
     @Resource(name = "ragWebClient")
@@ -51,5 +62,26 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
                     log.error("[rag-assistant] 桥调 Python 失败: {}", e.getMessage(), e);
                     return Flux.error(new TutoringAgentException("RAG 助手服务暂不可用", e));
                 });
+    }
+
+    @Override
+    public Mono<String> source(String filePath) {
+        // Python StaticFiles 按目录分隔服务：逐段 urlencode 保留 "/" 目录结构（中文/空格安全）
+        String encodedPath = Arrays.stream(filePath.split("/"))
+                .map(seg -> URLEncoder.encode(seg, StandardCharsets.UTF_8))
+                .collect(Collectors.joining("/"));
+        log.info("[rag-assistant] 桥调 Python source, filePath={}", filePath);
+        return ragWebClient.get()
+                .uri(URI.create(SOURCE_PATH + "/" + encodedPath))
+                .retrieve()
+                // 原文不存在 → EntityNotFoundException（10002，HTTP 404）
+                .onStatus(status -> status.value() == 404,
+                        resp -> Mono.error(new EntityNotFoundException("原文不存在")))
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientRequestException.class,
+                        e -> new TutoringAgentException("RAG 原文服务暂不可用", e))
+                .onErrorMap(WebClientResponseException.class,
+                        e -> new TutoringAgentException("RAG 原文服务暂不可用 (status="
+                                + e.getStatusCode().value() + ")", e));
     }
 }

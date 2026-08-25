@@ -12,12 +12,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
@@ -53,6 +56,14 @@ public class RagAssistantController {
     public ApiResponse<Map<String, Object>> askSync(@Valid @RequestBody RagAskCommand command, HttpSession session) {
         requireStudent(session);
         return ApiResponse.success(ragAssistantAppService.askStages(command));
+    }
+
+    /** 查看原文（Java 代理）：转发 Python 源文件静态服务，返回原文内容。非学生 → 403。 */
+    @Operation(summary = "查看原文", description = "Java 网关代理 Python 源文件，前端不直连 Python；STUDENT 角色门")
+    @GetMapping("/source")
+    public Mono<String> source(@RequestParam("path") String path, HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.source(path);
     }
 
     private void requireStudent(HttpSession session) {

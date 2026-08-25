@@ -1,5 +1,6 @@
 package com.ai.edu.infrastructure.ai.rag;
 
+import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.common.exception.TutoringAgentException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,14 +8,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.net.URI;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -142,5 +153,69 @@ class RagAssistantBridgeImplTest {
 
         assertThrows(TutoringAgentException.class,
                 () -> client.ask(askRequest()).blockLast());
+    }
+
+    // ==================== source 查看原文 ====================
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private WebClient buildGetClient(WebClient.ResponseSpec responseSpec) {
+        WebClient webClient = mock(WebClient.class);
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri(any(URI.class))).thenReturn(uriSpec);
+        when(uriSpec.retrieve()).thenReturn(responseSpec);
+        return webClient;
+    }
+
+    @Test
+    @DisplayName("source: 原文存在 → 返回文件内容")
+    void source_returnsContent() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("# 文档内容\n正文"));
+
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+
+        StepVerifier.create(client.source("4.完善文档/02-一次完整答疑怎么走.md"))
+                .expectNext("# 文档内容\n正文")
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("source: 原文不存在 → 注册 404 谓词，错误函数产 EntityNotFoundException（10002）")
+    void source_notFoundWiring() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        AtomicReference<Predicate<HttpStatusCode>> predicateRef = new AtomicReference<>();
+        AtomicReference<Function<ClientResponse, Mono<? extends Throwable>>> errRef = new AtomicReference<>();
+        when(responseSpec.onStatus(any(), any())).thenAnswer(inv -> {
+            predicateRef.set(inv.getArgument(0));
+            errRef.set(inv.getArgument(1));
+            return responseSpec;
+        });
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("x"));
+
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+        client.source("不存在.md").block();
+
+        assertTrue(predicateRef.get().test(HttpStatus.NOT_FOUND), "404 应命中谓词");
+        assertThrows(EntityNotFoundException.class,
+                () -> errRef.get().apply(mock(ClientResponse.class)).block());
+    }
+
+    @Test
+    @DisplayName("source: 传输异常 → TutoringAgentException")
+    void source_transportError() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
+                        org.springframework.http.HttpMethod.GET, URI.create("http://x"), HttpHeaders.EMPTY)));
+
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildGetClient(responseSpec));
+
+        assertThrows(TutoringAgentException.class, () -> client.source("x.md").block());
     }
 }

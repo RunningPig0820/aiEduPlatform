@@ -3,6 +3,7 @@ package com.ai.edu.domain.learning.service;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * RAG 项目介绍助手端口（Java → Python 白盒链路引擎的调用契约）。
@@ -20,4 +21,12 @@ public interface RagAssistantPort {
      * @param request ask 请求（history/traceId 由 Java 组装传入）
      */
     Flux<ServerSentEvent<String>> ask(RagAskRequest request);
+
+    /**
+     * 查看原文（非流式）：转发 Python 源文件静态服务，返回文件内容（markdown/text）。
+     * 文件不存在 → EntityNotFoundException（10002，HTTP 404）。
+     *
+     * @param filePath rerank 块的 filePath（如 "4.完善文档/02-…md"，含目录分隔）
+     */
+    Mono<String> source(String filePath);
 }

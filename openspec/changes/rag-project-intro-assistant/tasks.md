@@ -55,15 +55,15 @@
 
 ## M3 召回+remark+边界（双路召回、RRF top-K、范围门、硬路由、数据驱动）
 
-- [ ] 3.1 契约 DTO 扩展：`RagBlock`（blockId/title/summary/filePath/score）
-- [ ] 3.2 Python 双路召回：向量（COS）+ BM25（本地 jsonl），单路各 2s 硬超时 → 降级纯另一路（degraded 标记）；**按 anchor 选语料池**（多模块目录，orchestrate 入参加 corpus 参数，节级锚定加权逻辑保留不改）
-- [ ] 3.3 Python RRF 精排：RRF_K=60 融合 Top-K（默认 3，可配），仅回传精排块，不吐全量召回
-- [ ] 3.4 Python 模块全放行 + 硬路由：四模块（AI答疑/知识图谱/题型分析/RAG）均可路由无禁区；硬路由（架构/代码/部署/评测/接口 → RAG 项目）
-- [ ] 3.5 Python 范围门低置信过滤：综合分低于 0.75/0.5 → `boundary`（reason=low_confidence）固定话术，0 生成 token（唯一拒答路径）；模块可用性数据驱动（语料即边界，无语料模块正常召回命中空→过滤）
-- [ ] 3.6 SSE 中继（阶段 2）：rerank/boundary 事件按序透传
-- [ ] 3.7 桥单测扩展：边界流重建（rerank→boundary）、Python 异常冒泡（500 → 网关降级）
-- [ ] 3.7b 查看原文代理：`GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}`；file_path 走 query 传参（不走 path，避免特殊字符被容器拒）；原文不存在 → 10002
-- [ ] 3.8 三端对接测试：前端召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术；后端+模型端联调 RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002
+- [x] 3.1 契约 DTO 扩展：`RagBlock`（blockId/title/summary/filePath/score）—— **由 SseRerankBlock（2.1）覆盖**，重建直接反序列化进前端 DTO，无需单独 Python 契约 DTO
+- [x] 3.2 Python 双路召回：向量（COS）+ BM25（本地 jsonl），单路各 2s 硬超时 → 降级纯另一路（degraded 标记）；**按 anchor 选语料池**（多模块目录，orchestrate 入参加 corpus 参数，节级锚定加权逻辑保留不改）—— **Model A3 [x] + Java e2e 验证**
+- [x] 3.3 Python RRF 精排：RRF_K=60 融合 Top-K（默认 3，可配），仅回传精排块，不吐全量召回 —— **Model A4 [x] + Java e2e 验证**（真实 3 块带 score/file_path）
+- [x] 3.4 Python 模块全放行 + 硬路由：四模块（AI答疑/知识图谱/题型分析/RAG）均可路由无禁区；硬路由（架构/代码/部署/评测/接口 → RAG 项目）—— **Model A4 [x] + Java e2e 验证**（架构问题硬路由 rag-system→boundary）
+- [x] 3.5 Python 范围门低置信过滤：综合分低于 0.75/0.5 → `boundary`（reason=low_confidence）固定话术，0 生成 token（唯一拒答路径）；模块可用性数据驱动（语料即边界，无语料模块正常召回命中空→过滤）—— **Model A9 [x] + Java e2e 验证**
+- [x] 3.6 SSE 中继（阶段 2）：rerank/boundary 事件按序透传 —— **2.5 已实现**（rebuildEvent 处理 rerank/boundary），应用服务测试覆盖
+- [x] 3.7 桥单测扩展：边界流重建（rerank→boundary）、Python 异常冒泡（500 → 网关降级）—— RagAssistantAppServiceTest 加 rerank/boundary 重建用例；RagAssistantBridgeImplTest 已有异常冒泡
+- [x] 3.7b 查看原文代理：`GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}`；file_path 走 query 传参（不走 path，避免特殊字符被容器拒）；原文不存在 → 10002 —— **已实现**（port.source + 桥逐段编码转发 + 404→EntityNotFoundException；Python source 端点真实验证）
+- [ ] 3.8 三端对接测试：前端召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术；后端+模型端联调 RAG-SSE-002/003、RAG-BRIDGE-001~003、RAG-COST-002 —— **后端部分已测**（RAG-SSE-002/003 边界时序、RAG-BRIDGE 全测）；前端 F-M3 引用面板待前端侧
 
 ## M4 生成+token展示（doubao 流式、8s 超时、断连取消、usage、done 重建）
 

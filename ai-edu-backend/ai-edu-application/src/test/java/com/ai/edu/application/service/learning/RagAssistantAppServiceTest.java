@@ -102,6 +102,33 @@ class RagAssistantAppServiceTest {
     }
 
     @Test
+    @DisplayName("ask: rerank/boundary 事件重建为 camel（blocks/filePath、boundary 话术）")
+    void ask_rebuildsRerankAndBoundary() {
+        when(port.ask(any())).thenReturn(Flux.just(
+                sse("intent", "{\"anchor\":\"ai-tutoring\"}"),
+                sse("rerank", "{\"blocks\":[{\"block_id\":\"b1\",\"title\":\"块1\",\"summary\":\"摘要\",\"file_path\":\"4.完善文档/02-…md\",\"score\":0.0323}]}"),
+                sse("boundary", "{\"message\":\"未找到关联文档，我尚未掌握。\",\"reason\":\"low_confidence\"}"),
+                sse("done", "{\"answer\":\"\",\"trace_id\":null}")));
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextMatches(ev -> "permission".equals(ev.event()))
+                .expectNextMatches(ev -> "intent".equals(ev.event()))
+                .assertNext(ev -> {
+                    assertTrue("rerank".equals(ev.event()));
+                    assertTrue(ev.data().contains("\"blockId\":\"b1\""), ev.data());
+                    assertTrue(ev.data().contains("\"filePath\""), ev.data());
+                    assertFalse(ev.data().contains("block_id"), ev.data());
+                    assertFalse(ev.data().contains("file_path"), ev.data());
+                })
+                .assertNext(ev -> {
+                    assertTrue("boundary".equals(ev.event()));
+                    assertTrue(ev.data().contains("\"reason\":\"low_confidence\""), ev.data());
+                })
+                .expectNextMatches(ev -> "done".equals(ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
     @DisplayName("ask: clarify 事件重建，default 字段正确映射（Java 关键字绕过）")
     void ask_rebuildsClarifyDefault() {
         when(port.ask(any())).thenReturn(Flux.just(

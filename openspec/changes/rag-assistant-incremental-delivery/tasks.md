@@ -21,13 +21,13 @@
 
 ## M3 多路召回 + remark 打分 + 边界拒答
 
-- [ ] 3.1 Python：双路召回（向量 COS + BM25 本地 jsonl），单路 2s 硬超时 → 降级纯另一路（degraded 标记）；按 anchor 选语料池（orchestrate 加 corpus 参数，节级锚定加权保留不改）
-- [ ] 3.2 Python：RRF 融合（RRF_K=60）精排 Top-K（默认 3），精排块字段 blockId/title/summary/filePath/score
-- [ ] 3.3 Python：范围门低置信过滤（索引层 0.75 / 源文档池 0.5）→ `boundary`（reason=low_confidence）固定话术，0 生成 token
-- [ ] 3.4 Java：rerank/boundary 事件中继
-- [ ] 3.4b Java：查看原文代理 `GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python source 端点；file_path 走 query 传参
-- [ ] 3.5 前端：召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术展示
-- [ ] 3.6 对接测试：RAG-SSE-002/003、RAG-BRIDGE-001~003/005、RAG-COST-002 全绿
+- [x] 3.1 Python：双路召回（向量 COS + BM25 本地 jsonl），单路 2s 硬超时 → 降级纯另一路（degraded 标记）；按 anchor 选语料池（orchestrate 加 corpus 参数，节级锚定加权保留不改）—— Model A3 [x]
+- [x] 3.2 Python：RRF 融合（RRF_K=60）精排 Top-K（默认 3），精排块字段 blockId/title/summary/filePath/score—— Model A4 [x]
+- [x] 3.3 Python：范围门低置信过滤（索引层 0.75 / 源文档池 0.5）→ `boundary`（reason=low_confidence）固定话术，0 生成 token—— Model A9 [x]
+- [x] 3.4 Java：rerank/boundary 事件中继—— 2.5 已实现（rebuildEvent）
+- [x] 3.4b Java：查看原文代理 `GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python source 端点；file_path 走 query 传参—— 已实现 + 测试 + Python source 端点真实验证
+- [ ] 3.5 前端：召回块面板（标题/摘要/file_path，点击查看原文走 source 代理）+ 边界拒答话术展示—— 待前端 F-M3
+- [x] 3.6 对接测试：RAG-SSE-002/003、RAG-BRIDGE-001~003/005、RAG-COST-002 全绿—— 后端部分绿（RAG-SSE-002/003、RAG-BRIDGE-001~005、RAG-COST-002）；前端 F-M3 待前端侧
 
 ## M4 生成 + token 展示
 

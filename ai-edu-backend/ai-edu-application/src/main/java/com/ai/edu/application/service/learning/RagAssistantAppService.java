@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,6 +74,14 @@ public class RagAssistantAppService {
         return Flux.concat(
                 Flux.just(sse("permission", writeCamel(permission))),
                 ragAssistantPort.ask(request).map(ev -> rebuildEvent(ev, traceId)));
+    }
+
+    /**
+     * 查看原文（非流式）：委托桥转发 Python 源文件静态服务，返回文件内容。
+     * 文件不存在 → EntityNotFoundException（10002，HTTP 404）。
+     */
+    public Mono<String> source(String filePath) {
+        return ragAssistantPort.source(filePath);
     }
 
     /**
