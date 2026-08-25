@@ -33,11 +33,11 @@
 
 ## M1 权限判断（纯 Java，0 依赖，第一个）
 
-- [ ] 1.1 契约 DTO 基线：`RagAskRequest`（question/sessionId/currentProject/topK/**history**/**traceId**——history=最近 N 轮（默认 3，含 clarify 轮，Java 网关组装传入），traceId=Java 生成传 Python），snake→camel 映射，`@JsonProperty`，`FAIL_ON_UNKNOWN_PROPERTIES=false`
-- [ ] 1.2 新增 `RagAssistantController` 骨架：`POST /api/rag/assistant/ask`（SSE 流式 + 非流式两模式占位），SSE 通道建立
-- [ ] 1.3 角色硬门：从 `HttpSession.getAttribute("role")` 取角色（STUDENT 才放行），非学生/缺失 → 固定 403 响应体；忽略 body 传 role；角色门不调 LLM、不产生 trace
-- [ ] 1.4 桥桩替：`RagAssistantPort` 骨架 + infra 桥占位（Python 未就绪前返回桩替流），学生放行 → `permission{allowed:true}` → 桩替 done，ask 整轮可通
-- [ ] 1.5 三端对接测试：前端 403 页 / 学生放行；后端 RAG-GATE-001~004（角色门验证含前端改 role 无法绕过）；模型端 0 依赖
+- [x] 1.1 契约 DTO 基线：`RagAskRequest`（question/sessionId/currentProject/topK/**history**/**traceId**——history=最近 N 轮（默认 3，含 clarify 轮，Java 网关组装传入），traceId=Java 生成传 Python），snake→camel 映射，`@JsonProperty`，`FAIL_ON_UNKNOWN_PROPERTIES=false`
+- [x] 1.2 新增 `RagAssistantController` 骨架：`POST /api/rag/assistant/ask`（SSE 流式 + 非流式两模式占位），SSE 通道建立
+- [x] 1.3 角色硬门：从 `HttpSession.getAttribute("role")` 取角色（STUDENT 才放行），非学生/缺失 → 固定 403 响应体；忽略 body 传 role；角色门不调 LLM、不产生 trace
+- [x] 1.4 桥桩替：`RagAssistantPort` 骨架 + infra 桥占位（Python 未就绪前返回桩替流），学生放行 → `permission{allowed:true}` → 桩替 done，ask 整轮可通
+- [ ] 1.5 三端对接测试：前端 403 页 / 学生放行（**后端 RAG-GATE-001~004 已绿 4/4**；前端 F-M1 对接待前端侧完成）
 
 ## M2 意图+改写+骨架（SSE 契约冻结、trace、intent LLM、rewrite、switch、上下文窗口）
 
