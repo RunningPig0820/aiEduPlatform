@@ -46,11 +46,11 @@
 - [x] 2.3 端口与桥：`RagAssistantPort`（入参 ask/查询，出参流式事件回调；放学习域答疑子模块），infra 桥实现（复用 `LlmGateway` internalToken，`POST /api/rag/assistant/ask`）；桥组装 **history（最近 N 轮，含 clarify 轮）+ traceId** 传给 Python；SSE 中继从 Python 的 `intent` 事件开始（**permission 仅 Java 发，桥不消费 Python 的 permission**）；桥单测：snake↔camel 映射、SSE 事件重建顺序、degraded 200 不 503
 - [x] 2.4 trace_id 生成（定死归属）：**Java 生成**（每轮入口 UUID）→ **permission 事件携带 traceId（前端流开始即取，供断线补查）** → 随 ask 请求传 Python → Python 贯穿日志并在 done 回显 → Java 校验回显一致（两端 trace 对得上）
 - [x] 2.5 SSE 中继（阶段 1）：permission/intent/rewrite/done 按序透传，meta/done 由 Java 重建不透传原始
-- [ ] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块级路由，locked_sections=节级加权，两层并存），失败回退 `_fallback_anchor`（保留），degraded 标记
-- [ ] 2.7 Python rewrite：生成改写后 query，透传 `rewrite` 事件
-- [ ] 2.8 Python switch 判定：`switch_detected=(前端 current_project≠会话锚点 或 问题明确指向另一有语料模块)`，发 `switch` 事件（from/to），收敛下一轮 intent，不做生成中切换
-- [ ] 2.9 Python 上下文窗口截断：intent/generate 历史仅保留最近 N 轮（默认 3，可配），不设轮数上限；锚点由 session 独立携带
-- [ ] 2.10 Python generate 桩替：固定占位答案回填 done，整轮可通（M4 移除）
+- [x] 2.6 Python intent 泛化：`classify` 升级 LLM 结构化输出 `{anchor, category, switch_detected, ambiguous, candidates}`（anchor=模块级路由，locked_sections=节级加权，两层并存），失败回退 `_fallback_anchor`（保留），degraded 标记 —— **Model A1 [x] + Java e2e 验证**（真实 intent 输出 anchor=ai-tutoring/locked_sections=["02","06"]）
+- [x] 2.7 Python rewrite：生成改写后 query，透传 `rewrite` 事件 —— **Model A2 [x] + Java e2e 验证**（真实 rewrite 事件 original_question/rewritten_query）
+- [x] 2.8 Python switch 判定：`switch_detected=(前端 current_project≠会话锚点 或 问题明确指向另一有语料模块)`，发 `switch` 事件（from/to），收敛下一轮 intent，不做生成中切换 —— **Model A2b [x]**；Java 侧 SseSwitchDTO 重建已就绪（2.5），switch 路径在 M8 e2e 覆盖
+- [x] 2.9 Python 上下文窗口截断：intent/generate 历史仅保留最近 N 轮（默认 3，可配），不设轮数上限；锚点由 session 独立携带 —— **Model A1 [x]**（history[-3:]）；Java 侧组装 history 待 M7 会话累计时落地
+- [x] 2.10 Python generate 桩替：固定占位答案回填 done，整轮可通（M4 移除）—— **已过时**：Python generate 为真实实现（Java e2e 验证 token 流式输出），无需桩替，此任务作废
 - [ ] 2.11 三端对接测试：前端阶段展示区（权限✓/意图分类/改写后问题）+ 桩替答案；后端+模型端联调 RAG-SSE-001(桩)/RAG-CONTRACT-002/003/RAG-COST-003
 
 ## M3 召回+remark+边界（双路召回、RRF top-K、范围门、硬路由、数据驱动）
