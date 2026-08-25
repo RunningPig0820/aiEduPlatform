@@ -213,6 +213,121 @@ class RagAssistantBridgeImplTest {
         return client;
     }
 
+    // ==================== eval/report 评估报告 ====================
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private WebClient buildEvalGetClient(WebClient.ResponseSpec responseSpec) {
+        WebClient webClient = mock(WebClient.class);
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri(anyString())).thenReturn(uriSpec);
+        when(uriSpec.retrieve()).thenReturn(responseSpec);
+        return webClient;
+    }
+
+    private RagAssistantBridgeImpl buildEvalReportClient(WebClient.ResponseSpec responseSpec) {
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildEvalGetClient(responseSpec));
+        return client;
+    }
+
+    @Test
+    @DisplayName("evalReport: 报告存在 → 返回 Python 原始 snake_case JSON")
+    void evalReport_returnsRawJson() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.just("{\"version\":\"v1\",\"hit_at_3\":0.8}"));
+
+        RagAssistantBridgeImpl client = buildEvalReportClient(responseSpec);
+
+        StepVerifier.create(client.evalReport())
+                .expectNext("{\"version\":\"v1\",\"hit_at_3\":0.8}")
+                .verifyComplete();
+    }
+
+    // ==================== eval/run 触发重评测 ====================
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private WebClient buildEvalRunPostClient(WebClient.ResponseSpec responseSpec) {
+        WebClient webClient = mock(WebClient.class);
+        WebClient.RequestBodyUriSpec uriSpec = mock(WebClient.RequestBodyUriSpec.class);
+        WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
+        when(webClient.post()).thenReturn(uriSpec);
+        when(uriSpec.uri(anyString())).thenReturn(uriSpec);
+        when(uriSpec.contentType(any(MediaType.class))).thenReturn(bodySpec);
+        when(bodySpec.retrieve()).thenReturn(responseSpec);
+        return webClient;
+    }
+
+    private RagAssistantBridgeImpl buildEvalRunClient(WebClient.ResponseSpec responseSpec) {
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildEvalRunPostClient(responseSpec));
+        return client;
+    }
+
+    @Test
+    @DisplayName("evalRun: 触发成功 → 返回 running 状态原始 JSON")
+    void evalRun_returnsRunningState() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.just("{\"running\":true,\"already_running\":false}"));
+
+        RagAssistantBridgeImpl client = buildEvalRunClient(responseSpec);
+
+        StepVerifier.create(client.evalRun())
+                .expectNext("{\"running\":true,\"already_running\":false}")
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("evalRun: 传输异常 → TutoringAgentException")
+    void evalRun_transportError() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
+                        org.springframework.http.HttpMethod.POST, URI.create("http://x"), HttpHeaders.EMPTY)));
+
+        RagAssistantBridgeImpl client = buildEvalRunClient(responseSpec);
+
+        assertThrows(TutoringAgentException.class, () -> client.evalRun().block());
+    }
+
+    @Test
+    @DisplayName("evalReport: 暂无报告 → 注册 404 谓词，错误函数产 EntityNotFoundException（10002）")
+    void evalReport_notFoundWiring() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        AtomicReference<Predicate<HttpStatusCode>> predicateRef = new AtomicReference<>();
+        AtomicReference<Function<ClientResponse, Mono<? extends Throwable>>> errRef = new AtomicReference<>();
+        when(responseSpec.onStatus(any(), any())).thenAnswer(inv -> {
+            predicateRef.set(inv.getArgument(0));
+            errRef.set(inv.getArgument(1));
+            return responseSpec;
+        });
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("x"));
+
+        RagAssistantBridgeImpl client = buildEvalReportClient(responseSpec);
+        client.evalReport().block();
+
+        assertTrue(predicateRef.get().test(HttpStatus.NOT_FOUND), "404 应命中谓词");
+        assertThrows(EntityNotFoundException.class,
+                () -> errRef.get().apply(mock(ClientResponse.class)).block());
+    }
+
+    @Test
+    @DisplayName("evalReport: 传输异常 → TutoringAgentException")
+    void evalReport_transportError() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
+                        org.springframework.http.HttpMethod.GET, URI.create("http://x"), HttpHeaders.EMPTY)));
+
+        RagAssistantBridgeImpl client = buildEvalReportClient(responseSpec);
+
+        assertThrows(TutoringAgentException.class, () -> client.evalReport().block());
+    }
+
     @Test
     @DisplayName("source: 原文存在 → 返回文件内容")
     void source_returnsContent() {

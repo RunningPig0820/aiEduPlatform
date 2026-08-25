@@ -39,6 +39,8 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
 
     private static final String ASK_PATH = "/api/rag/assistant/ask";
     private static final String SOURCE_PATH = "/api/rag/source";
+    private static final String EVAL_REPORT_PATH = "/api/rag/assistant/eval/report";
+    private static final String EVAL_RUN_PATH = "/api/rag/assistant/eval/run";
     private static final Duration ASK_TIMEOUT = Duration.ofSeconds(60);
 
     @Resource(name = "ragWebClient")
@@ -66,6 +68,38 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
                     log.error("[rag-assistant] 桥调 Python 失败: {}", e.getMessage(), e);
                     return Flux.error(new TutoringAgentException("RAG 助手服务暂不可用", e));
                 });
+    }
+
+    @Override
+    public Mono<String> evalReport() {
+        log.info("[rag-assistant] 桥调 Python eval/report");
+        return ragWebClient.get()
+                .uri(EVAL_REPORT_PATH)
+                .retrieve()
+                // 暂无报告 → EntityNotFoundException（10002，HTTP 404）
+                .onStatus(status -> status.value() == 404,
+                        resp -> Mono.error(new EntityNotFoundException("暂无评估报告")))
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientRequestException.class,
+                        e -> new TutoringAgentException("RAG 评估报告服务暂不可用", e))
+                .onErrorMap(WebClientResponseException.class,
+                        e -> new TutoringAgentException("RAG 评估报告服务暂不可用 (status="
+                                + e.getStatusCode().value() + ")", e));
+    }
+
+    @Override
+    public Mono<String> evalRun() {
+        log.info("[rag-assistant] 桥调 Python eval/run（异步触发重评测）");
+        return ragWebClient.post()
+                .uri(EVAL_RUN_PATH)
+                .contentType(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientRequestException.class,
+                        e -> new TutoringAgentException("RAG 重评测服务暂不可用", e))
+                .onErrorMap(WebClientResponseException.class,
+                        e -> new TutoringAgentException("RAG 重评测服务暂不可用 (status="
+                                + e.getStatusCode().value() + ")", e));
     }
 
     private static String stripTrailingSlash(String url) {

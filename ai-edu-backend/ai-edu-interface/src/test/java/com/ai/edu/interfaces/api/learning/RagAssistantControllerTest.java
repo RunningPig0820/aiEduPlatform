@@ -151,6 +151,44 @@ class RagAssistantControllerTest {
         verify(appService, times(1)).source(any()); // 仅学生路径 1 次，教师路径 0 次
     }
 
+    // ==================== eval/report 评估报告 ====================
+
+    @Test
+    @DisplayName("evalReport：学生 → ApiResponse(报告)；非学生 → 403 且不调 appService")
+    void evalReport_studentOk_teacher403() {
+        com.ai.edu.application.dto.learning.rag.RagEvalReportDTO report =
+                com.ai.edu.application.dto.learning.rag.RagEvalReportDTO.builder()
+                        .version("v1").count(15).hitAt3(0.8).build();
+        when(appService.evalReport()).thenReturn(reactor.core.publisher.Mono.just(report));
+        clearInvocations(appService);
+
+        assertTrue(controller.evalReport(loginSession(STUDENT_ID, "STUDENT"))
+                .block().getData().getHitAt3() == 0.8);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.evalReport(loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).evalReport();
+    }
+
+    // ==================== eval/run 触发重评测 ====================
+
+    @Test
+    @DisplayName("evalRun：学生 → ApiResponse(running)；非学生 → 403 且不调 appService")
+    void evalRun_studentOk_teacher403() {
+        when(appService.evalRun()).thenReturn(reactor.core.publisher.Mono.just(
+                com.ai.edu.application.dto.learning.rag.RagEvalRunDTO.builder().running(true).build()));
+        clearInvocations(appService);
+
+        assertTrue(controller.evalRun(loginSession(STUDENT_ID, "STUDENT"))
+                .block().getData().getRunning());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.evalRun(loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).evalRun();
+    }
+
     // ==================== helpers ====================
 
     private MockHttpSession loginSession(Long userId, String role) {

@@ -77,14 +77,14 @@
 
 ## M5 自我检查（is_quoted + 评估扩展 + 评估报告白盒）
 
-- [ ] 5.1 Python is_quoted LCS 硬匹配纯函数（连续 8 中 / 12 英，窗口可调 `config/settings.py`）：生成完成后对精排块 text/summary 与 answer 匹配 → `quoted_keys`，done 后补发；quotedKeys 为空 → answer 标注"引用未能精确匹配"
-- [ ] 5.2 done 补 quotedKeys 字段（Java 重建）
-- [ ] 5.3 Python 评估集扩面：`eval_dataset.py` VALID_TYPES 增加 `边界拒答`；RAG 助手评估集 ≥15 条覆盖 5 类（项目介绍/操作/数据关联/难点/边界拒答），含"改写答案"用例（验证 8 字符窗口漏判率）
-- [ ] 5.4 Python `precision_at_k` 纯函数并纳入聚合报告
-- [ ] 5.5 Python is_quoted 入评估：`lcs_quote_match` 单测 + 断言 quoted_keys ⊆ 召回块（引用不得指向未召回内容）
-- [ ] 5.6 Python 边界拒答用例判定：命中固定话术 + 0 token
-- [ ] 5.7 Python 重跑 baseline 报告：hit@3/质量分/成本/耗时/版本，`--compare` 版本对比可复现
-- [ ] 5.8 Java `GET /api/rag/assistant/eval/report` 端点（白盒展示，暂无报告 → 10002）
+- [x] 5.1 Python is_quoted LCS 硬匹配纯函数（连续 8 中 / 12 英，窗口可调 `config/settings.py`）：生成完成后对精排块 text/summary 与 answer 匹配 → `quoted_keys`，done 后补发；quotedKeys 为空 → answer 标注"引用未能精确匹配" —— **Python 已验证**（assistant.py `_lcs_longest`/`lcs_quote_match` A6）
+- [x] 5.2 done 补 quotedKeys 字段（Java 重建）—— **已实现**（SseDoneDTO.quotedKeys + rebuildEvent 读 quoted_keys，AppServiceTest 断言 camel 化）
+- [x] 5.3 Python 评估集扩面：`eval_dataset.py` VALID_TYPES 增加 `边界拒答`；RAG 助手评估集 ≥15 条覆盖 5 类（项目介绍/操作/数据关联/难点/边界拒答），含"改写答案"用例（验证 8 字符窗口漏判率）—— **Python 已验证**（eval_agent.py BOUNDARY_TYPE/边界拒答 trace）
+- [x] 5.4 Python `precision_at_k` 纯函数并纳入聚合报告 —— **Python 已验证**（eval_agent.py `precision_at_k` + `precision_at_k_avg` 聚合）
+- [x] 5.5 Python is_quoted 入评估：`lcs_quote_match` 单测 + 断言 quoted_keys ⊆ 召回块（引用不得指向未召回内容）—— **Python 已验证**（quoted_valid_ratio 引用合法率）
+- [x] 5.6 Python 边界拒答用例判定：命中固定话术 + 0 token —— **Python 已验证**（`_boundary_trace` 断言低置信固定话术 + 0 token）
+- [x] 5.7 Python 重跑 baseline 报告：hit@3/质量分/成本/耗时/版本，`--compare` 版本对比可复现 —— **Python 已验证**（真实报告 version=2026-08-25-e966ac、count=6、hit@3=0.667）
+- [x] 5.8 Java `GET /api/rag/assistant/eval/report` 端点（白盒展示，暂无报告 → 10002）—— **已实现**（Port evalReport() + Bridge GET 代理 404→10002 + AppService SNAKE_MAPPER 解析 + Controller GET /eval/report requireStudent；数字后缀字段用 @JsonAlias 收 hit_at_3/precision_at_3（SNAKE_CASE 会翻成 hit_at3），输出仍 hitAt3；新增 controller/appService/bridge 4 测试全绿）
 - [ ] 5.9 三端对接测试：前端引用高亮/灰显折叠 + 评估报告一屏；后端+模型端联调 RAG-QUOTE-001~005、RAG-CONTRACT-001
 
 ## M6 问题提示（开始引导 + 结束建议必含 RAG + clarify）

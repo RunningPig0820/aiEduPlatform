@@ -2,6 +2,8 @@ package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
+import com.ai.edu.application.dto.learning.rag.RagEvalReportDTO;
+import com.ai.edu.application.dto.learning.rag.RagEvalRunDTO;
 import com.ai.edu.application.service.learning.RagAssistantAppService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -64,6 +66,22 @@ public class RagAssistantController {
     public Mono<ApiResponse<String>> source(@RequestParam("path") String path, HttpSession session) {
         requireStudent(session);
         return ragAssistantAppService.source(path).map(ApiResponse::success);
+    }
+
+    /** 评估报告（Java 代理）：转发 Python baseline 报告白盒（hit@3/质量分/成本/耗时/样本细节），snake→camel。非学生 → 403。 */
+    @Operation(summary = "评估报告", description = "白盒展示 RAG baseline 评估报告（含 evaluatedAt/样本细节/running）；STUDENT 角色门；暂无报告 → 10002")
+    @GetMapping("/eval/report")
+    public Mono<ApiResponse<RagEvalReportDTO>> evalReport(HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.evalReport().map(ApiResponse::success);
+    }
+
+    /** 触发重评测（Java 代理，异步）：Python 后台跑一轮评估，秒回 running 状态；前端轮询 report.running 后刷新。非学生 → 403。 */
+    @Operation(summary = "触发重评测", description = "异步跑一轮真实评估（几分钟）；已有一轮在跑 → 幂等 {running:true,alreadyRunning:true}；STUDENT 角色门")
+    @PostMapping("/eval/run")
+    public Mono<ApiResponse<RagEvalRunDTO>> evalRun(HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.evalRun().map(ApiResponse::success);
     }
 
     private void requireStudent(HttpSession session) {

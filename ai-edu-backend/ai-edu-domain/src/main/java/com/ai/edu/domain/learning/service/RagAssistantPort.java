@@ -29,4 +29,19 @@ public interface RagAssistantPort {
      * @param filePath rerank 块的 filePath（如 "4.完善文档/02-…md"，含目录分隔）
      */
     Mono<String> source(String filePath);
+
+    /**
+     * 评估报告（非流式）：转发 Python baseline 报告白盒（hit@3/质量分/耗时/成本/版本）。
+     * 返回 Python 原始 snake_case JSON 字符串，由应用层反序列化为 camelCase DTO。
+     * 暂无报告 → EntityNotFoundException（10002，HTTP 404）。
+     */
+    Mono<String> evalReport();
+
+    /**
+     * 触发重评测（非流式，异步模型）：转发 Python {@code POST /api/rag/assistant/eval/run}，
+     * Python 后台跑一轮真实评估（几分钟），立即返回 {running:true}。
+     * 已有一轮在跑 → 幂等返回 {running:true, already_running:true}。
+     * 返回 Python 原始 JSON 字符串，由应用层反序列化。
+     */
+    Mono<String> evalRun();
 }

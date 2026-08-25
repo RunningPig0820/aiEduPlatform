@@ -2,7 +2,10 @@ package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
+import com.ai.edu.domain.learning.model.contract.RagQualityScore;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
+import com.ai.edu.domain.learning.service.RagQualityGrader;
+import com.ai.edu.domain.shared.service.RedisService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,7 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -29,12 +36,19 @@ class RagAssistantAppServiceTest {
 
     private RagAssistantAppService appService;
     private RagAssistantPort port;
+    private RagQualityGrader grader;
+    private RedisService redis;
 
     @BeforeEach
     void setUp() {
         port = mock(RagAssistantPort.class);
+        grader = mock(RagQualityGrader.class);
+        redis = mock(RedisService.class);
+        when(grader.grade(any(), any(), any(), any())).thenReturn(reactor.core.publisher.Mono.empty());
         appService = new RagAssistantAppService();
         ReflectionTestUtils.setField(appService, "ragAssistantPort", port);
+        ReflectionTestUtils.setField(appService, "ragQualityGrader", grader);
+        ReflectionTestUtils.setField(appService, "redisService", redis);
     }
 
     private RagAskCommand command() {
@@ -141,6 +155,103 @@ class RagAssistantAppServiceTest {
                     assertFalse(ev.data().contains("cache_hit_tokens"), ev.data());
                 })
                 .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("evalReport：Python snake_case 报告解析为 camelCase DTO（hit_at_3→hitAt3、样本细节、running）")
+    void evalReport_snakeToCamel() {
+        String pyJson = "{\"version\":\"v1\",\"count\":15,\"hit_at_3\":0.8,\"quality_avg\":4.2,"
+                + "\"avg_latency_ms\":2300,\"avg_cost_yuan\":0.012,\"judged_ratio\":1.0,"
+                + "\"precision_at_3\":0.6,\"quoted_valid_ratio\":0.9,"
+                + "\"evaluated_at\":\"2026-08-25T11:02:00\",\"hit_cases\":12,\"avg_tokens\":3912,"
+                + "\"total_cost_yuan\":0.0806,\"running\":false}";
+        when(port.evalReport()).thenReturn(reactor.core.publisher.Mono.just(pyJson));
+
+        var report = appService.evalReport().block();
+        assertTrue(report.getHitAt3() == 0.8, String.valueOf(report));
+        assertTrue(report.getCount() == 15);
+        assertTrue(report.getAvgLatencyMs() == 2300L);
+        assertTrue(report.getQuotedValidRatio() == 0.9);
+        assertTrue("v1".equals(report.getVersion()));
+        assertTrue("2026-08-25T11:02:00".equals(report.getEvaluatedAt()));
+        assertTrue(report.getHitCases() == 12);
+        assertTrue(report.getAvgTokens() == 3912);
+        assertTrue(report.getTotalCostYuan() == 0.0806);
+        assertFalse(report.getRunning());
+    }
+
+    @Test
+    @DisplayName("evalRun：已有一轮在跑 → already_running 解析为 alreadyRunning（幂等非错误）")
+    void evalRun_parsesRunningState() {
+        when(port.evalRun()).thenReturn(reactor.core.publisher.Mono.just(
+                "{\"running\":true,\"already_running\":true}"));
+
+        var run = appService.evalRun().block();
+        assertTrue(run.getRunning());
+        assertTrue(run.getAlreadyRunning());
+    }
+
+    @Test
+    @DisplayName("ask: done（非空答案+正常轮）触发异步质量打分，传 question/answer/quotedKeys/块摘要")
+    void ask_schedulesGradeOnDone() {
+        when(port.ask(any())).thenAnswer(inv -> Flux.just(
+                sse("intent", "{\"anchor\":\"rag-system\"}"),
+                sse("rerank", "{\"blocks\":[{\"block_id\":\"b1\",\"title\":\"架构\",\"summary\":\"分四层……\",\"file_path\":\"f\",\"score\":0.3}]}"),
+                sse("done", "{\"answer\":\"RAG 项目的整体架构是……\",\"quoted_keys\":[\"b1\"],"
+                        + "\"tokens_usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"cache_hit_tokens\":0,\"total_tokens\":2},"
+                        + "\"trace_id\":\"trc\",\"suggestions\":[],\"reason\":null}")));
+        when(grader.grade(any(), any(), any(), any()))
+                .thenReturn(reactor.core.publisher.Mono.just(
+                        RagQualityScore.builder().score(4).reason("ok").build()));
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextCount(4) // permission + intent + rerank + done
+                .verifyComplete();
+
+        // grade 调用在 doOnNext 内同步发生（订阅计分是异步的），可直接 verify
+        verify(grader).grade(eq("这个项目的整体架构是什么？"), eq("RAG 项目的整体架构是……"),
+                eq(List.of("b1")), eq(List.of("【架构】分四层……")));
+    }
+
+    @Test
+    @DisplayName("ask: boundary 轮（reason=low_confidence）不触发质量打分")
+    void ask_skipsGradeOnBoundary() {
+        when(port.ask(any())).thenReturn(Flux.just(
+                sse("intent", "{\"anchor\":\"rag-system\"}"),
+                sse("done", "{\"answer\":\"\",\"tokens_usage\":{\"prompt_tokens\":0,\"completion_tokens\":0,"
+                        + "\"cache_hit_tokens\":0,\"total_tokens\":0},\"trace_id\":\"trc\",\"suggestions\":[],\"reason\":\"low_confidence\"}")));
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextCount(3) // permission + intent + done
+                .verifyComplete();
+
+        verify(grader, never()).grade(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("evalReport: 并入 realConversation（读 Redis 聚合 → avgQuality/quotedRatio/avgLatencyMs）")
+    void evalReport_mergesRealConversation() {
+        when(port.evalReport()).thenReturn(reactor.core.publisher.Mono.just(
+                "{\"version\":\"v1\",\"count\":6,\"hit_at_3\":0.667}"));
+        when(redis.get("rag:assistant:eval:recent"))
+                .thenReturn("{\"count\":10,\"sum_quality\":38,\"quoted_count\":9,\"sum_latency_ms\":50000}");
+
+        var report = appService.evalReport().block();
+        assertEquals(3.8, report.getRealConversation().getAvgQuality());
+        assertEquals(0.9, report.getRealConversation().getQuotedRatio());
+        assertEquals(5000L, report.getRealConversation().getAvgLatencyMs());
+        assertEquals(10, report.getRealConversation().getCount());
+    }
+
+    @Test
+    @DisplayName("evalReport: 无真实对话累计（Redis 无 key）→ realConversation 为 null")
+    void evalReport_noRealConversationWhenRedisEmpty() {
+        when(port.evalReport()).thenReturn(reactor.core.publisher.Mono.just(
+                "{\"version\":\"v1\",\"count\":6,\"hit_at_3\":0.667}"));
+        when(redis.get("rag:assistant:eval:recent")).thenReturn(null);
+
+        var report = appService.evalReport().block();
+        assertNull(report.getRealConversation());
     }
 
     @Test
