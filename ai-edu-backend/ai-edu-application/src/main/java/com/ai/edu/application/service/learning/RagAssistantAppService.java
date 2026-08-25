@@ -22,6 +22,7 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -78,14 +79,16 @@ public class RagAssistantAppService {
      * 发起一轮问答（非流式，M1 桩替）：返回 done 结构 + stages 摘要（真实链路在 M2 起）。
      */
     public Map<String, Object> askStages(RagAskCommand command) {
-        return Map.of(
-                "answer", "（桩替）RAG 项目介绍助手链路已通，等待 Python 白盒引擎接入。",
-                "quotedKeys", List.of(),
-                "tokensUsage", Map.of("promptTokens", 0, "completionTokens", 0, "cacheHitTokens", 0, "totalTokens", 0),
-                "traceId", UUID.randomUUID().toString(),
-                "suggestions", List.of(),
-                "reason", null,
-                "stages", List.of("permission", "intent", "rewrite", "rerank", "done"));
+        // 用 LinkedHashMap（Map.of 不允许 null 值，"reason":null 会抛 NPE）
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("answer", "（桩替）RAG 项目介绍助手链路已通，等待 Python 白盒引擎接入。");
+        result.put("quotedKeys", List.of());
+        result.put("tokensUsage", Map.of("promptTokens", 0, "completionTokens", 0, "cacheHitTokens", 0, "totalTokens", 0));
+        result.put("traceId", UUID.randomUUID().toString());
+        result.put("suggestions", List.of());
+        result.put("reason", null);
+        result.put("stages", List.of("permission", "intent", "rewrite", "rerank", "done"));
+        return result;
     }
 
     /** 重建 Python snake 事件 → 前端 camel 事件；done 做 traceId 一致性校验（对不上告警，不阻断）。 */

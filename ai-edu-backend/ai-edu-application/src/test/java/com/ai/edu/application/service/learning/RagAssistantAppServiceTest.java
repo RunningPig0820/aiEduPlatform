@@ -11,7 +11,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -86,6 +89,16 @@ class RagAssistantAppServiceTest {
                     assertFalse(ev.data().contains("tokens_usage"), ev.data());
                 })
                 .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("askStages: 非流式返回不抛 NPE（reason 为 null，Map.of 会崩，须用 LinkedHashMap）")
+    void askStages_noNpeOnNullReason() {
+        Map<String, Object> result = appService.askStages(command());
+        assertTrue(result.containsKey("answer"));
+        assertTrue(result.containsKey("reason"));
+        assertNull(result.get("reason"));
+        assertTrue(result.containsKey("stages"));
     }
 
     @Test
