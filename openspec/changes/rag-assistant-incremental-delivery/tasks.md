@@ -55,6 +55,7 @@
 - [ ] 6.4 Java：clarify 事件中继 + done 补 suggestions 字段 + guide 接口中继
 - [ ] 6.5 前端：开始引导 chips（定向 RAG，进入页面展示）+ 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI（默认当前功能）
 - [ ] 6.6 对接测试：RAG-SSE-004/005、SUGG-001~003 全绿
+- [ ] 6.7 Python 问候识别 + 欢迎引导（D-E 定稿）：intent 判 category=问候/ambiguous=false（不 clarify）；问候语返回固定欢迎话术 + 引导建议（复用 guide 静态池），0 生成 token
 
 ## M7 会话收尾（close + 累计 token + 补查）
 

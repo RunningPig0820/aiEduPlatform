@@ -64,6 +64,7 @@
 | RAG-SSE-006 | meta/done 不透传原始 | 桥 mock 含 Python meta/done 事件 | 正常问答 | Java 重建为自定义事件，Python 原始 meta/done 不暴露给前端 |
 | RAG-SSE-007 | 上下文窗口截断 | 会话第 4 轮发起（历史 >3 轮） | 正常问答 | intent/generate 上下文仅含最近 3 轮，第 1 轮截断；锚点由 session 独立携带不受影响 |
 | RAG-SSE-008 | clarify 点选后重发 | 上一轮 clarify 发出，学生点选 [RAG项目] | 重发原问题 + currentProject=rag-system（含 clarify 轮 history） | intent 以 currentProject 为权威锚点直接锚定 anchor=rag-system，不再 ambiguous；锚点与会话不同则 switch 后正常 rewrite/recall/generate |
+| RAG-SSE-009 | 问候语欢迎引导 | 学生发"你好" | 问候语 | intent 判 category=问候/ambiguous=false，**不触发 clarify**；直接 done（固定欢迎话术 + 引导建议指向 ①②③④），0 生成 token、无 rewrite/recall/token 流 |
 
 ### 3.3 事件契约字段（RAG-CONTRACT）
 
@@ -150,7 +151,7 @@
 | 模块 | 用例数量 |
 |-----|---------|
 | 角色硬门 RAG-GATE | 4 |
-| SSE 事件时序 RAG-SSE | 8 |
+| SSE 事件时序 RAG-SSE | 9 |
 | 事件契约字段 RAG-CONTRACT | 4 |
 | is_quoted 纯函数 RAG-QUOTE | 5 |
 | tokens_usage/trace RAG-COST | 7 |

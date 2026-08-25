@@ -95,6 +95,7 @@
   - **点选交互定稿（2026-08-25）**：clarify 后前端点选候选 → **重发原问 + current_project=点选模块**（非裸功能名）；intent 以 current_project 为**权威消歧锚点**直接锚定、**不因问题含糊再拉 ambiguous**；点选模块与会话锚点不同 → `switch` 事件照常触发
 - [ ] 6.4 done 补 suggestions 字段 + guide 接口中继（Java）
 - [ ] 6.5 三端对接测试：前端开始引导 chips + 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI；后端+模型端联调 RAG-SSE-004/005、SUGG-001~003
+- [ ] 6.6 Python 问候识别 + 欢迎引导（D-E 定稿）：intent 判 `category=问候`/`ambiguous=false`（**不触发 clarify**，实联调发现"你好"被误判 ambiguous）；问候语走固定欢迎话术 + 引导建议（复用 guide 静态池指向 ①②③④），0 生成 token、不 recall 不 generate
 
 ## M7 会话收尾（close + 累计 token + 补查）
 

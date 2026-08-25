@@ -25,6 +25,11 @@ Python 侧白盒 RAG 链路：intent（LLM 结构化输出，anchor/category/swi
 - **WHEN** intent LLM 调用失败或输出非闭集类别
 - **THEN** 系统回退关键词锚定得出 `locked_sections`，intent 事件携带 degraded 标记，不阻断链路
 
+#### Scenario: 问候语识别
+
+- **WHEN** 学生发"你好"等问候/寒暄语
+- **THEN** intent 输出 `category="问候"`、`ambiguous=false`，不触发 clarify，直接走欢迎引导路径（固定欢迎话术 + 引导建议指向 ①项目介绍②操作③数据关联④难点，0 生成 token）
+
 ### Requirement: Query 改写透传
 
 系统 SHALL 基于原始问题与当前上下文（锚点、历史）生成改写后检索式 query，并在 `rewrite` 事件中透传 `{originalQuestion, rewrittenQuery}` 供前端展示。

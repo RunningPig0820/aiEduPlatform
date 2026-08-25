@@ -13,7 +13,7 @@
 - **纯函数单测**：is_quoted LCS 匹配、契约 snake↔camel 映射（Java 侧）。
 - **数据库回滚**：`@Transactional`，测试完成后自动回滚。
 - **端到端**：真实 Java↔Python 联调单独跑（tasks 8.3），不纳入常规单元测试。
-- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（41 行：38 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
+- 用例语义与既有 `rag-project-intro-assistant/test.md` 一致，本文件**按里程碑分组**并标注门禁（42 行：39 条 RAG-* + 3 条新增 SUGG 引导用例；RAG-SSE-001 / RAG-COST-007 在两个里程碑门禁复用）。
 
 ### 1.3 测试环境配置
 
@@ -51,7 +51,7 @@
 | M3 召回+remark+边界 | RAG-SSE-002/003、RAG-BRIDGE-001~005、RAG-COST-002 | 召回块面板（含查看原文代理）+ 边界话术 |
 | M4 生成+token | RAG-SSE-001（全量）、RAG-COST-001/007、RAG-ABORT-001 | 流式回答 + 成本面板 |
 | M5 自我检查 | RAG-QUOTE-001~005、RAG-CONTRACT-001 | 引用高亮 + 评估报告 |
-| M6 问题提示 | RAG-SSE-004/005、SUGG-001~003 | 开始/结束引导 chips + 澄清 UI |
+| M6 问题提示 | RAG-SSE-004/005/008/009、SUGG-001~003 | 开始/结束引导 chips + 澄清 UI + 问候欢迎 |
 | M7 会话收尾 | RAG-CLOSE-001~006、RAG-COST-004~006 | 结算面板 + 断线补查 |
 
 ---
@@ -120,6 +120,7 @@
 | SUGG-001 | 开始引导定向 RAG | 学生进入助手页 | GET /guide | 返回 RAG 定向静态引导池（定位/架构/数据流/评测/坑），0 token、非 SSE、不占冻结时序 |
 | SUGG-002 | 结束建议必含 RAG | 桥 mock done 带 suggestions | 学生问 AI答疑 完成一轮 | done.suggestions 1~3 条中至少 1 条指向 RAG 方向，前端渲染引导 chips |
 | SUGG-003 | suggestions 静态池兜底 | suggestions LLM 失败 | 正常问答 | 返回静态池预写建议（含 RAG 方向，对齐 Python 6 引导方向），链路不中断 |
+| RAG-SSE-009 | 问候语欢迎引导 | 学生发"你好" | 问候语 | intent 判 category=问候/ambiguous=false，**不触发 clarify**；直接 done（固定欢迎话术 + 引导建议指向 ①②③④），0 生成 token、无 rewrite/recall/token 流 |
 
 ## 3G. M7 会话收尾（RAG-CLOSE / RAG-COST 补查）
 
@@ -158,9 +159,9 @@
 | M3 召回+边界 RAG-SSE/BRIDGE/COST | 8 |
 | M4 生成+token RAG-SSE/COST/ABORT | 4 |
 | M5 自我检查 RAG-QUOTE/CONTRACT | 6 |
-| M6 问题提示 RAG-SSE/SUGG | 6 |
+| M6 问题提示 RAG-SSE/SUGG | 7 |
 | M7 会话收尾 RAG-CLOSE/COST | 9 |
-| **总计** | **41** |
+| **总计** | **42** |
 
 ---
 
@@ -174,7 +175,7 @@
 300-307  : M3 召回+边界（RAG-SSE / BRIDGE / COST）
 400-403  : M4 生成+token（RAG-SSE 全量 / COST / ABORT）
 500-505  : M5 自我检查（RAG-QUOTE / CONTRACT）
-600-605  : M6 问题提示（RAG-SSE / SUGG）
+600-606  : M6 问题提示（RAG-SSE / SUGG）
 700-708  : M7 会话收尾（RAG-CLOSE / COST）
 800      : 契约冻结回归（SSE 时序未被重排/删字段）
 ```

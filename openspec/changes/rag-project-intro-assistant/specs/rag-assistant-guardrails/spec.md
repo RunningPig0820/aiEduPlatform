@@ -67,6 +67,11 @@
 - **WHEN** 问题模糊但会话内只讨论过一个功能
 - **THEN** 系统不触发澄清，直接按当前功能默认回答（低摩擦）
 
+#### Scenario: 问候语不澄清（欢迎引导）
+
+- **WHEN** 学生发"你好"等问候语（intent 判 category=问候、ambiguous=false）
+- **THEN** 系统不触发 clarify，直接返回固定欢迎话术 + 引导建议（指向 ①项目介绍②操作③数据关联④难点，复用 guide 静态池），0 生成 token、不 recall 不 generate
+
 ### Requirement: is_quoted 确定性硬匹配
 
 系统 SHALL 在生成完成后，对精排 Top-K 块的 `text`/`summary` 与最终 answer 做最长公共子串匹配：任意**连续 8 个中文字符（或 12 个英文字符）**命中即标记该块 `is_quoted=true`。该判定为确定性硬匹配，**不依赖 LLM 自述**。前端 `rerank` 先展示全部块，`done` 后以 `quotedKeys` 补发命中集合（未命中灰显折叠）。

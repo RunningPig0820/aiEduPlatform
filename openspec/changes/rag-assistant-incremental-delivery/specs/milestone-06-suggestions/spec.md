@@ -53,6 +53,15 @@ M6 SHALL 交付歧义澄清：`ambiguous=true` 且 candidates ≥ 2 → `clarify
 - **WHEN** 澄清一轮后学生仍不明确
 - **THEN** 不再澄清，默认当前功能继续，防死循环
 
+### Requirement: 问候识别与欢迎引导
+
+M6 SHALL 交付问候处理：intent 识别问候/寒暄（如"你好"）为 `category=问候`、`ambiguous=false`，**不触发 clarify**（clarify 仅用于功能指代不明，不用于问候语）；问候语直接返回**固定欢迎话术 + 引导建议**（指向 ①项目介绍②操作③数据关联④难点，复用 guide 静态池），0 生成 token、不 recall 不 generate。
+
+#### Scenario: 问候语欢迎引导
+
+- **WHEN** 学生发"你好"
+- **THEN** intent 判 category=问候/ambiguous=false，不 clarify；done 直接返回欢迎话术 + 引导建议，0 生成 token
+
 ### Requirement: 里程碑对接测试验收
 
 M6 SHALL 以引导 + 澄清用例作为完成标准：RAG-SSE-004（clarify 时序）、RAG-SSE-005（switch 时序，依赖 M2 已交付的 switch）、suggestions 展示用例。

@@ -127,6 +127,9 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 **D-D. 查看原文走 Java 代理**
 新增 `GET /api/rag/assistant/source?path=<urlencoded>`（STUDENT 角色门）转发 Python `/api/rag/source/{file_path}`；Python 保留挂载作转发目标，前端**不直连 Python**。file_path 走 query 传参（不走 path，避免特殊字符被容器拒）。
 
+**D-E. 问候识别与欢迎引导（2026-08-25 产品校准）**
+intent SHALL 识别"问候/寒暄"（如"你好/Hi/在吗"）为 `category="问候"`、`ambiguous=false`——**不触发 clarify**（clarify 仅用于功能指代不明：ambiguous+candidates≥2，**不用于问候语**，实联调发现"你好"被误判 ambiguous 弹澄清很怪）。问候语 SHALL 走**欢迎引导路径**：不 recall 不 generate（省 token），直接返回**固定欢迎话术 + 引导建议**（指向 ①项目介绍②操作③数据关联④难点，复用 guide 静态池，0 生成 token）。
+
 ## Risks / Trade-offs
 
 - [intent LLM 偶发误判] → 规则兜底（`_fallback_anchor`）+ degraded 标记走 200；评估集 `边界拒答` 类型覆盖误判回归。
