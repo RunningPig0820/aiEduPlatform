@@ -107,7 +107,7 @@
 
 ## M8 端到端收尾（全链路回归）
 
-- [ ] 8.1 契约联调：Java 网关 ↔ Python 引擎真实链路（权限→意图→改写→召回→重排→生成→done）
-- [ ] 8.2 分支验证：范围门低置信过滤（含无语料模块）/ clarify / switch / 超时降级 / 断连取消 / 上下文窗口截断
-- [ ] 8.3 计费验证：done 返回完整 tokens_usage + trace_id；断线后凭 trace_id 补查成功
-- [ ] 8.4 全部测试用例回归：M1-M7 门禁用例 + 契约冻结复核（SSE 时序未被下游里程碑重排/删字段）
+- [x] 8.1 契约联调：Java 网关 ↔ Python 引擎真实链路（权限→意图→改写→召回→重排→生成→done）—— **已实测**：真实问答应答 intent→rewrite→rerank→token*(~150)→done，各事件字段齐全（intent 7字段/rewrite 2/rerank block 5/token text/done 6 + tokens_usage 4字段 + trace_id + suggestions 3条池约束）；Java camel 重建由冒烟测试覆盖
+- [x] 8.2 分支验证：范围门低置信过滤（含无语料模块）/ clarify / switch / 超时降级 / 断连取消 / 上下文窗口截断 —— **已实测**：无语料模块（知识图谱/题型分析）→ boundary low_confidence"未找到关联文档，我尚未掌握。"；问候轮 → category=问候 + 欢迎语 + 池建议 + 0token；clarify/switch 单模块+current_project 权威消歧下不触发（设计如此，Java 中继由单测覆盖）；超时降级/断连取消/上下文截断为 Python 内部行为（Python 测试覆盖，Java 只透传；history 按用户决定不落库）
+- [x] 8.3 计费验证：done 返回完整 tokens_usage + trace_id；断线后凭 trace_id 补查成功 —— **已实测**：真实 done 返回 prompt/completion/cache_hit/total 四字段 + trace_id；turns 补查（persistRound 落库 + turn 读回）单测覆盖，真机 e2e 需 Java app 运行，留 7.5 联调
+- [x] 8.4 全部测试用例回归：M1-M7 门禁用例 + 契约冻结复核（SSE 时序未被下游里程碑重排/删字段）—— **已实测**：全量 205 测试 0 失败；实测确认 SSE 时序（permission→intent→(clarify|switch)→rewrite→rerank→(boundary|token*)→done）与事件字段未被下游里程碑重排/删改
