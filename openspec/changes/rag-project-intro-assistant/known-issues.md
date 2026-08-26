@@ -49,3 +49,19 @@
 - **期望**: AI 先**列举 50 个高频问题**作为引导底座(对齐语料,保证每个都能答),随机生成时**从这 50 题池子里抽**(而非纯 LLM 自由发挥);开始引导 guide 静态池同理对齐
 - **归属**: Python 侧(建议生成逻辑 + 50 题底座池 + 与语料对齐)+ 语料侧(保证 50 题都有对应切片)
 - **修复时机**: ~~对接完成后统一建立 50 题高频底座池并校准可答性~~ → **已并入 M6(D11 底座池方案,2026-08-26)**: `ai-tutoring` 引导底座池 75 题已由 Python 产出(`docs/rag/ai-tutoring/7. 引导问题/引导问题.md`);开始/结束引导都以池为唯一来源,LLM 结束建议提示词注入池内问题作**可提问范围硬约束**(不得自由发挥超池),失败 → 池内随机抽兜底(必含 ≥1 条 RAG 方向)。后续模块语料就绪各加池条目即可
+
+## 问题 7:指代词"这个功能"被硬路由带到 rag-system,当前模块架构问题拒答
+
+- **发现于**: 三端联调自测(2026-08-26),复现: `current_project=ai-tutoring`, 问题"这个功能的底层是怎么实现的？"
+- **现象**: intent anchor=rag-system(❌ 应为 ai-tutoring), rewrite="rag-system功能底层实现方式"——Python 把"这个功能"硬解成 rag-system;rag-system 无切片 → rerank 空 → boundary low_confidence"未找到关联文档,我尚未掌握。"
+- **影响**: 用户在当前功能页问"本功能的架构/底层实现"→ 被拉去无语料模块 → 必然拒答,体验断裂;且是高频问题(架构/难点方向)
+- **根因**: ①Python intent 把"底层实现/架构"按 D4 硬路由到 rag-system,未把指代词"这个功能/它"解析为 current_project;②D4 硬路由规则过激进——current_project 明确时,"XXX 功能的底层"应在当前模块架构语料(ai-tutoring 有 03-架构与微服务分工 等),而非一律 rag-system;③意图判定到无语料模块(rag-system)必然拒答
+- **归属**: Python 侧(intent 提示词/逻辑:指代词→current_project 优先锚定;硬路由放宽:仅 RAG 系统整体/current_project=rag-system 才路由 rag-system;无语料模块防御:有 current_project 不轻易跳出)。Java 仅中继,正确传了 current_project,无责
+- **修复时机**: Python 意图识别校准后重测;若硬路由保留,需 rag-system 语料入桶否则仍拒答
+
+> **修复建议(2026-08-26,基于 query.py 现状)**:
+> 1. `_INTENT_SYSTEM` anchor 枚举后加**指代词规则**: "这个功能/它/本功能/当前功能/这个项目"等指代一律解析为 current_project,除非问题点名另一模块名,不得因"底层/实现/架构"等词跳走。
+> 2. 改写现有"优先级规则"(现为"问工程实现、底层技术选 rag-system"过于绝对): 只有问题**无指代**且明确问 RAG 系统整体实现(点名 rag 系统/整体架构/召回算法)才选 rag-system;问"这个功能的底层" → 选 current_project。
+> 3. `_llm_intent` 的 ctx_line(现为"除非问题明确属于其他模块否则保持")改为强约束: 明示"这个功能=current_project, 不要因底层/实现/架构跳 rag-system"。
+> 4. **确定性兜底(最稳,不依赖 LLM)**: `intent()` 里 LLM anchor≠current_project 且 问题含指代词(这个功能/这个/它/本功能/当前功能/本项目)且 未点名其它模块名 → 强制 anchor=current_project。
+> 验证用例: "这个功能的底层是怎么实现的？"(ai-tutoring)→ai-tutoring;"RAG 系统整体架构是什么？"(ai-tutoring)→rag-system(硬路由保留)。
