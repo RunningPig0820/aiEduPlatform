@@ -80,8 +80,8 @@ intent 为每轮开头的**非流式**调用（快模型、0 温度、关思考�
 - **备选**：统一 20s 超时 → 学生等待过久；生成超时也调 LLM 重试 → 重复花钱。
 
 ### D8. tokens_usage + trace_id
-`done` 事件携带 `tokens_usage{prompt_tokens, completion_tokens, cache_hit_tokens, total_tokens}` + `trace_id`。usage 取流结束 ark 返回（`include_usage`）；cache_hit 取不到 → tokenizer 估算标注"估算"。`trace_id` 由 Java 生成透传 Python（同源贯穿日志，Python done 回显），供前端 `GET /api/rag/assistant/turns/{trace_id}` 断线补查。**history 由 Java 网关组装**（最近 N 轮，含 clarify 轮，随 ask 请求传 Python，Python 无状态只消费）；**turns 只存 Java Redis**（每轮 done 按 trace_id 落 `rag:assistant:trace:{traceId}` TTL 24h，补查读 Redis；Python 不落会话 trace）。
-- **为什么**：spec 第 8 条透明计费；tutoring 已改 ark_stream 取 usage，复用。cache_hit 是 doubao prompt 缓存命中计数，用于成本叙事。history/trace 归 Java 因 Java 是天然聚合点（每轮过手 done），Python 保持无状态（Python 侧校准确认）。
+`done` 事件携带 `tokens_usage{prompt_tokens, completion_tokens, cache_hit_tokens, total_tokens}` + `trace_id`。usage 取流结束 ark 返回（`include_usage`）；cache_hit 取不到 → tokenizer 估算标注"估算"。`trace_id` 由 Java 生成透传 Python（同源贯穿日志，Python done 回显），供前端 `GET /api/rag/assistant/turns/{trace_id}` 断线补查。**history 由前端传**（方案 A，2026-08-26：最近 3 轮 `{question, answer, anchor}`，追问展开用——省略主语的"能说的详细一点吗"靠 history 还原，Java 透传 Python 只消费；不落库，刷新后为空=新会话）；**turns 只存 Java Redis**（每轮 done 按 trace_id 落 `rag:assistant:trace:{traceId}` TTL 24h，补查读 Redis；Python 不落会话 trace）。
+- **为什么**：spec 第 8 条透明计费；tutoring 已改 ark_stream 取 usage，复用。cache_hit 是 doubao prompt 缓存命中计数，用于成本叙事。**history 方案 A（前端传）**：用户确认"不要落库"——前端本就持有每轮 {question, answer, anchor}，随 ask 回传即可，Java 不存 session 历史；刷新后前端消息清空则 history 空=新会话（可接受）。turns/trace 归 Java（每轮过手 done，天然聚合点），Python 保持无状态。
 - **备选**：不补查接口 → trace_id 是死口（spec 要求"供断线后补查"）；Python 落 trace JSONL → 破坏无状态边界，弃。
 
 ### D9. 模块可用性数据驱动：四模块放行，无语料自然低置信过滤

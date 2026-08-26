@@ -78,7 +78,7 @@
 | currentProject | String | 否 | 模块 id 闭集（ai-tutoring/knowledge-graph/question-analysis/rag-system） | 页面锚定；缺省=rag-system。**仅作提示，角色以 session 为准** |
 | question | String | 是 | 非空，长度 ≤ 500 | 学生问题 |
 | sessionId | String | 否 | 会话 id | **前端生成 UUID 整场复用**（首问即带）；Java 以 sessionId 为键累计，未知 session 按新会话（累计从 0） |
-| history | Array | 否 | 最近 N 轮（默认 3），含 clarify 轮 | **Java 网关组装**传入（每轮过手 done 天然有）；供 intent/rewrite/clarify 兜底消费，Python 只读，前端不传 |
+| history | Array | 否 | 最近 3 轮 `{question, answer, anchor}`，Python 只消费最近 3 轮（HISTORY_LIMIT=3） | **前端传**（方案 A，2026-08-26：不落库）；追问展开用——省略主语的"能说的详细一点吗"靠 history 还原（→"当前模块 详细说明"再检索）；刷新后前端消息清空则 history 为空=新会话 |
 | traceId | String | 否 | 非空 | **Java 生成**传 Python；Python 贯穿日志并在 done 回显（两端 trace 一致）；permission 事件已携带，前端流开始即可取 |
 | stream | Boolean | 否 | 默认 false | true 时走 SSE 流式 |
 | topK | Integer | 否 | 1~5，默认 3 | RRF 精排块数（建议保持默认 3） |

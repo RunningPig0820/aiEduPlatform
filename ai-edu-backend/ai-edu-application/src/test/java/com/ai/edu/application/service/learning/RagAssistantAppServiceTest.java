@@ -3,6 +3,7 @@ package com.ai.edu.application.service.learning;
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
 import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
+import com.ai.edu.domain.learning.model.contract.RagHistoryItem;
 import com.ai.edu.domain.learning.model.contract.RagQualityScore;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
 import com.ai.edu.domain.learning.service.RagQualityGrader;
@@ -344,6 +345,45 @@ class RagAssistantAppServiceTest {
                     assertFalse(ev.data().contains("defaultModule"), ev.data());
                 })
                 .expectNextMatches(ev -> "done".equals(ev.event()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("ask: 前端 history（最近 3 轮）透传给 Python 桥（追问展开用）")
+    void ask_passesFrontendHistory() {
+        RagAskCommand cmd = command();
+        cmd.setHistory(List.of(
+                RagHistoryItem.builder().question("流程图是什么样的").answer("答案1").anchor("ai-tutoring").build(),
+                RagHistoryItem.builder().question("数据怎么落库").answer("答案2").anchor("ai-tutoring").build()));
+        when(port.ask(any())).thenAnswer(inv -> {
+            RagAskRequest req = inv.getArgument(0);
+            assertEquals(2, req.getHistory().size());
+            assertEquals("流程图是什么样的", req.getHistory().get(0).getQuestion());
+            assertEquals("答案2", req.getHistory().get(1).getAnswer());
+            assertEquals("ai-tutoring", req.getHistory().get(0).getAnchor());
+            return Flux.just(
+                    sse("intent", "{\"anchor\":\"ai-tutoring\"}"),
+                    sse("done", "{\"answer\":\"\",\"trace_id\":\"trc\"}"));
+        });
+
+        StepVerifier.create(appService.ask(cmd))
+                .expectNextCount(3) // permission + intent + done
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("ask: 前端未传 history → 透传空列表（等价无上下文）")
+    void ask_emptyHistoryWhenNull() {
+        when(port.ask(any())).thenAnswer(inv -> {
+            RagAskRequest req = inv.getArgument(0);
+            assertTrue(req.getHistory() == null || req.getHistory().isEmpty());
+            return Flux.just(
+                    sse("intent", "{\"anchor\":\"ai-tutoring\"}"),
+                    sse("done", "{\"answer\":\"\",\"trace_id\":\"trc\"}"));
+        });
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextCount(3)
                 .verifyComplete();
     }
 

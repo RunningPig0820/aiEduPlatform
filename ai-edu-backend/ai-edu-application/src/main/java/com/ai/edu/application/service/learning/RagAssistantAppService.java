@@ -105,7 +105,8 @@ public class RagAssistantAppService {
                 .question(command.getQuestion())
                 .sessionId(command.getSessionId())
                 .currentProject(command.getCurrentProject())
-                .history(List.of()) // M2 起由网关组装最近 N 轮
+                // M6 方案A：history 由前端传（最近 3 轮，追问展开用）；不落库，刷新后为空=新会话
+                .history(command.getHistory() == null ? List.of() : command.getHistory())
                 .traceId(traceId)
                 .topK(command.getTopK() == null ? 3 : command.getTopK())
                 .stream(Boolean.TRUE) // 桥恒以 SSE 流式调 Python（非流式走 Java 侧 askStages）
