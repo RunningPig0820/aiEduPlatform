@@ -381,28 +381,31 @@ const result = await response.json();
 |------|-----|
 | HTTP 方法 | `GET` |
 | 接口路径 | `/api/rag/assistant/guide` |
+| 请求参数 | `currentProject`（**前端必传**）——当前功能模块锚点（如 `ai-tutoring`）；**每个功能的引导问题不同**，前端进页面/切换功能时以当前功能为准传参；缺省 Python 兜底 ai-tutoring（仅作防御） |
 | Content-Type | `application/json` |
 | 需要登录 | 是（仅 STUDENT，非学生固定 403） |
 
 ### 响应参数
 
-成功时 `data` 返回：
+成功时 `data` 返回（**模块引导底座池驱动**，known-issues 问题6 落地；1~3 条，必含 ≥1 条 RAG 方向）：
 
 ```json
 {
   "suggestions": [
-    { "title": "想了解RAG的整体架构吗？", "direction": "architecture" },
-    { "title": "想知道知识库数据是如何流转的吗？", "direction": "data_flow" },
-    { "title": "想看看评测体系是怎么设计的吗？", "direction": "evaluation" }
+    { "title": "AI答疑在项目里做什么？", "direction": "intro" },
+    { "title": "一次完整答疑怎么走？", "direction": "operation" },
+    { "title": "把答疑的完整调用链路画出来，前端 / Java / Python 各自负责什么？", "direction": "rag" }
   ]
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| suggestions | Array | RAG 定向开始引导（定位/架构/数据流/评测/坑），1~3 条，静态池 0 token |
+| suggestions | Array | 模块引导池出题 1~3 条（direction=intro/operation/data_relation/difficulty/rag），0 token |
+| suggestions[].title | String | 引导问题（可直接点击发送） |
+| suggestions[].direction | String | 引导方向标签；`rag` 为 RAG 引擎常驻方向（D11 必含 ≥1 条） |
 
-> **RAG 常驻**：RAG 是始终在底层运行的引擎（非展示页模块，学生无法导航到）。会话入口展示开始引导（定向 RAG）；每轮 `done.suggestions` 必含 ≥1 条 RAG 方向。guide 走非 SSE（会话开始无问答轮），不占冻结时序。
+> **底座池**：开始/结束引导都以模块引导池为唯一来源（每模块 `{direction: [问题]}`，`ai-tutoring` 75 题来自 `docs/rag/ai-tutoring/7. 引导问题/引导问题.md`，问题对齐语料保证可答）。**RAG 常驻**：RAG 是始终在底层运行的引擎（非展示页模块，学生无法导航到），每轮 `done.suggestions` 必含 ≥1 条 RAG 方向。guide 走非 SSE（会话开始无问答轮），不占冻结时序。
 
 ### 常见错误
 

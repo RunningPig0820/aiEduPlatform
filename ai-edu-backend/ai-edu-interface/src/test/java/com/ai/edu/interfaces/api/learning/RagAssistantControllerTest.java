@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -187,6 +188,40 @@ class RagAssistantControllerTest {
                 () -> controller.evalRun(loginSession(TEACHER_ID, "TEACHER")));
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
         verify(appService, times(1)).evalRun();
+    }
+
+    // ==================== guide 开始引导 ====================
+
+    @Test
+    @DisplayName("guide：学生 → ApiResponse(引导池)，透传 currentProject；非学生 → 403 且不调 appService")
+    void guide_studentOk_teacher403() {
+        when(appService.guide("ai-tutoring")).thenReturn(reactor.core.publisher.Mono.just(
+                com.ai.edu.application.dto.learning.rag.RagGuideDTO.builder()
+                        .suggestions(List.of(com.ai.edu.application.dto.learning.rag.RagGuideSuggestionDTO.builder()
+                                .title("AI答疑在项目里做什么？").direction("intro").build()))
+                        .build()));
+        clearInvocations(appService);
+
+        var data = controller.guide("ai-tutoring", loginSession(STUDENT_ID, "STUDENT"))
+                .block().getData();
+        assertEquals("AI答疑在项目里做什么？", data.getSuggestions().get(0).getTitle());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.guide("ai-tutoring", loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).guide("ai-tutoring");
+    }
+
+    @Test
+    @DisplayName("guide：currentProject 缺省 → 透传 null（Python 兜底默认模块）")
+    void guide_nullProjectPassThrough() {
+        when(appService.guide(null)).thenReturn(reactor.core.publisher.Mono.just(
+                com.ai.edu.application.dto.learning.rag.RagGuideDTO.builder()
+                        .suggestions(List.of()).build()));
+        clearInvocations(appService);
+
+        controller.guide(null, loginSession(STUDENT_ID, "STUDENT")).block();
+        verify(appService, times(1)).guide(null);
     }
 
     // ==================== helpers ====================

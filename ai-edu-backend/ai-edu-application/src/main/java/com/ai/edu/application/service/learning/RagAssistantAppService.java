@@ -3,6 +3,7 @@ package com.ai.edu.application.service.learning;
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
 import com.ai.edu.application.dto.learning.rag.RagEvalReportDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalRunDTO;
+import com.ai.edu.application.dto.learning.rag.RagGuideDTO;
 import com.ai.edu.application.dto.learning.rag.RagRealConversationDTO;
 import com.ai.edu.application.dto.learning.rag.SseBoundaryDTO;
 import com.ai.edu.application.dto.learning.rag.SseRerankBlock;
@@ -170,6 +171,21 @@ public class RagAssistantAppService {
         });
     }
 
+    /**
+     * 开始引导（非流式）：桥调 Python {@code GET /guide}，返回模块引导底座池出题
+     * （1~3 条，必含 ≥1 条 RAG 方向）。0 token、非 SSE、不占冻结时序。
+     * currentProject 可选（缺省 Python 兜底默认模块）。
+     */
+    public Mono<RagGuideDTO> guide(String currentProject) {
+        return ragAssistantPort.guide(currentProject).map(json -> {
+            try {
+                return SNAKE_MAPPER.readValue(json, RagGuideDTO.class);
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("引导响应解析失败: " + e.getMessage(), e);
+            }
+        });
+    }
+
     /** rerank 事件（camel）→ 捕获精排块（供忠实度打分喂片段摘要）。 */
     private void captureRerankBlocks(ServerSentEvent<String> ev, AtomicReference<List<SseRerankBlock>> ref) {
         if (!"rerank".equals(ev.event()) || ev.data() == null) {
@@ -213,6 +229,11 @@ public class RagAssistantAppService {
             SseDoneDTO done = CAMEL_MAPPER.readValue(ev.data(), SseDoneDTO.class);
             if (done.getAnswer() == null || done.getAnswer().isBlank() || done.getReason() != null) {
                 return; // 非生成轮不评分
+            }
+            if (ragQualityGrader == null) {
+                // 打分是尽力而为的旁路：无打分器（非 Spring 装配/单测）时不打断回答链路
+                log.debug("[rag-quality] 无打分器注入，跳过本轮评分");
+                return;
             }
             long latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
             List<String> quotedKeys = done.getQuotedKeys() == null ? List.of() : done.getQuotedKeys();

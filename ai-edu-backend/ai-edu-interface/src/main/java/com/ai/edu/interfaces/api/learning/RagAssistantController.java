@@ -4,6 +4,7 @@ import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
 import com.ai.edu.application.dto.learning.rag.RagEvalReportDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalRunDTO;
+import com.ai.edu.application.dto.learning.rag.RagGuideDTO;
 import com.ai.edu.application.service.learning.RagAssistantAppService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,6 +83,16 @@ public class RagAssistantController {
     public Mono<ApiResponse<RagEvalRunDTO>> evalRun(HttpSession session) {
         requireStudent(session);
         return ragAssistantAppService.evalRun().map(ApiResponse::success);
+    }
+
+    /** 开始引导（Java 代理）：转发 Python 模块引导底座池出题（1~3 条，必含 ≥1 条 RAG 方向）。非学生 → 403。 */
+    @Operation(summary = "开始引导", description = "会话入口 chips，模块底座池驱动，必含 RAG 方向；STUDENT 角色门；currentProject 可选，缺省 Python 兜底")
+    @GetMapping("/guide")
+    public Mono<ApiResponse<RagGuideDTO>> guide(
+            @RequestParam(value = "currentProject", required = false) String currentProject,
+            HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.guide(currentProject).map(ApiResponse::success);
     }
 
     private void requireStudent(HttpSession session) {

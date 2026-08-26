@@ -192,6 +192,31 @@ class RagAssistantAppServiceTest {
     }
 
     @Test
+    @DisplayName("guide：Python 引导 JSON → RagGuideDTO（suggestions 池，title/direction 映射）")
+    void guide_parsesPoolJson() {
+        when(port.guide("ai-tutoring")).thenReturn(reactor.core.publisher.Mono.just(
+                "{\"suggestions\":["
+                + "{\"title\":\"AI答疑在项目里做什么？\",\"direction\":\"intro\"},"
+                + "{\"title\":\"为什么拆 question_understand / decide / generate？\",\"direction\":\"difficulty\"}]}"));
+
+        var guide = appService.guide("ai-tutoring").block();
+        assertEquals(2, guide.getSuggestions().size());
+        assertEquals("AI答疑在项目里做什么？", guide.getSuggestions().get(0).getTitle());
+        assertEquals("intro", guide.getSuggestions().get(0).getDirection());
+        assertEquals("difficulty", guide.getSuggestions().get(1).getDirection());
+    }
+
+    @Test
+    @DisplayName("guide：缺省 currentProject → 透传 null 由 Python 兜底默认模块")
+    void guide_nullProjectPassThrough() {
+        when(port.guide(null)).thenReturn(reactor.core.publisher.Mono.just(
+                "{\"suggestions\":[]}"));
+
+        var guide = appService.guide(null).block();
+        assertTrue(guide.getSuggestions() == null || guide.getSuggestions().isEmpty());
+    }
+
+    @Test
     @DisplayName("ask: done（非空答案+正常轮）触发异步质量打分，传 question/answer/quotedKeys/块摘要")
     void ask_schedulesGradeOnDone() {
         when(port.ask(any())).thenAnswer(inv -> Flux.just(

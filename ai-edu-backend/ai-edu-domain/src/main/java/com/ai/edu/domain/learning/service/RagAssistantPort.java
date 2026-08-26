@@ -44,4 +44,12 @@ public interface RagAssistantPort {
      * 返回 Python 原始 JSON 字符串，由应用层反序列化。
      */
     Mono<String> evalRun();
+
+    /**
+     * 开始引导（非流式）：转发 Python {@code GET /api/rag/assistant/guide}，返回模块引导底座池
+     * 出题（1~3 条，必含 ≥1 条 RAG 方向）。0 token、非 SSE、不占冻结时序。
+     * currentProject 为可选模块锚点（缺省由 Python 兜底默认模块）。
+     * 返回 Python 原始 JSON 字符串，由应用层反序列化。
+     */
+    Mono<String> guide(String currentProject);
 }

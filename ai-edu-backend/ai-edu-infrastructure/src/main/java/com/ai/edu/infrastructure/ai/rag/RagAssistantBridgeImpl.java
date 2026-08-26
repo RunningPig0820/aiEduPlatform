@@ -41,6 +41,7 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
     private static final String SOURCE_PATH = "/api/rag/source";
     private static final String EVAL_REPORT_PATH = "/api/rag/assistant/eval/report";
     private static final String EVAL_RUN_PATH = "/api/rag/assistant/eval/run";
+    private static final String GUIDE_PATH = "/api/rag/assistant/guide";
     private static final Duration ASK_TIMEOUT = Duration.ofSeconds(60);
 
     @Resource(name = "ragWebClient")
@@ -99,6 +100,25 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
                         e -> new TutoringAgentException("RAG 重评测服务暂不可用", e))
                 .onErrorMap(WebClientResponseException.class,
                         e -> new TutoringAgentException("RAG 重评测服务暂不可用 (status="
+                                + e.getStatusCode().value() + ")", e));
+    }
+
+    @Override
+    public Mono<String> guide(String currentProject) {
+        // 桥 → Python 用 snake_case 契约（current_project）；缺省不发参，Python 兜底默认模块
+        String uri = (currentProject == null || currentProject.isBlank())
+                ? GUIDE_PATH
+                : GUIDE_PATH + "?current_project="
+                        + URLEncoder.encode(currentProject, StandardCharsets.UTF_8);
+        log.info("[rag-assistant] 桥调 Python guide, currentProject={}, uri={}", currentProject, uri);
+        return ragWebClient.get()
+                .uri(uri)
+                .retrieve()
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientRequestException.class,
+                        e -> new TutoringAgentException("RAG 引导服务暂不可用", e))
+                .onErrorMap(WebClientResponseException.class,
+                        e -> new TutoringAgentException("RAG 引导服务暂不可用 (status="
                                 + e.getStatusCode().value() + ")", e));
     }
 

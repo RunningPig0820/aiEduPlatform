@@ -293,6 +293,65 @@ class RagAssistantBridgeImplTest {
         assertThrows(TutoringAgentException.class, () -> client.evalRun().block());
     }
 
+    // ==================== guide 开始引导 ====================
+
+    private RagAssistantBridgeImpl buildGuideClient(WebClient.ResponseSpec responseSpec) {
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", buildEvalGetClient(responseSpec));
+        return client;
+    }
+
+    @Test
+    @DisplayName("guide: 成功 → 返回 Python 原始 JSON（模块引导池 suggestions）")
+    void guide_returnsRawJson() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(
+                "{\"suggestions\":[{\"title\":\"AI答疑在项目里做什么？\",\"direction\":\"intro\"}]}"));
+
+        RagAssistantBridgeImpl client = buildGuideClient(responseSpec);
+
+        StepVerifier.create(client.guide("ai-tutoring"))
+                .expectNext("{\"suggestions\":[{\"title\":\"AI答疑在项目里做什么？\",\"direction\":\"intro\"}]}")
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("guide: 透传 current_project query（snake_case）；缺省不发参由 Python 兜底")
+    void guide_passesCurrentProjectParam() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("{\"suggestions\":[]}"));
+        AtomicReference<String> uriRef = new AtomicReference<>();
+        WebClient webClient = mock(WebClient.class);
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri(anyString())).thenAnswer(inv -> {
+            uriRef.set(inv.getArgument(0));
+            return uriSpec;
+        });
+        when(uriSpec.retrieve()).thenReturn(responseSpec);
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", webClient);
+
+        client.guide("ai-tutoring").block();
+        assertTrue(uriRef.get().contains("current_project=ai-tutoring"), uriRef.get());
+
+        client.guide(null).block();
+        assertFalse(uriRef.get().contains("?"), uriRef.get()); // 缺省不带 query
+    }
+
+    @Test
+    @DisplayName("guide: 传输异常 → TutoringAgentException")
+    void guide_transportError() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
+                        org.springframework.http.HttpMethod.GET, URI.create("http://x"), HttpHeaders.EMPTY)));
+
+        RagAssistantBridgeImpl client = buildGuideClient(responseSpec);
+
+        assertThrows(TutoringAgentException.class, () -> client.guide("ai-tutoring").block());
+    }
+
     @Test
     @DisplayName("evalReport: 暂无报告 → 注册 404 谓词，错误函数产 EntityNotFoundException（10002）")
     void evalReport_notFoundWiring() {
