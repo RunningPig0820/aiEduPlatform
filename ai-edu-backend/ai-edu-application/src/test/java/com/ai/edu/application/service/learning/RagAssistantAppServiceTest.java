@@ -254,6 +254,22 @@ class RagAssistantAppServiceTest {
     }
 
     @Test
+    @DisplayName("ask: 问候轮（intent category=问候）不触发质量打分（固定欢迎语非真实答案）")
+    void ask_skipsGradeOnGreeting() {
+        when(port.ask(any())).thenReturn(Flux.just(
+                sse("intent", "{\"anchor\":\"ai-tutoring\",\"category\":\"问候\",\"ambiguous\":false}"),
+                sse("done", "{\"answer\":\"你好！欢迎使用……\","
+                        + "\"tokens_usage\":{\"prompt_tokens\":0,\"completion_tokens\":0,\"cache_hit_tokens\":0,\"total_tokens\":0},"
+                        + "\"trace_id\":\"trc\",\"suggestions\":[\"想了解 RAG 的整体架构吗？\"],\"reason\":null}")));
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextCount(3) // permission + intent + done
+                .verifyComplete();
+
+        verify(grader, never()).grade(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("evalReport: 并入 realConversation（读 Redis 聚合 → avgQuality/quotedRatio/avgLatencyMs）")
     void evalReport_mergesRealConversation() {
         when(port.evalReport()).thenReturn(reactor.core.publisher.Mono.just(

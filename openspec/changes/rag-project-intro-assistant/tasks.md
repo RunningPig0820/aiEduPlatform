@@ -89,13 +89,13 @@
 
 ## M6 问题提示（开始引导 + 结束建议必含 RAG + clarify）
 
-- [ ] 6.1 Python 引导底座池 + 开始引导：建**每模块引导底座池** `{module_id: {direction: [问题]}}`（`ai-tutoring` 来源 `docs/rag/ai-tutoring/7. 引导问题/引导问题.md`，以文件为准随切片迭代；direction=intro/operation/data_relation/difficulty + rag 常驻；问题对齐语料保证可答；后续模块各加条目可扩展）；`GET /api/rag/assistant/guide?currentProject=` 从池取 3 条（**必含 ≥1 条 RAG 方向**），0 token、非 SSE、不占冻结时序
-- [ ] 6.2 Python 结束建议（池约束）：done 后 LLM 生成 1~3 条（向 ①项目介绍②操作③数据关联④难点），**提示词注入池内问题作「可提问范围」硬约束——只生成与池内方向类似的问题，不得自由发挥超出池子**；**必含 ≥1 条 RAG 方向**（RAG 始终带上，非并列模块）；LLM 失败/形状异常 → **池内随机抽 2~3 条**兜底（非自由发挥）
+- [x] 6.1 Python 引导底座池 + 开始引导：建**每模块引导底座池** `{module_id: {direction: [问题]}}`（`ai-tutoring` 来源 `docs/rag/ai-tutoring/7. 引导问题/引导问题.md`，以文件为准随切片迭代；direction=intro/operation/data_relation/difficulty + rag 常驻；问题对齐语料保证可答；后续模块各加条目可扩展）；`GET /api/rag/assistant/guide?currentProject=` 从池取 3 条（**必含 ≥1 条 RAG 方向**），0 token、非 SSE、不占冻结时序 —— **Python 已落地**（guide_pool.py 75 题/去重/子集/兜底 + guide(current_project)；Java 侧实测响应 shape 正确、无参兜底 ai-tutoring；direction 值已切 intro/operation/data_relation/difficulty/rag）
+- [x] 6.2 Python 结束建议（池约束）：done 后 LLM 生成 1~3 条（向 ①项目介绍②操作③数据关联④难点），**提示词注入池内问题作「可提问范围」硬约束——只生成与池内方向类似的问题，不得自由发挥超出池子**；**必含 ≥1 条 RAG 方向**（RAG 始终带上，非并列模块）；LLM 失败/形状异常 → **池内随机抽 2~3 条**兜底（非自由发挥） —— **Python 已落地**（gen_suggestions 注入池内 75 题范围 + 兜底池内随机 2 条必含 rag）
 - [ ] 6.3 Python clarify 澄清轮：`ambiguous=true` 且候选 ≥2 → `clarify` 事件（固定话术+candidates+default），0 生成 token、不计答案轮次、最多一轮；default 绑定 current_project > 会话锚点；再模糊直接默认；**候选来源** = ① intent LLM 输出 candidates（主源）② 会话最近 N 轮锚点去重（兜底）③ 仍 <2 不澄清
   - **点选交互定稿（2026-08-25）**：clarify 后前端点选候选 → **重发原问 + current_project=点选模块**（非裸功能名）；intent 以 current_project 为**权威消歧锚点**直接锚定、**不因问题含糊再拉 ambiguous**；点选模块与会话锚点不同 → `switch` 事件照常触发
 - [x] 6.4 done 补 suggestions 字段 + guide 接口中继（Java；guide 透传 currentProject 给 Python，缺省后端兜底）—— **已实现**（GET /api/rag/assistant/guide 代理：Port/Bridge/AppService/Controller requireStudent；透传 ?current_project=，缺省 Python 兜底；done.suggestions 已在 M4 中继透传。测试 41/41 含 guide 7 例）
 - [ ] 6.5 三端对接测试：前端开始引导 chips + 结束引导 chips（含 RAG，点击再问）+ clarify 澄清追问 UI；后端+模型端联调 RAG-SSE-004/005、SUGG-001~003
-- [ ] 6.6 Python 问候识别 + 欢迎引导（D-E 定稿）：intent 判 `category=问候`/`ambiguous=false`（**不触发 clarify**，实联调发现"你好"被误判 ambiguous）；问候语走固定欢迎话术 + 引导建议（复用模块引导池指向 ①②③④），0 生成 token、不 recall 不 generate
+- [x] 6.6 Python 问候识别 + 欢迎引导（D-E 定稿）：intent 判 `category=问候`/`ambiguous=false`（**不触发 clarify**，实联调发现"你好"被误判 ambiguous）；问候语走固定欢迎话术 + 引导建议（复用模块引导池指向 ①②③④），0 生成 token、不 recall 不 generate —— **Python 已落地**（is_greeting 关键词预检 + category 问候枚举；done 返回欢迎语 total_tokens=0 + 池内引导建议）；**Java 适配**：scheduleGradeOnDone 捕获 intent.category，问候轮跳过质量打分（欢迎语非真实答案，不入 realConversation 评估聚合），新增单测
 
 ## M7 会话收尾（close + 累计 token + 补查）
 

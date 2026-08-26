@@ -96,14 +96,18 @@ public class RagAssistantAppService {
                 traceId, command.getSessionId(), command.getCurrentProject());
         long startNanos = System.nanoTime();
         AtomicReference<List<SseRerankBlock>> blocksRef = new AtomicReference<>(List.of());
+        AtomicReference<String> categoryRef = new AtomicReference<>();
         return Flux.concat(
                 Flux.just(sse("permission", writeCamel(permission))),
                 ragAssistantPort.ask(request)
                         .map(ev -> rebuildEvent(ev, traceId))
                         // 捕获 rerank 块（title/summary 供忠实度打分），done 前 ready
                         .doOnNext(ev -> captureRerankBlocks(ev, blocksRef))
+                        // 捕获 intent category（问候轮识别，避免欢迎语被误打分进评估）
+                        .doOnNext(ev -> captureIntentCategory(ev, categoryRef))
                         // 每轮真实问答 done 后：后台异步 LLM 打分 → 累计进评估报告（不阻塞 SSE）
-                        .doOnNext(ev -> scheduleGradeOnDone(command, ev, blocksRef.get(), startNanos)));
+                        .doOnNext(ev -> scheduleGradeOnDone(command, ev, blocksRef.get(), startNanos,
+                                categoryRef.get())));
     }
 
     /**
@@ -201,6 +205,21 @@ public class RagAssistantAppService {
         }
     }
 
+    /** intent 事件（camel）→ 捕获 category（问候轮识别，M6 ④：category=问候 不触发质量打分）。 */
+    private void captureIntentCategory(ServerSentEvent<String> ev, AtomicReference<String> ref) {
+        if (!"intent".equals(ev.event()) || ev.data() == null) {
+            return;
+        }
+        try {
+            SseIntentDTO dto = CAMEL_MAPPER.readValue(ev.data(), SseIntentDTO.class);
+            if (dto.getCategory() != null) {
+                ref.set(dto.getCategory());
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("[rag-quality] intent category 解析失败: {}", e.getMessage());
+        }
+    }
+
     /** 把精排块格式化为 "【标题】摘要" 片段列表（优先命中引用的块，最多 5 条）。 */
     private List<String> formatBlockSummaries(List<SseRerankBlock> blocks, List<String> quotedKeys) {
         if (blocks == null || blocks.isEmpty()) {
@@ -221,7 +240,7 @@ public class RagAssistantAppService {
      * （boundary=low_confidence / 澄清轮 answer 空或 reason 非 null 跳过）。
      */
     private void scheduleGradeOnDone(RagAskCommand command, ServerSentEvent<String> ev,
-                                     List<SseRerankBlock> blocks, long startNanos) {
+                                     List<SseRerankBlock> blocks, long startNanos, String category) {
         if (!"done".equals(ev.event()) || ev.data() == null) {
             return;
         }
@@ -229,6 +248,11 @@ public class RagAssistantAppService {
             SseDoneDTO done = CAMEL_MAPPER.readValue(ev.data(), SseDoneDTO.class);
             if (done.getAnswer() == null || done.getAnswer().isBlank() || done.getReason() != null) {
                 return; // 非生成轮不评分
+            }
+            if ("问候".equals(category)) {
+                // 问候轮：固定欢迎语（0 token），非真实答案，不入评估聚合（M6 ④）
+                log.debug("[rag-quality] 问候轮，跳过评分");
+                return;
             }
             if (ragQualityGrader == null) {
                 // 打分是尽力而为的旁路：无打分器（非 Spring 装配/单测）时不打断回答链路

@@ -61,13 +61,13 @@ class RagAssistantPythonSmokeTest {
 
         AtomicReference<String> permissionTraceId = new AtomicReference<>();
 
-        // 复现：前端实测 source 50005 的路径（中文目录/文件名）
-        var sourceMono = bridge.source("3.代码/分析-04-学科门.md");
+        // U4 后 source 按 COS key 读普通桶（file_path 形如 rag-source/<模块>/<路径>.md）；用真实 key 验证中文目录/COS 路径
+        var sourceMono = bridge.source("rag-source/ai-tutoring/语雀/语雀-AI答疑.md");
         try {
             String content = sourceMono.block();
-            assertTrue(content != null && content.contains("学科"), "source 应返回原文, got=" + (content == null ? "null" : content.substring(0, Math.min(50, content.length()))));
+            assertTrue(content != null && content.contains("AI答疑"), "source 应返回原文, got=" + (content == null ? "null" : content.substring(0, Math.min(50, content.length()))));
         } catch (Exception e) {
-            throw new AssertionError("source 50005 复现: " + e, e);
+            throw new AssertionError("source 复现失败: " + e, e);
         }
 
         Flux<ServerSentEvent<String>> stream = appService.ask(command);

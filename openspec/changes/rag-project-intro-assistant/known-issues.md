@@ -19,7 +19,7 @@
 - **现象**: rerank 块的 `file_path` 很多指向的地址不对(依赖本地/相对路径),前端"查看原文"可能打不开或指向错误文档
 - **影响**: 引用面板"查看原文"体验断裂
 - **归属**: Python/Model 侧(语料地址统一迁移到 COS 存储);Java 侧 source 代理(`GET /api/rag/assistant/source?path=`)随 file_path 格式变化可能需要小适配
-- **修复时机**: 三端对接完成后统一迁移到 COS,并同步更新 `file_path` 字段的地址格式
+- **修复时机**: ~~三端对接完成后统一迁移到 COS~~ → **Python U4 已落地(2026-08-26)**: source 改读 COS 普通桶,`file_path` 为 COS key(`rag-source/<模块>/<路径>.md`, 仅允许 rag-source/rag-slices 前缀);Java source 代理透传 key 即可,冒烟测试改用真实 COS key 验证通过。遗留: 历史切片 file_path 是否全量入桶待 Python 侧自核
 
 ## 问题 3:缺少流程图
 
