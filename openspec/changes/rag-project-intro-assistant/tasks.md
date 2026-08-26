@@ -99,10 +99,10 @@
 
 ## M7 会话收尾（close + 累计 token + 补查）
 
-- [ ] 7.1 Java 会话累计 token：每轮 done 后累加进 Redis `rag:assistant:session:{sessionId}:usage`（TTL 24h 对齐 tutoring），含轮数
-- [ ] 7.2 Java close 端点：`POST /api/rag/assistant/sessions/{sessionId}/close`（角色门同上；中止在途流 + 置 session closed + 返回累计 usage/轮数）；closed 后再 ask → 固定话术"本轮对话已结束，可开启新对话"0 token；幂等处理
-- [ ] 7.3 Java turns 存储与补查：每轮 done 后按 trace_id 落 Redis（`rag:assistant:trace:{traceId}`，TTL 24h）；`GET /api/rag/assistant/turns/{traceId}` 读 Redis 返回完整结果（answer/quotedKeys/tokensUsage/suggestions；不存在 → 10002）。**turns 只存 Java Redis，Python 不落会话 trace**（Python eval trace jsonl 与补查分开）
-- [ ] 7.4 控制器测试全量：角色门/事件时序/断线补查/评估报告/关闭对话（累计结算/关闭后再问/幂等）
+- [x] 7.1 Java 会话累计 token：每轮 done 后累加进 Redis `rag:assistant:session:{sessionId}:usage`（TTL 24h 对齐 tutoring），含轮数 —— **已实现**（persistRound→accumulateSessionUsage 读-改-写：prompt/completion/cacheHit/total + rounds；落库失败不阻断回答链路）
+- [x] 7.2 Java close 端点：`POST /api/rag/assistant/sessions/{sessionId}/close`（角色门同上；置 session closed + 返回累计 usage/轮数）；closed 后再 ask → 固定话术"本轮对话已结束，可开启新对话"0 token；幂等处理 —— **已实现**（close 读 Redis usage 返回结算、置 closed 标志幂等、未知会话 10002；ask 前置 closed 短路→permission+done(话术) 不调 Python 不落库不评分；**中止在途流**依赖前端断连→Python is_disconnected 取消，Java 侧置 closed 标志）
+- [x] 7.3 Java turns 存储与补查：每轮 done 后按 trace_id 落 Redis（`rag:assistant:trace:{traceId}`，TTL 24h）；`GET /api/rag/assistant/turns/{traceId}` 读 Redis 返回完整结果（answer/quotedKeys/tokensUsage/suggestions；不存在 → 10002）。**turns 只存 Java Redis，Python 不落会话 trace**（Python eval trace jsonl 与补查分开） —— **已实现**（persistRound 存 done camel JSON；turn 读回 SseDoneDTO；新 DTO RagCloseDTO/RagSessionUsageDTO）
+- [x] 7.4 控制器测试全量：角色门/事件时序/断线补查/评估报告/关闭对话（累计结算/关闭后再问/幂等） —— **已实现**（AppService +7：closed 短路/累计+trace 落库/close 正常/幂等/未知 10002/turn 命中/缺失 10002；Controller +2：close/turn 学生 200 教师 403；冒烟真实链路复跑通过）
 - [ ] 7.5 三端对接测试：前端关闭对话按钮 + 结算面板（累计 token + 轮数）+ 断线凭 trace_id 补查；后端+模型端联调 RAG-CLOSE-001~006、RAG-COST-004~006
 
 ## M8 端到端收尾（全链路回归）

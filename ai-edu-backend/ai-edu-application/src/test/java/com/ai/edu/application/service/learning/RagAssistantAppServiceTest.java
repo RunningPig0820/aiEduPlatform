@@ -1,6 +1,7 @@
 package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
+import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import com.ai.edu.domain.learning.model.contract.RagQualityScore;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
@@ -16,13 +17,17 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -340,5 +345,105 @@ class RagAssistantAppServiceTest {
                 })
                 .expectNextMatches(ev -> "done".equals(ev.event()))
                 .verifyComplete();
+    }
+
+    // ==================== M7 会话收尾（累计 token / close / turns 补查） ====================
+
+    @Test
+    @DisplayName("ask: 会话已关闭 → permission + done(固定话术)，不调 Python、不落库、不评分")
+    void ask_closedSessionShortCircuit() {
+        when(redis.get("rag:assistant:session:sess-001:closed")).thenReturn("1");
+
+        StepVerifier.create(appService.ask(command()))
+                .assertNext(ev -> assertTrue("permission".equals(ev.event())))
+                .assertNext(ev -> {
+                    assertTrue("done".equals(ev.event()), ev.event());
+                    assertTrue(ev.data().contains("本轮对话已结束"), ev.data());
+                    assertTrue(ev.data().contains("\"totalTokens\":0"), ev.data());
+                })
+                .verifyComplete();
+        verify(port, never()).ask(any());
+        verify(grader, never()).grade(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("ask: done 落库——会话累计 token（7.1）+ trace 快照（7.3），TTL 24h")
+    void ask_persistsSessionUsageAndTrace() {
+        when(port.ask(any())).thenReturn(Flux.just(
+                sse("intent", "{\"anchor\":\"ai-tutoring\"}"),
+                sse("done", "{\"answer\":\"答案\",\"quoted_keys\":[\"b1\"],"
+                        + "\"tokens_usage\":{\"prompt_tokens\":320,\"completion_tokens\":140,\"cache_hit_tokens\":0,\"total_tokens\":460},"
+                        + "\"trace_id\":\"trc\",\"suggestions\":[],\"reason\":null}")));
+        when(redis.get("rag:assistant:session:sess-001:usage")).thenReturn(null);
+
+        StepVerifier.create(appService.ask(command()))
+                .expectNextCount(3) // permission + intent + done
+                .verifyComplete();
+
+        // 7.1 会话累计（读-改-写，起始 null → 首轮 320/140/0/460 + rounds=1）
+        verify(redis).set(eq("rag:assistant:session:sess-001:usage"),
+                contains("\"promptTokens\":320"), eq(24L), eq(TimeUnit.HOURS));
+        // 7.3 trace 快照（traceId 为 Java 生成 UUID，只校验 key 前缀）
+        verify(redis).set(startsWith("rag:assistant:trace:"), contains("\"answer\":\"答案\""),
+                eq(24L), eq(TimeUnit.HOURS));
+    }
+
+    @Test
+    @DisplayName("close: 有累计 → 置 closed + 返回 usage/轮数")
+    void close_returnsUsage() {
+        when(redis.get("rag:assistant:session:sess-001:closed")).thenReturn(null);
+        when(redis.get("rag:assistant:session:sess-001:usage"))
+                .thenReturn("{\"promptTokens\":1600,\"completionTokens\":700,\"cacheHitTokens\":200,\"totalTokens\":2300,\"rounds\":5}");
+
+        var result = appService.close("sess-001").block();
+        assertTrue(result.getClosed());
+        assertEquals(5, result.getRounds());
+        assertEquals(2300, result.getSessionUsage().getTotalTokens());
+        verify(redis).set(eq("rag:assistant:session:sess-001:closed"), eq("1"),
+                eq(24L), eq(TimeUnit.HOURS));
+    }
+
+    @Test
+    @DisplayName("close: 已关闭 → 幂等返回 closed=true（不重复写 closed 标志）")
+    void close_idempotentWhenAlreadyClosed() {
+        when(redis.get("rag:assistant:session:sess-001:closed")).thenReturn("1");
+        when(redis.get("rag:assistant:session:sess-001:usage"))
+                .thenReturn("{\"promptTokens\":10,\"totalTokens\":10,\"rounds\":1}");
+
+        var result = appService.close("sess-001").block();
+        assertTrue(result.getClosed());
+        verify(redis, never()).set(eq("rag:assistant:session:sess-001:closed"), eq("1"),
+                eq(24L), eq(TimeUnit.HOURS));
+    }
+
+    @Test
+    @DisplayName("close: 未知会话（无累计且未关闭）→ EntityNotFoundException(10002)")
+    void close_unknownSessionThrows() {
+        when(redis.get("rag:assistant:session:sess-001:closed")).thenReturn(null);
+        when(redis.get("rag:assistant:session:sess-001:usage")).thenReturn(null);
+
+        assertThrows(EntityNotFoundException.class, () -> appService.close("sess-001").block());
+    }
+
+    @Test
+    @DisplayName("turn: trace 存在 → 返回 SseDoneDTO 完整结果")
+    void turn_returnsDone() {
+        when(redis.get("rag:assistant:trace:trc-1"))
+                .thenReturn("{\"answer\":\"答案\",\"quotedKeys\":[\"b1\"],"
+                        + "\"tokensUsage\":{\"promptTokens\":1,\"completionTokens\":1,\"cacheHitTokens\":0,\"totalTokens\":2},"
+                        + "\"traceId\":\"trc-1\",\"suggestions\":[\"想了解...\"],\"reason\":null}");
+
+        var done = appService.turn("trc-1").block();
+        assertEquals("答案", done.getAnswer());
+        assertEquals("trc-1", done.getTraceId());
+        assertEquals(2, done.getTokensUsage().getTotalTokens());
+    }
+
+    @Test
+    @DisplayName("turn: trace 不存在 → EntityNotFoundException(10002)")
+    void turn_missingThrows() {
+        when(redis.get("rag:assistant:trace:trc-missing")).thenReturn(null);
+
+        assertThrows(EntityNotFoundException.class, () -> appService.turn("trc-missing").block());
     }
 }

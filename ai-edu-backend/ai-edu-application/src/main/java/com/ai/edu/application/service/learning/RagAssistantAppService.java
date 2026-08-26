@@ -1,10 +1,12 @@
 package com.ai.edu.application.service.learning;
 
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
+import com.ai.edu.application.dto.learning.rag.RagCloseDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalReportDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalRunDTO;
 import com.ai.edu.application.dto.learning.rag.RagGuideDTO;
 import com.ai.edu.application.dto.learning.rag.RagRealConversationDTO;
+import com.ai.edu.application.dto.learning.rag.RagSessionUsageDTO;
 import com.ai.edu.application.dto.learning.rag.SseBoundaryDTO;
 import com.ai.edu.application.dto.learning.rag.SseRerankBlock;
 import com.ai.edu.application.dto.learning.rag.SseRerankDTO;
@@ -16,6 +18,8 @@ import com.ai.edu.application.dto.learning.rag.SseRerankDTO;
 import com.ai.edu.application.dto.learning.rag.SseRewriteDTO;
 import com.ai.edu.application.dto.learning.rag.SseSwitchDTO;
 import com.ai.edu.application.dto.learning.rag.SseTokenDTO;
+import com.ai.edu.application.dto.learning.rag.SseTokensUsageDTO;
+import com.ai.edu.common.exception.EntityNotFoundException;
 import com.ai.edu.domain.learning.model.contract.RagAskRequest;
 import com.ai.edu.domain.learning.model.contract.RagQualityScore;
 import com.ai.edu.domain.learning.service.RagAssistantPort;
@@ -67,6 +71,15 @@ public class RagAssistantAppService {
     /** 真实对话质量统计 Redis key（每轮 LLM 打分累计，TTL 24h） */
     private static final String EVAL_RECENT_KEY = "rag:assistant:eval:recent";
 
+    /** M7 会话收尾 Redis 键/常量（对齐 tutoring：Java 聚合点，Python 无状态） */
+    private static final String SESSION_KEY_PREFIX = "rag:assistant:session:";
+    private static final String SESSION_USAGE_SUFFIX = ":usage";
+    private static final String SESSION_CLOSED_SUFFIX = ":closed";
+    private static final String TRACE_KEY_PREFIX = "rag:assistant:trace:";
+    private static final long SESSION_TTL_HOURS = 24;
+    /** 会话已关闭后再 ask → 固定话术（0 token，不调 Python；对齐 Python CLOSED_MSG） */
+    private static final String CLOSED_MSG = "本轮对话已结束，可开启新对话。";
+
     @Resource
     private RagAssistantPort ragAssistantPort;
 
@@ -83,6 +96,11 @@ public class RagAssistantAppService {
         String traceId = UUID.randomUUID().toString();
         SsePermissionDTO permission = SsePermissionDTO.builder()
                 .role("STUDENT").allowed(true).traceId(traceId).build();
+        // M7 7.2：会话已关闭 → 短路固定话术（0 token，不调 Python）
+        if (isSessionClosed(command.getSessionId())) {
+            log.info("[rag-assistant] ask 会话已关闭, 短路话术 sessionId={}", command.getSessionId());
+            return closedSessionStream(permission, traceId);
+        }
         RagAskRequest request = RagAskRequest.builder()
                 .question(command.getQuestion())
                 .sessionId(command.getSessionId())
@@ -105,9 +123,59 @@ public class RagAssistantAppService {
                         .doOnNext(ev -> captureRerankBlocks(ev, blocksRef))
                         // 捕获 intent category（问候轮识别，避免欢迎语被误打分进评估）
                         .doOnNext(ev -> captureIntentCategory(ev, categoryRef))
+                        // M7 7.1/7.3：每轮 done 落库（会话累计 token + trace 补查快照）
+                        .doOnNext(ev -> persistRound(command, ev, traceId))
                         // 每轮真实问答 done 后：后台异步 LLM 打分 → 累计进评估报告（不阻塞 SSE）
                         .doOnNext(ev -> scheduleGradeOnDone(command, ev, blocksRef.get(), startNanos,
                                 categoryRef.get())));
+    }
+
+    /**
+     * 关闭对话（非流式）：置 session closed（Redis）+ 读回会话累计 token/轮数。
+     * 幂等：已关闭也返回 closed=true；未知 session（无累计且未关闭）→ EntityNotFoundException（10002）。
+     */
+    public Mono<RagCloseDTO> close(String sessionId) {
+        return Mono.fromCallable(() -> {
+            String usageKey = SESSION_KEY_PREFIX + sessionId + SESSION_USAGE_SUFFIX;
+            String closedKey = SESSION_KEY_PREFIX + sessionId + SESSION_CLOSED_SUFFIX;
+            String closed = redisService.get(closedKey);
+            String usageJson = redisService.get(usageKey);
+            if (closed == null && usageJson == null) {
+                throw new EntityNotFoundException("会话不存在");
+            }
+            if (closed == null) {
+                redisService.set(closedKey, "1", SESSION_TTL_HOURS, TimeUnit.HOURS);
+            }
+            int rounds = 0;
+            int prompt = 0, completion = 0, cacheHit = 0, total = 0;
+            if (usageJson != null) {
+                JsonNode agg = CAMEL_MAPPER.readTree(usageJson);
+                rounds = agg.path("rounds").asInt(0);
+                prompt = agg.path("promptTokens").asInt(0);
+                completion = agg.path("completionTokens").asInt(0);
+                cacheHit = agg.path("cacheHitTokens").asInt(0);
+                total = agg.path("totalTokens").asInt(0);
+            }
+            return RagCloseDTO.builder()
+                    .sessionId(sessionId).closed(true).rounds(rounds)
+                    .sessionUsage(RagSessionUsageDTO.builder()
+                            .promptTokens(prompt).completionTokens(completion)
+                            .cacheHitTokens(cacheHit).totalTokens(total).build())
+                    .build();
+        });
+    }
+
+    /**
+     * 断线补查单轮结果（非流式）：读 Redis trace 快照（每轮 done 落库），不存在 → 10002。
+     */
+    public Mono<SseDoneDTO> turn(String traceId) {
+        return Mono.fromCallable(() -> {
+            String json = redisService.get(TRACE_KEY_PREFIX + traceId);
+            if (json == null) {
+                throw new EntityNotFoundException("trace 不存在");
+            }
+            return CAMEL_MAPPER.readValue(json, SseDoneDTO.class);
+        });
     }
 
     /**
@@ -289,6 +357,72 @@ public class RagAssistantAppService {
         } catch (Exception e) {
             log.warn("[rag-quality] 累计失败: {}", e.getMessage());
         }
+    }
+
+    /** 会话是否已 closed（Redis closed 标志；Redis 异常 → 按未关闭处理，不阻断）。 */
+    private boolean isSessionClosed(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return false;
+        }
+        try {
+            return "1".equals(redisService.get(SESSION_KEY_PREFIX + sessionId + SESSION_CLOSED_SUFFIX));
+        } catch (Exception e) {
+            log.warn("[rag-assistant] 读会话 closed 标志失败: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /** 会话已关闭 → permission + done(固定话术)，0 token、不调 Python、不落库不评分。 */
+    private Flux<ServerSentEvent<String>> closedSessionStream(SsePermissionDTO permission, String traceId) {
+        SseDoneDTO done = SseDoneDTO.builder()
+                .answer(CLOSED_MSG).quotedKeys(List.of())
+                .tokensUsage(SseTokensUsageDTO.builder()
+                        .promptTokens(0).completionTokens(0).cacheHitTokens(0).totalTokens(0).build())
+                .traceId(traceId).suggestions(List.of()).reason(null).build();
+        return Flux.concat(
+                Flux.just(sse("permission", writeCamel(permission))),
+                Flux.just(sse("done", writeCamel(done))));
+    }
+
+    /**
+     * M7 7.1/7.3：每轮 done 后落库——①会话累计 token（close 结算用）②trace 快照（断线补查用）。
+     * 落库失败不阻断回答链路（尽力而为，只告警）。
+     */
+    private void persistRound(RagAskCommand command, ServerSentEvent<String> ev, String traceId) {
+        if (!"done".equals(ev.event()) || ev.data() == null) {
+            return;
+        }
+        try {
+            SseDoneDTO done = CAMEL_MAPPER.readValue(ev.data(), SseDoneDTO.class);
+            // 7.3 turns 补查：done 的 camel JSON 直接落 trace 键（TTL 24h）
+            redisService.set(TRACE_KEY_PREFIX + traceId, ev.data(), SESSION_TTL_HOURS, TimeUnit.HOURS);
+            // 7.1 会话累计 token + 轮数
+            accumulateSessionUsage(command.getSessionId(), done.getTokensUsage());
+        } catch (Exception e) {
+            log.warn("[rag-assistant] 会话落库失败: {}", e.getMessage());
+        }
+    }
+
+    /** 每轮 done 的 tokens_usage 累加进会话键（读-改-写，TTL 24h）。 */
+    private void accumulateSessionUsage(String sessionId, SseTokensUsageDTO usage) {
+        try {
+            String key = SESSION_KEY_PREFIX + sessionId + SESSION_USAGE_SUFFIX;
+            String current = redisService.get(key);
+            JsonNode agg = current == null ? CAMEL_MAPPER.createObjectNode() : CAMEL_MAPPER.readTree(current);
+            var node = CAMEL_MAPPER.createObjectNode();
+            node.put("promptTokens", agg.path("promptTokens").asInt(0) + nvl(usage == null ? null : usage.getPromptTokens()));
+            node.put("completionTokens", agg.path("completionTokens").asInt(0) + nvl(usage == null ? null : usage.getCompletionTokens()));
+            node.put("cacheHitTokens", agg.path("cacheHitTokens").asInt(0) + nvl(usage == null ? null : usage.getCacheHitTokens()));
+            node.put("totalTokens", agg.path("totalTokens").asInt(0) + nvl(usage == null ? null : usage.getTotalTokens()));
+            node.put("rounds", agg.path("rounds").asInt(0) + 1);
+            redisService.set(key, node.toString(), SESSION_TTL_HOURS, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("[rag-assistant] 会话累计 token 失败: {}", e.getMessage());
+        }
+    }
+
+    private int nvl(Integer v) {
+        return v == null ? 0 : v;
     }
 
     /**

@@ -224,6 +224,50 @@ class RagAssistantControllerTest {
         verify(appService, times(1)).guide(null);
     }
 
+    // ==================== M7 close / turns 会话收尾 ====================
+
+    @Test
+    @DisplayName("close：学生 → ApiResponse(结算)；非学生 → 403 且不调 appService")
+    void close_studentOk_teacher403() {
+        when(appService.close("sess-001")).thenReturn(reactor.core.publisher.Mono.just(
+                com.ai.edu.application.dto.learning.rag.RagCloseDTO.builder()
+                        .sessionId("sess-001").closed(true).rounds(5)
+                        .sessionUsage(com.ai.edu.application.dto.learning.rag.RagSessionUsageDTO.builder()
+                                .promptTokens(1600).completionTokens(700).cacheHitTokens(200).totalTokens(2300).build())
+                        .build()));
+        clearInvocations(appService);
+
+        var data = controller.close("sess-001", loginSession(STUDENT_ID, "STUDENT")).block().getData();
+        assertTrue(data.getClosed());
+        assertEquals(2300, data.getSessionUsage().getTotalTokens());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.close("sess-001", loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).close("sess-001");
+    }
+
+    @Test
+    @DisplayName("turn：学生 → ApiResponse(该轮完整结果)；非学生 → 403 且不调 appService")
+    void turn_studentOk_teacher403() {
+        when(appService.turn("trc-1")).thenReturn(reactor.core.publisher.Mono.just(
+                com.ai.edu.application.dto.learning.rag.SseDoneDTO.builder()
+                        .answer("答案").quotedKeys(List.of("b1")).traceId("trc-1")
+                        .tokensUsage(com.ai.edu.application.dto.learning.rag.SseTokensUsageDTO.builder()
+                                .promptTokens(1).completionTokens(1).cacheHitTokens(0).totalTokens(2).build())
+                        .suggestions(List.of()).reason(null).build()));
+        clearInvocations(appService);
+
+        var data = controller.turn("trc-1", loginSession(STUDENT_ID, "STUDENT")).block().getData();
+        assertEquals("答案", data.getAnswer());
+        assertEquals(2, data.getTokensUsage().getTotalTokens());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> controller.turn("trc-1", loginSession(TEACHER_ID, "TEACHER")));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(appService, times(1)).turn("trc-1");
+    }
+
     // ==================== helpers ====================
 
     private MockHttpSession loginSession(Long userId, String role) {

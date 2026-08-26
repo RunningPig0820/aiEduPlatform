@@ -2,9 +2,11 @@ package com.ai.edu.interfaces.api.learning;
 
 import com.ai.edu.application.dto.ApiResponse;
 import com.ai.edu.application.dto.learning.command.RagAskCommand;
+import com.ai.edu.application.dto.learning.rag.RagCloseDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalReportDTO;
 import com.ai.edu.application.dto.learning.rag.RagEvalRunDTO;
 import com.ai.edu.application.dto.learning.rag.RagGuideDTO;
+import com.ai.edu.application.dto.learning.rag.SseDoneDTO;
 import com.ai.edu.application.service.learning.RagAssistantAppService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -93,6 +96,22 @@ public class RagAssistantController {
             HttpSession session) {
         requireStudent(session);
         return ragAssistantAppService.guide(currentProject).map(ApiResponse::success);
+    }
+
+    /** 关闭对话（Java 侧结算）：置 session closed + 返回会话累计 token/轮数。非学生 → 403；未知会话 → 10002。 */
+    @Operation(summary = "关闭对话", description = "结束会话 + 结算累计 token/轮数；幂等（已关闭也返回 true）；STUDENT 角色门；未知会话 → 10002")
+    @PostMapping("/sessions/{sessionId}/close")
+    public Mono<ApiResponse<RagCloseDTO>> close(@PathVariable String sessionId, HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.close(sessionId).map(ApiResponse::success);
+    }
+
+    /** 断线补查单轮结果：读 Java Redis trace 快照。非学生 → 403；trace 不存在 → 10002。 */
+    @Operation(summary = "断线补查", description = "凭 traceId 找回该轮完整回答（answer/quotedKeys/tokensUsage/suggestions）；STUDENT 角色门；不存在 → 10002")
+    @GetMapping("/turns/{traceId}")
+    public Mono<ApiResponse<SseDoneDTO>> turn(@PathVariable String traceId, HttpSession session) {
+        requireStudent(session);
+        return ragAssistantAppService.turn(traceId).map(ApiResponse::success);
     }
 
     private void requireStudent(HttpSession session) {
