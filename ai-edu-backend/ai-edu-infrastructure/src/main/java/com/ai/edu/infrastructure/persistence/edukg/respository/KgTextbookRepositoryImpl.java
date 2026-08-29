@@ -119,4 +119,9 @@ public class KgTextbookRepositoryImpl implements KgTextbookRepository {
     public List<KgTextbook> findAllActiveByGrade(String grade) {
         return KgTextbookPo.toEntityList(kgTextbookMapper.selectAllActiveByGrade(grade));
     }
+
+    @Override
+    public List<KgTextbook> findAllActive() {
+        return KgTextbookPo.toEntityList(kgTextbookMapper.selectAllActive());
+    }
 }

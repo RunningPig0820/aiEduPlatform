@@ -69,4 +69,8 @@ public interface KgTextbookMapper extends BaseMapper<KgTextbookPo> {
 
     @Select("SELECT * FROM t_kg_textbook WHERE grade = #{grade} AND is_deleted = false ORDER BY sort")
     List<KgTextbookPo> selectAllActiveByGrade(@Param("grade") String grade);
+
+    /** 全年级活跃教材（统计栏空 grade 用：前端不选年级 → 全年级统计） */
+    @Select("SELECT * FROM t_kg_textbook WHERE is_deleted = false ORDER BY sort")
+    List<KgTextbookPo> selectAllActive();
 }

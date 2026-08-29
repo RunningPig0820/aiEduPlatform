@@ -167,10 +167,13 @@ public class KgKnowledgeSystemAppService {
     }
 
     /**
-     * 获取年级知识点统计
+     * 获取年级知识点统计。
+     * 空/缺省 grade → 全年级统计（前端统计栏不选年级传空，见 SystemStats）。
      */
     public StatsDTO getGradeStats(String grade) {
-        List<KgTextbook> textbooks = kgTextbookRepository.findAllActiveByGrade(grade);
+        List<KgTextbook> textbooks = (grade == null || grade.isBlank())
+                ? kgTextbookRepository.findAllActive()          // 全年级统计
+                : kgTextbookRepository.findAllActiveByGrade(grade);
 
         if (textbooks.isEmpty()) {
             return KgConvert.toStatsDTO(grade, 0, 0, 0, 0, Map.of());

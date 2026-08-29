@@ -285,6 +285,29 @@ class KgKnowledgeSystemAppServiceTest {
     }
 
     @Test
+    @Order(8)
+    @DisplayName("getGradeStats 空/缺省 grade — 应走全年级统计 findAllActive（统计栏不选年级）")
+    void getGradeStats_blankGrade_shouldQueryAllActive() {
+        List<KgTextbook> textbooks = List.of(
+                KgTextbook.create("uri:tb1", "数学上册", "七年级", "junior", "人教版", "math"),
+                KgTextbook.create("uri:tb2", "数学下册", "八年级", "junior", "人教版", "math")
+        );
+        when(kgTextbookRepository.findAllActive()).thenReturn(textbooks);
+        when(kgTextbookChapterRepository.findByTextbookUris(anyList())).thenReturn(List.of());
+        when(kgChapterSectionRepository.findByChapterUris(anyList())).thenReturn(List.of());
+        when(kgSectionKPRepository.findBySectionUris(anyList())).thenReturn(List.of());
+        when(kgKnowledgePointRepository.findByUris(anyList())).thenReturn(List.of());
+
+        StatsDTO result = kgKnowledgeSystemAppService.getGradeStats("");
+
+        assertNotNull(result);
+        // 关键：空 grade 必须走 findAllActive，而不是 findAllActiveByGrade('')（0 行 → 全 0）
+        org.mockito.Mockito.verify(kgTextbookRepository).findAllActive();
+        assertEquals(2, result.getTotalTextbooks());
+        assertEquals("", result.getGrade());
+    }
+
+    @Test
     @Order(9)
     @DisplayName("getGradeStats 难度为 null — 应归类为 unknown")
     void getGradeStats_nullDifficulty_shouldBeUnknown() {
