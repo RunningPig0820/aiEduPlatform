@@ -56,8 +56,8 @@ public class RagAssistantController {
         return ragAssistantAppService.ask(command);
     }
 
-    /** 发起一轮问答（非流式）：done 结构 + stages 摘要。非学生 → 403。 */
-    @Operation(summary = "发起问答（非流式）", description = "返回 done 结构 + stages 摘要，角色门仅 STUDENT")
+    /** 发起一轮问答（非流式，RAG-A-17 接真实）：done 结构 + stages 摘要（Python stream=false）。非学生 → 403。 */
+    @Operation(summary = "发起问答（非流式）", description = "真实 Python 非流式：done + stages 摘要，角色门仅 STUDENT")
     @PostMapping(value = "/ask/sync")
     public ApiResponse<Map<String, Object>> askSync(@Valid @RequestBody RagAskCommand command, HttpSession session) {
         requireStudent(session);

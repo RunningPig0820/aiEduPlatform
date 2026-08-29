@@ -96,6 +96,29 @@ class RagAssistantBridgeImplTest {
         assertFalse(json.contains("currentProject"), json);
     }
 
+    @Test
+    @DisplayName("RagAskRequest 缺省 currentProject → NON_NULL 省略字段，不序列化 current_project=null（防 Pydantic 422）")
+    void request_omitsNullCurrentProject() throws Exception {
+        // 与 RagWebClientConfig 一致的 mapper（NON_NULL）。前端不传 currentProject 时应省略字段
+        // （Pydantic str 显式 null 会 422 → 整轮 ask 失败；省略则 Python 兜底 rag-system）。
+        ObjectMapper mapper = new ObjectMapper()
+                .setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
+        RagAskRequest req = RagAskRequest.builder()
+                .question("RAG问答系统是干什么的")
+                .sessionId("sess-null-001")
+                .currentProject(null)
+                .history(List.of())
+                .traceId("trc-1")
+                .topK(3)
+                .stream(true)
+                .build();
+        String json = mapper.writeValueAsString(req);
+
+        assertFalse(json.contains("current_project"), "null current_project 应省略, got=" + json);
+        assertTrue(json.contains("\"question\""), json);
+        assertTrue(json.contains("\"trace_id\""), json);
+    }
+
     // ==================== SSE 中继保序 ====================
 
     @Test
@@ -148,6 +171,63 @@ class RagAssistantBridgeImplTest {
     }
 
     // ==================== Python 异常冒泡 ====================
+
+    // ==================== askSync 非流式（RAG-A-17） ====================
+
+    private RagAssistantBridgeImpl buildAskSyncClient(WebClient.ResponseSpec responseSpec) {
+        WebClient webClient = mock(WebClient.class);
+        WebClient.RequestBodyUriSpec uriSpec = mock(WebClient.RequestBodyUriSpec.class);
+        WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        when(webClient.post()).thenReturn(uriSpec);
+        when(uriSpec.uri(anyString())).thenReturn(uriSpec);
+        when(uriSpec.contentType(any(MediaType.class))).thenReturn(bodySpec);
+        when(bodySpec.accept(any(MediaType.class))).thenReturn(bodySpec);
+        when(bodySpec.bodyValue(any())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        RagAssistantBridgeImpl client = new RagAssistantBridgeImpl();
+        ReflectionTestUtils.setField(client, "ragWebClient", webClient);
+        return client;
+    }
+
+    private RagAskRequest nonStreamRequest() {
+        return RagAskRequest.builder()
+                .question("这个项目的整体架构是什么？")
+                .sessionId("sess-001")
+                .currentProject("rag-system")
+                .history(List.of())
+                .traceId("trc-abc123")
+                .topK(3)
+                .stream(Boolean.FALSE)
+                .build();
+    }
+
+    @Test
+    @DisplayName("askSync: 非流式 POST 调 Python（stream=false），返回原始 snake JSON")
+    void askSync_returnsRawJson() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(
+                "{\"answer\":\"A\",\"stages\":{\"intent\":{\"anchor\":\"rag-system\"}}}"));
+
+        RagAssistantBridgeImpl client = buildAskSyncClient(responseSpec);
+
+        StepVerifier.create(client.askSync(nonStreamRequest()))
+                .expectNext("{\"answer\":\"A\",\"stages\":{\"intent\":{\"anchor\":\"rag-system\"}}}")
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("askSync: 传输异常 → TutoringAgentException")
+    void askSync_transportError() {
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.error(new WebClientRequestException(new RuntimeException("down"),
+                        org.springframework.http.HttpMethod.POST, URI.create("http://x"), HttpHeaders.EMPTY)));
+
+        RagAssistantBridgeImpl client = buildAskSyncClient(responseSpec);
+
+        assertThrows(TutoringAgentException.class, () -> client.askSync(nonStreamRequest()).block());
+    }
 
     @Test
     @DisplayName("ask: Python 流异常 → TutoringAgentException（桥不吞，由编排层降级）")

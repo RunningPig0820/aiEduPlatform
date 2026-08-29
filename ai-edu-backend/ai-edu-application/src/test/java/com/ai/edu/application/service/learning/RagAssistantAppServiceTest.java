@@ -113,13 +113,50 @@ class RagAssistantAppServiceTest {
     }
 
     @Test
-    @DisplayName("askStages: 非流式返回不抛 NPE（reason 为 null，Map.of 会崩，须用 LinkedHashMap）")
-    void askStages_noNpeOnNullReason() {
+    @DisplayName("askStages: 真实非流式 —— Python snake done+stages → camel 摘要（RAG-A-17）")
+    void askStages_parsesSnakeToCamel() {
+        when(port.askSync(any())).thenAnswer(inv -> {
+            RagAskRequest req = inv.getArgument(0);
+            assertFalse(req.getStream(), "非流式应传 stream=false");
+            return reactor.core.publisher.Mono.just("{\"answer\":\"RAG 项目的整体架构\",\"quoted_keys\":[\"b1\"],"
+                    + "\"tokens_usage\":{\"prompt_tokens\":320,\"completion_tokens\":140,\"cache_hit_tokens\":0,\"total_tokens\":460},"
+                    + "\"trace_id\":\"" + req.getTraceId() + "\",\"suggestions\":[\"引导1\"],\"reason\":null,"
+                    + "\"stages\":{\"intent\":{\"anchor\":\"rag-system\",\"category\":\"项目介绍\",\"switch_detected\":false,\"ambiguous\":false},"
+                    + "\"rewrite\":{\"original_question\":\"Q\",\"rewritten_query\":\"R\"},"
+                    + "\"rerank\":[{\"block_id\":\"b1\",\"title\":\"架构\",\"summary\":\"摘要\",\"file_path\":\"f.md\",\"score\":0.3}]}}");
+        });
+
         Map<String, Object> result = appService.askStages(command());
-        assertTrue(result.containsKey("answer"));
-        assertTrue(result.containsKey("reason"));
+        assertEquals("RAG 项目的整体架构", result.get("answer"));
+        assertEquals("b1", ((List<?>) result.get("quotedKeys")).get(0));
         assertNull(result.get("reason"));
-        assertTrue(result.containsKey("stages"));
+        assertTrue(result.containsKey("tokensUsage"), "tokensUsage 应 camel 化");
+        assertFalse(result.containsKey("tokens_usage"), "不应残留 snake 键");
+        Map<?, ?> usage = (Map<?, ?>) result.get("tokensUsage");
+        assertEquals(320, usage.get("promptTokens"));
+
+        assertTrue(result.containsKey("stages"), "应含 stages 摘要");
+        Map<?, ?> stages = (Map<?, ?>) result.get("stages");
+        Map<?, ?> intent = (Map<?, ?>) stages.get("intent");
+        assertEquals("rag-system", intent.get("anchor"));
+        assertTrue(intent.containsKey("switchDetected"), "intent 应 camel 化");
+        Map<?, ?> rewrite = (Map<?, ?>) stages.get("rewrite");
+        assertTrue(rewrite.containsKey("originalQuestion"), "rewrite 应 camel 化");
+        List<?> rerank = (List<?>) stages.get("rerank");
+        Map<?, ?> block = (Map<?, ?>) rerank.get(0);
+        assertEquals("b1", block.get("blockId"));
+        assertTrue(block.containsKey("filePath"), "rerank block 应 camel 化");
+    }
+
+    @Test
+    @DisplayName("askStages: 会话已关闭 → 固定话术 0 token，不调 Python")
+    void askStages_closedSessionShortCircuit() {
+        when(redis.get("rag:assistant:session:sess-001:closed")).thenReturn("1");
+
+        Map<String, Object> result = appService.askStages(command());
+        assertEquals("本轮对话已结束，可开启新对话。", result.get("answer"));
+        assertEquals(0, ((Map<?, ?>) result.get("tokensUsage")).get("totalTokens"));
+        verify(port, never()).askSync(any());
     }
 
     @Test

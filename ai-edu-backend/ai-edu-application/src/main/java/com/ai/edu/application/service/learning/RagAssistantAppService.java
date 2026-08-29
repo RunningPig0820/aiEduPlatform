@@ -30,6 +30,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
@@ -427,19 +429,72 @@ public class RagAssistantAppService {
     }
 
     /**
-     * 发起一轮问答（非流式，M1 桩替）：返回 done 结构 + stages 摘要（真实链路在 M2 起）。
+     * 发起一轮问答（非流式，RAG-A-17 接真实）：调 Python {@code stream=false}，返回 done 结构 + stages 摘要
+     * （snake→camel 重建；会话已关闭 → 固定话术 0 token）。
      */
     public Map<String, Object> askStages(RagAskCommand command) {
-        // 用 LinkedHashMap（Map.of 不允许 null 值，"reason":null 会抛 NPE）
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("answer", "（桩替）RAG 项目介绍助手链路已通，等待 Python 白盒引擎接入。");
-        result.put("quotedKeys", List.of());
-        result.put("tokensUsage", Map.of("promptTokens", 0, "completionTokens", 0, "cacheHitTokens", 0, "totalTokens", 0));
-        result.put("traceId", UUID.randomUUID().toString());
-        result.put("suggestions", List.of());
-        result.put("reason", null);
-        result.put("stages", List.of("permission", "intent", "rewrite", "rerank", "done"));
-        return result;
+        if (isSessionClosed(command.getSessionId())) {
+            Map<String, Object> closed = new LinkedHashMap<>();
+            closed.put("answer", CLOSED_MSG);
+            closed.put("quotedKeys", List.of());
+            closed.put("tokensUsage", Map.of("promptTokens", 0, "completionTokens", 0,
+                    "cacheHitTokens", 0, "totalTokens", 0));
+            closed.put("traceId", UUID.randomUUID().toString());
+            closed.put("suggestions", List.of());
+            closed.put("reason", null);
+            closed.put("stages", List.of());
+            return closed;
+        }
+        String traceId = UUID.randomUUID().toString();
+        RagAskRequest request = RagAskRequest.builder()
+                .question(command.getQuestion())
+                .sessionId(command.getSessionId())
+                .currentProject(command.getCurrentProject())
+                .history(command.getHistory() == null ? List.of() : command.getHistory())
+                .traceId(traceId)
+                .topK(command.getTopK() == null ? 3 : command.getTopK())
+                .stream(Boolean.FALSE)
+                .build();
+        String json = ragAssistantPort.askSync(request).block();
+        try {
+            // Python snake_case → 前端 camelCase（done + stages 嵌套全部递归转换）
+            JsonNode snake = SNAKE_MAPPER.readTree(json);
+            return CAMEL_MAPPER.convertValue(toCamel(snake), Map.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("非流式问答响应解析失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** snake_case JSON → camelCase JSON（递归，供非流式 done+stages 重建）。 */
+    private JsonNode toCamel(JsonNode node) {
+        if (node.isObject()) {
+            ObjectNode out = CAMEL_MAPPER.createObjectNode();
+            node.fields().forEachRemaining(e -> out.set(camelize(e.getKey()), toCamel(e.getValue())));
+            return out;
+        }
+        if (node.isArray()) {
+            ArrayNode out = CAMEL_MAPPER.createArrayNode();
+            node.forEach(n -> out.add(toCamel(n)));
+            return out;
+        }
+        return node;
+    }
+
+    /** 下划线转驼峰：prompt_tokens → promptTokens（数字后缀安全，如 hit_at_3 → hitAt3）。 */
+    private String camelize(String snake) {
+        StringBuilder sb = new StringBuilder();
+        boolean upperNext = false;
+        for (char c : snake.toCharArray()) {
+            if (c == '_') {
+                upperNext = true;
+            } else if (upperNext) {
+                sb.append(Character.toUpperCase(c));
+                upperNext = false;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /** 重建 Python snake 事件 → 前端 camel 事件；done 做 traceId 一致性校验（对不上告警，不阻断）。 */

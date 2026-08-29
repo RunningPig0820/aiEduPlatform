@@ -72,6 +72,24 @@ public class RagAssistantBridgeImpl implements RagAssistantPort {
     }
 
     @Override
+    public Mono<String> askSync(RagAskRequest request) {
+        log.info("[rag-assistant] 桥调 Python ask(非流式), sessionId={}, traceId={}",
+                request.getSessionId(), request.getTraceId());
+        return ragWebClient.post()
+                .uri(ASK_PATH)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientRequestException.class,
+                        e -> new TutoringAgentException("RAG 非流式服务暂不可用", e))
+                .onErrorMap(WebClientResponseException.class,
+                        e -> new TutoringAgentException("RAG 非流式服务暂不可用 (status="
+                                + e.getStatusCode().value() + ")", e));
+    }
+
+    @Override
     public Mono<String> evalReport() {
         log.info("[rag-assistant] 桥调 Python eval/report");
         return ragWebClient.get()
