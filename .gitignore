@@ -23,3 +23,6 @@ target/
 logs/
 **/logs/
 **/logs/**
+# 部署文档(含服务器信息, 仅本地不进 git)
+deploy/backend-deploy.md
+deploy/frontend-deploy.md
