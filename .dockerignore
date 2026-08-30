@@ -1,0 +1,6 @@
+# Docker 构建上下文精简 (backend build context = 仓库根)
+**/target/
+**/.git/
+**/node_modules/
+*.log
+deploy/docker-compose.yml

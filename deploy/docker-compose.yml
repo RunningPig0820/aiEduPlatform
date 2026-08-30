@@ -1,55 +1,48 @@
-version: '3.8'
-
+# AI Edu Platform 三服务一键部署 (demo, 2-3 人)
+# 前置: 三个仓库为兄弟目录(同一父目录下):
+#   ../                = aiEduPlatform (后端, 含本 deploy/)
+#   ../../aiEduPlatformModel/ai-edu-ai-service  = Python AI 服务
+#   ../../aiEduPlatformFront/ai-edu-front        = 前端
+# 用法: cd deploy && cp .env.example .env(填 Python 密钥) && docker compose up -d --build
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: ai-edu-mysql
+  backend:
+    build:
+      context: ../
+      dockerfile: deploy/backend.Dockerfile
+    container_name: ai-edu-backend
+    ports:
+      - "9627:9627"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ai_edu
-      MYSQL_CHARSET: utf8mb4
-      MYSQL_COLLATION: utf8mb4_unicode_ci
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      # Docker 内 Java 连 Python 用 compose 服务名(替代 application.yml 里的 127.0.0.1:9527)
+      - LLM_GATEWAY_BASEURL=http://ai-service:9527
+    restart: unless-stopped
+    networks: [ai-edu]
+    depends_on:
+      - ai-service
 
-  redis:
-    image: redis:7-alpine
-    container_name: ai-edu-redis
+  ai-service:
+    build:
+      context: ../../aiEduPlatformModel/ai-edu-ai-service
+      dockerfile: Dockerfile
+    container_name: ai-edu-ai-service
+    env_file: .env          # Python 密钥: DOUBAO_API_KEY / DASHSCOPE_API_KEY / COS_VECTORS_* / INTERNAL_TOKEN
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+      - "9527:9527"
+    restart: unless-stopped
+    networks: [ai-edu]
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: ai-edu-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+  frontend:
+    build:
+      context: ../../aiEduPlatformFront/ai-edu-front
+      dockerfile: Dockerfile
+    container_name: ai-edu-front
     ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - "80:80"
+    restart: unless-stopped
+    networks: [ai-edu]
+    depends_on:
+      - backend
 
-  minio:
-    image: minio/minio:latest
-    container_name: ai-edu-minio
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: admin123
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-
-volumes:
-  mysql_data:
-  redis_data:
-  rabbitmq_data:
-  minio_data:
+networks:
+  ai-edu:
+    driver: bridge
