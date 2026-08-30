@@ -145,6 +145,14 @@
                         </exclude>
                     </excludes>
                 </configuration>
+                <!-- 修复: 父 pom pluginManagement 未绑 repackage, 缺此 execution 时 mvn package 产 83KB 薄包, java -jar 跑不起来 -->
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
