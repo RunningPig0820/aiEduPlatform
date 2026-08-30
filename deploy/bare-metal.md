@@ -5,8 +5,11 @@
 
 ## 服务器需求
 
-- **2C4G** Linux,Ubuntu 24.04 纯净版(自带 OpenJDK 21 源、Nginx;Python 3.13 走 deadsnakes)。
-- 20GB 盘。
+- **单台**:2C4G 足够(Java+Python+Nginx 全装)。
+- **两台(推荐,更宽裕)**:
+  - **2C4G** → Java 后端 + Python AI 服务(**必须同机**:Java 连 Python 走 `127.0.0.1:9527`)
+  - **2C2G** → Nginx + 前端静态(很轻)
+- Ubuntu 24.04 纯净版,20GB 盘。
 
 ## 目录结构(三个仓库兄弟目录)
 
@@ -17,20 +20,34 @@
 └── aiEduPlatformFront/ai-edu-front/
 ```
 
+> 两台机各自上传/克隆**对应需要的仓库**(backend 机只要后端+Python;frontend 机只要前端)。
+
 ## 部署步骤
 
-```bash
-# 1. 上传/克隆三个仓库到服务器成兄弟目录
-# 2. 一键部署(会装依赖 + 构建 jar/venv/前端 + 配 systemd/nginx)
-sudo bash aiEduPlatform/deploy/bare-metal.sh
+### 单台(三服务同机)
 
-# 3. 填密钥
-sudo vim /etc/ai-edu.env      # 必填: DOUBAO_API_KEY / DASHSCOPE_API_KEY / COS_VECTORS_SECRET_ID / COS_VECTORS_SECRET_KEY
-# 4. 启动
+```bash
+# 1. 三个仓库上传成兄弟目录
+# 2. 一键部署(装依赖 + 构建 jar/venv/前端 + 配 systemd/nginx)
+sudo bash aiEduPlatform/deploy/bare-metal.sh          # 默认 all
+# 3. 填密钥 + 启动
+sudo vim /etc/ai-edu.env
 sudo systemctl restart ai-edu-ai ai-edu-backend nginx
 ```
 
-浏览器访问 `http://<服务器IP>/` → 演示账号登录 → 逐功能验收。
+### 两台(分机)
+
+```bash
+# 后端机(2C4G): 只装 Java + Python
+sudo bash aiEduPlatform/deploy/bare-metal.sh backend
+sudo vim /etc/ai-edu.env    # 必填密钥
+sudo systemctl restart ai-edu-ai ai-edu-backend
+
+# 前端机(2C2G): 只装 Nginx + 前端, /api 反代到后端机 IP
+BACKEND_HOST=<后端机IP> sudo bash aiEduPlatform/deploy/bare-metal.sh frontend
+```
+
+浏览器访问 `http://<前端机IP>/` → 演示账号登录 → 逐功能验收。
 
 ## 三个服务
 
