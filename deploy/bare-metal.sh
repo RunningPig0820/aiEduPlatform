@@ -102,6 +102,9 @@ EnvironmentFile=$ENV_FILE
 ExecStart=$VENV_DIR/bin/uvicorn main:app --host 0.0.0.0 --port 9527
 Restart=always
 RestartSec=3
+# 内存配额 1G(正常 ~135M, 防 RAG/embedding 高峰吃内存挤占 Java; 超限 OOM 由 systemd 处理)
+MemoryHigh=768M
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target
