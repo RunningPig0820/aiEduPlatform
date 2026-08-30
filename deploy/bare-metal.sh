@@ -122,6 +122,7 @@ WorkingDirectory=$BACKEND_DIR/ai-edu-backend
 # Python 地址/令牌用环境变量覆盖(默认 127.0.0.1 / application.yml 硬编码); 远程 Python 填 AI_BASE_URL
 Environment=AI_EDU_LLM_GATEWAY_BASEURL=http://${AI_BASE_URL}:9527
 $( [[ -n "$AI_TOKEN" ]] && echo "Environment=AI_EDU_LLM_GATEWAY_INTERNALTOKEN=$AI_TOKEN" )
+Environment=APP_LOG_FILE=/opt/ai-edu/backend/logs/app.log
 ExecStart=/usr/bin/java -Xms512m -Xmx1024m -jar $JAR_DIR/app.jar
 Restart=always
 RestartSec=3
