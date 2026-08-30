@@ -16,6 +16,8 @@ set -euo pipefail
 
 MODE="${1:-all}"
 BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"    # frontend 模式反代目标(分机时 = backend 机 IP)
+AI_BASE_URL="${AI_BASE_URL:-127.0.0.1}"      # Python AI 服务地址(Java 网关转发目标; 远程 Python 时填其 IP)
+AI_TOKEN="${AI_TOKEN:-}"                     # Python 鉴权 token(留空 = 用 application.yml 硬编码值)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PARENT="$(dirname "$(dirname "$SCRIPT_DIR")")"        # 三个仓库的父目录
@@ -117,6 +119,9 @@ After=network.target ai-edu-ai.service
 
 [Service]
 WorkingDirectory=$BACKEND_DIR/ai-edu-backend
+# Python 地址/令牌用环境变量覆盖(默认 127.0.0.1 / application.yml 硬编码); 远程 Python 填 AI_BASE_URL
+Environment=AI_EDU_LLM_GATEWAY_BASEURL=http://${AI_BASE_URL}:9527
+$( [[ -n "$AI_TOKEN" ]] && echo "Environment=AI_EDU_LLM_GATEWAY_INTERNALTOKEN=$AI_TOKEN" )
 ExecStart=/usr/bin/java -Xms512m -Xmx1024m -jar $JAR_DIR/app.jar
 Restart=always
 RestartSec=3
