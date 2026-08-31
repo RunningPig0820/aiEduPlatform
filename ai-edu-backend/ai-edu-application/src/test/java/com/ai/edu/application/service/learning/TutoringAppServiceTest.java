@@ -544,7 +544,7 @@ class TutoringAppServiceTest {
         when(sessionCache.listMessages(SESSION_ID)).thenReturn(List.of(
                 TutoringChatMessage.user("设鸡x只"), TutoringChatMessage.ai("继续"), TutoringChatMessage.user("2x+4(35-x)=94")));
 
-        service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94").subscribe();
+        service.sendMessage(STUDENT_ID, SESSION_ID, "2x+4(35-x)=94").blockLast();
 
         verify(errorEventRepository).save(argThat(e ->
                 "COMPUTATION".equals(e.getErrorType())
@@ -659,7 +659,7 @@ class TutoringAppServiceTest {
                 sse("token", "{\"content\":\"先找\"}"),
                 sse("token", "{\"content\":\"已知条件\"}")));
 
-        service.sendMessage(STUDENT_ID, SESSION_ID, "设鸡x只").subscribe();
+        service.sendMessage(STUDENT_ID, SESSION_ID, "设鸡x只").blockLast();
 
         verify(sessionCache).appendMessage(eq(SESSION_ID), argThat(m ->
                 "ai".equals(m.getRole()) && "先找已知条件".equals(m.getContent())));
@@ -865,7 +865,7 @@ class TutoringAppServiceTest {
         when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"思路\"}")));
 
-        service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
+        service.requestAnswer(STUDENT_ID, SESSION_ID).blockLast();
 
         assertEquals(1, session.getAnswerRequestCount());
         verify(llmPort).generate(argThat(ctx -> "approach".equals(ctx.getActionType())));
@@ -879,7 +879,7 @@ class TutoringAppServiceTest {
         when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"答案：鸡15兔20\"}")));
 
-        service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
+        service.requestAnswer(STUDENT_ID, SESSION_ID).blockLast();
 
         assertEquals(2, session.getAnswerRequestCount());
         verify(llmPort).generate(argThat(ctx -> "reveal".equals(ctx.getActionType())));
@@ -893,7 +893,7 @@ class TutoringAppServiceTest {
         when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("reveal")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"答案：鸡15兔20\"}")));
 
-        service.requestAnswer(STUDENT_ID, SESSION_ID).subscribe();
+        service.requestAnswer(STUDENT_ID, SESSION_ID).blockLast();
 
         assertEquals(TutoringState.ARCHIVED, session.getStatus());
         assertEquals(EndReason.ANSWER_REVEALED, session.getEndReason());
@@ -1071,7 +1071,7 @@ class TutoringAppServiceTest {
         when(llmPort.decideStream(any())).thenReturn(decideStreamOf(meta("hint")));
         when(llmPort.generate(any())).thenReturn(Flux.just(sse("token", "{\"content\":\"ok\"}")));
 
-        service.sendMessage(STUDENT_ID, SESSION_ID, "继续").subscribe();
+        service.sendMessage(STUDENT_ID, SESSION_ID, "继续").blockLast();
 
         verify(redisService).tryLock(anyString(), anyString(), anyLong(), any());
         verify(redisService).unlock(anyString(), anyString());

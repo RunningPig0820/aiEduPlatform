@@ -602,7 +602,12 @@ public class TutoringAppService {
                 .filter(e -> "thinking".equals(e.event()) || "agent".equals(e.event()));   // 中继 thinking + decide agent(perceive/analyze/plan/decide)，done 丢弃
 
         // meta 到达 → postDecide（同步护栏+副作用+guardrail+generate）→ 释放锁（generate 在锁外）
+        // ⚠ publishOn(boundedElastic)：meta 在 WebClient 事件循环线程(reactor-http-epoll-N)上 emit，
+        //   postDecide 里全是同步阻塞调用（护栏 subject-classify / 落库 / 题型名向量 put+query 的 .block()），
+        //   事件循环线程上 .block() 会被 Reactor 拒绝(IllegalStateException) → 把 postDecide 整体切到
+        //   boundedElastic 线程执行（generate 是响应式流，后续事件仍走 WebClient 事件循环，无阻塞，无影响）。
         Mono<Flux<ServerSentEvent<String>>> tail = metaSink.asMono()
+                .publishOn(Schedulers.boundedElastic())
                 .map(action -> {
                     Flux<ServerSentEvent<String>> result = postDecide(session, action, history, isNewQuestion);
                     unlock.run();   // decide+副作用临界区结束，generate 在锁外
